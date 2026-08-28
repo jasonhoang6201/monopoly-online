@@ -1,0 +1,228 @@
+/**
+ * Modal dùng chung — có hiệu ứng ẩn/hiện (mờ nền + trượt lên + bung nhẹ).
+ */
+
+const root = () => document.getElementById('modal-root');
+
+/* ==================================================================
+   Tạm ẩn hộp thoại để ngó bàn cờ
+   Giữ phím Space (hoặc bấm con mắt ở góc modal) → modal mờ đi,
+   thả phím / bấm vào đâu đó là hiện lại. Không modal nào bị đóng.
+   ================================================================== */
+
+let peeking = false;
+let peekPill = null;
+
+/** Có modal nào đang mở mà cho phép ngó bàn cờ không? */
+const peekableOpen = () => root()?.querySelector('.scrim:not(.hide):not(.no-peek)');
+
+const isTyping = (el) => el instanceof HTMLInputElement
+  || el instanceof HTMLTextAreaElement
+  || (el instanceof HTMLElement && el.isContentEditable);
+
+/** Bấm ra ngoài khi đang ngó → hiện lại hộp thoại. */
+function onPeekPointer(e) {
+  if (peekPill?.contains(e.target)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  setPeek(false);
+}
+
+/** Bật/tắt chế độ ngó bàn cờ (áp dụng cho mọi modal đang xếp chồng). */
+export function setPeek(on) {
+  const r = root();
+  if (!r) return;
+  on = !!on && !!peekableOpen();
+  if (on === peeking) return;
+  peeking = on;
+  r.classList.toggle('peeking', on);
+
+  if (on) {
+    if (!peekPill) {
+      peekPill = document.createElement('button');
+      peekPill.type = 'button';
+      peekPill.className = 'peek-pill';
+      peekPill.title = 'Hộp thoại đang tạm ẩn để bạn ngó bàn cờ';
+      peekPill.innerHTML = '<span class="peek-eye">👁</span> Hiện lại hộp thoại';
+      peekPill.addEventListener('click', () => setPeek(false));
+    }
+    r.appendChild(peekPill);
+    window.addEventListener('pointerdown', onPeekPointer, true);
+  } else {
+    peekPill?.remove();
+    window.removeEventListener('pointerdown', onPeekPointer, true);
+  }
+}
+
+window.addEventListener('keydown', (e) => {
+  if (peeking && e.key === 'Escape') {
+    // Đang ngó thì Esc chỉ kéo hộp thoại về, không đóng nó
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    setPeek(false);
+    return;
+  }
+  if (e.code !== 'Space' || e.repeat || peeking) return;
+  if (isTyping(e.target) || !peekableOpen()) return;
+  e.preventDefault();       // đừng để Space bấm nhầm nút đang focus
+  e.stopImmediatePropagation();
+  setPeek(true);
+}, true);
+
+window.addEventListener('keyup', (e) => {
+  if (e.code === 'Space' && peeking) {
+    e.preventDefault();
+    setPeek(false);
+  }
+}, true);
+
+// Mất focus (alt-tab) giữa lúc đang giữ phím thì không kẹt ở trạng thái ẩn
+window.addEventListener('blur', () => setPeek(false));
+
+/**
+ * Mở một modal.
+ * @param {object} o
+ * @param {string} [o.eyebrow]  dòng chữ nhỏ phía trên tiêu đề
+ * @param {string} o.title      tiêu đề
+ * @param {string} [o.sub]      dòng phụ dưới tiêu đề
+ * @param {string|Node} [o.body] nội dung thân modal
+ * @param {Array}  [o.buttons]  [{ label, value, cls, disabled }]
+ * @param {boolean}[o.wide]     dùng khung rộng (trading)
+ * @param {boolean}[o.dismissible] false = không cho đóng bằng phím Esc
+ * @param {boolean}[o.scrimClose] true = hộp thoại chỉ để xem, bấm ra nền là đóng
+ * @param {boolean}[o.peekable] false = không cho tạm ẩn để ngó bàn cờ
+ * @param {any}    [o.escValue] giá trị khi đóng bằng Esc (mặc định: nút cuối cùng)
+ * @param {Function}[o.onMount] (bodyEl, close, modalEl) — gắn sự kiện động
+ * @returns {Promise<any>} giá trị của nút được bấm
+ */
+export function openModal(o) {
+  const peekable = o.peekable !== false;
+  setPeek(false); // modal mới mở thì luôn hiện ra đàng hoàng
+  const scrim = document.createElement('div');
+  scrim.className = 'scrim' + (peekable ? '' : ' no-peek');
+
+  const modal = document.createElement('div');
+  modal.className = 'modal' + (o.wide ? ' wide' : '');
+  scrim.appendChild(modal);
+
+  const head = document.createElement('div');
+  head.className = 'modal-head';
+  head.innerHTML = `
+    ${o.eyebrow ? `<div class="modal-eyebrow">${o.eyebrow}</div>` : ''}
+    <div class="modal-title">${o.title ?? ''}</div>
+    ${o.sub ? `<div class="modal-sub">${o.sub}</div>` : ''}`;
+  modal.appendChild(head);
+
+  if (peekable) {
+    const peekBtn = document.createElement('button');
+    peekBtn.type = 'button';
+    peekBtn.className = 'modal-peek';
+    peekBtn.textContent = '👁';
+    peekBtn.title = 'Tạm ẩn để ngó bàn cờ (hoặc giữ phím Space)';
+    peekBtn.setAttribute('aria-label', 'Tạm ẩn hộp thoại để ngó bàn cờ');
+    peekBtn.addEventListener('click', () => setPeek(true));
+    modal.appendChild(peekBtn);
+  }
+
+  const body = document.createElement('div');
+  body.className = 'modal-body';
+  if (typeof o.body === 'string') body.innerHTML = o.body;
+  else if (o.body) body.appendChild(o.body);
+  modal.appendChild(body);
+
+  const foot = document.createElement('div');
+  foot.className = 'modal-foot';
+  modal.appendChild(foot);
+
+  let settled = false;
+  let resolveFn;
+  const promise = new Promise((res) => { resolveFn = res; });
+
+  const close = (value) => {
+    if (settled) return;
+    settled = true;
+    window.removeEventListener('keydown', onKey, true);
+    scrim.classList.remove('show');
+    scrim.classList.add('hide');
+    setTimeout(() => scrim.remove(), 320);
+    if (peeking && !peekableOpen()) setPeek(false);
+    resolveFn(value);
+  };
+
+  for (const b of o.buttons ?? []) {
+    const btn = document.createElement('button');
+    btn.className = `btn ${b.cls ?? ''}`;
+    btn.textContent = b.label;
+    btn.disabled = !!b.disabled;
+    btn.addEventListener('click', () => close(b.value));
+    foot.appendChild(btn);
+  }
+  if (!o.buttons?.length) foot.remove();
+
+  /* Esc đóng modal — mặc định trả về giá trị của nút cuối cùng
+     (thường là nút "Bỏ qua / Huỷ / Đóng"), trừ khi caller chỉ định escValue. */
+  const escValue = 'escValue' in o
+    ? o.escValue
+    : (o.buttons?.length ? o.buttons[o.buttons.length - 1].value : undefined);
+
+  function onKey(e) {
+    if (e.key !== 'Escape' || settled) return;
+    // Chỉ modal trên cùng mới nhận phím Esc (bỏ qua modal đang chạy hiệu ứng đóng)
+    const open = root().querySelectorAll('.scrim:not(.hide)');
+    if (open[open.length - 1] !== scrim) return;
+    e.preventDefault();
+    e.stopPropagation();
+    close(escValue);
+  }
+  if (o.dismissible !== false) window.addEventListener('keydown', onKey, true);
+
+  /* Hộp thoại chỉ để xem: bấm ra vùng nền tối là đóng.
+     Đòi hỏi cả lúc nhấn lẫn lúc thả đều ở trên nền, để người chơi quét chữ
+     trong hộp thoại rồi lỡ thả tay ra ngoài thì không bị đóng oan. */
+  if (o.scrimClose && o.dismissible !== false) {
+    let downOnScrim = false;
+    scrim.addEventListener('pointerdown', (e) => { downOnScrim = e.target === scrim; });
+    scrim.addEventListener('click', (e) => {
+      if (settled || !downOnScrim || e.target !== scrim) return;
+      // Đang ngó bàn cờ thì cú bấm ấy chỉ để kéo hộp thoại về, không phải đóng
+      if (root()?.classList.contains('peeking')) return;
+      close(escValue);
+    });
+    scrim.classList.add('scrim-closable');
+  }
+
+  // Cho flashModal (và các chỗ khác) đóng đúng cách, không rò listener
+  scrim._close = close;
+
+  root().appendChild(scrim);
+  // Ép trình duyệt tính layout trước khi bật transition
+  void scrim.offsetHeight;
+  requestAnimationFrame(() => scrim.classList.add('show'));
+
+  if (o.onMount) o.onMount(body, close, modal, foot);
+
+  return promise;
+}
+
+/** Modal chỉ để thông báo, tự đóng sau `ms`. */
+export function flashModal(o, ms = 1600) {
+  // Tự tắt sau chớp mắt nên không cần nút ngó bàn cờ
+  const p = openModal({ ...o, peekable: false, buttons: o.buttons ?? [] });
+  const scrim = [...root().querySelectorAll('.scrim')].pop();
+  setTimeout(() => scrim?._close?.(), ms);
+  return new Promise((r) => setTimeout(r, ms + 300));
+}
+
+/** Màn hình chuyển máy giữa hai người chơi (giữ kín thông tin). */
+export function handoff(playerName, cssColor, note) {
+  return openModal({
+    eyebrow: 'CHUYỀN MÁY',
+    title: 'Đổi người chơi',
+    body: `<div class="handoff">
+        <div class="handoff-eye">🤝</div>
+        <div class="handoff-name" style="color:${cssColor}">${playerName}</div>
+        <div class="handoff-note">${note ?? 'Hãy chuyền máy cho người chơi này rồi bấm Tiếp tục.'}</div>
+      </div>`,
+    buttons: [{ label: 'Tiếp tục', value: true, cls: 'btn-primary' }],
+  });
+}

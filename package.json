@@ -1,0 +1,25 @@
+{
+  "name": "co-phieu-sai-gon-online",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Monopoly phiên bản Việt Nam — Sài Gòn - Gia Định xưa (bản online nhiều máy, Supabase Realtime)",
+  "scripts": {
+    "dev": "vite --port 5174",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node tests/play-through.mjs && node tests/features.mjs && node tests/endgame.mjs && node tests/jail-debt.mjs && node tests/audio.mjs && node tests/ui-v2.mjs",
+    "test:online": "node tests/online.mjs",
+    "test:visual": "node tests/visual.mjs",
+    "test:rules": "node tests/endgame.mjs && node tests/jail-debt.mjs",
+    "test:audio": "node tests/audio.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.58.0",
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1",
+    "vite": "^5.4.11"
+  }
+}

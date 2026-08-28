@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cờ Tỷ Phú — Sài Gòn · Gia Định</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%237C1E14'/%3E%3Cpath d='M16 5l2.6 7.4H26l-6 4.6 2.3 7.4L16 20l-6.3 4.4L12 17l-6-4.6h7.4z' fill='%23E9CE85'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/fonts/fonts.css" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Phaser mounts here: board, tokens, dice, particles -->
+    <div id="game-canvas"></div>
+
+    <!-- HTML overlay: một cột điều khiển duy nhất + mặt bàn cờ -->
+    <div id="ui">
+      <aside id="sidebar">
+        <div class="brand">
+          <span class="brand-mark">✦</span>
+          <span class="brand-text">
+            <b>CỜ TỶ PHÚ</b>
+            <i>Sài Gòn · Gia Định</i>
+          </span>
+        </div>
+
+        <!-- Thẻ lớn cho người đang tới lượt, bên dưới là cả bàn xếp hàng ngang -->
+        <div id="turn-panel">
+          <div id="players"></div>
+          <div id="roster"></div>
+        </div>
+
+        <!-- Xem nhanh ô đang rê chuột trên bàn cờ -->
+        <section id="quickview"></section>
+
+        <div class="side-foot">
+          <div id="bank-plate">
+            <span class="bank-label">NGÂN HÀNG</span>
+            <span id="bank-houses">32 nhà</span>
+          </div>
+          <div class="side-tools">
+            <button class="icon-btn" id="music-toggle" title="Bật/tắt nhạc nền (M)" aria-label="Bật/tắt nhạc nền">♪</button>
+            <button class="icon-btn" id="sfx-toggle" title="Bật/tắt hiệu ứng âm thanh" aria-label="Bật/tắt hiệu ứng âm thanh">🔔</button>
+            <button class="icon-btn" id="fullscreen-toggle" title="Toàn màn hình (F)" aria-label="Toàn màn hình">⛶</button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Lớp phủ khớp đúng ô vuông bàn cờ: thông báo trên đầu,
+           thanh nút hành động nằm giữa lòng bàn cờ.
+           Toạ độ do BoardScene.layout() bơm vào. -->
+      <div id="board-hud">
+        <!-- Bản online: đường truyền của máy này đứt. Ẩn cho tới khi có chuyện. -->
+        <div id="link-warn" role="status" aria-live="polite">
+          <span class="lw-dot"></span>
+          <span class="lw-text"><b>Mất kết nối</b> — đang nối lại…</span>
+        </div>
+        <div id="broadcast"></div>
+        <footer id="actions"></footer>
+      </div>
+    </div>
+
+    <!-- Modals render here -->
+    <div id="modal-root"></div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

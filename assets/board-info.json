@@ -1,0 +1,379 @@
+[
+    {
+        "id": 0,
+        "name": "BẮT ĐẦU (GO)",
+        "current_name": null,
+        "type": "corner",
+        "description": "Đi ngang qua nhận lương 200$",
+        "image": "go_space.png"
+    },
+    {
+        "id": 1,
+        "name": "Quai de l'Arroyo Chinois",
+        "current_name": "Bến Bình Đông",
+        "type": "property",
+        "color_group": "brown",
+        "price": 60,
+        "rent": 2,
+        "house_cost": 50,
+        "image": "quai_de_larroyo_chinois.png"
+    },
+    {
+        "id": 2,
+        "name": "Khí Giới (Community Chest)",
+        "current_name": null,
+        "type": "chest",
+        "image": "community_chest_1.png"
+    },
+    {
+        "id": 3,
+        "name": "Quai de Mytho",
+        "current_name": "Đại lộ Võ Văn Kiệt (đoạn Chợ Lớn)",
+        "type": "property",
+        "color_group": "brown",
+        "price": 60,
+        "rent": 4,
+        "house_cost": 50,
+        "image": "quai_de_mytho.png"
+    },
+    {
+        "id": 4,
+        "name": "Thuế Thu Nhập (Income Tax)",
+        "current_name": null,
+        "type": "tax",
+        "tax_amount": 200,
+        "image": "income_tax.png"
+    },
+    {
+        "id": 5,
+        "name": "Gare Routière (Bến Xe Lục Tỉnh)",
+        "current_name": "Khu vực Chợ Lớn",
+        "type": "station",
+        "price": 200,
+        "image": "gare_routiere.png"
+    },
+    {
+        "id": 6,
+        "name": "Rue Mac-Mahon",
+        "current_name": "Nam Kỳ Khởi Nghĩa",
+        "type": "property",
+        "color_group": "light_blue",
+        "price": 100,
+        "rent": 6,
+        "house_cost": 50,
+        "image": "rue_mac_mahon.png"
+    },
+    {
+        "id": 7,
+        "name": "Cơ Hội (Chance)",
+        "current_name": null,
+        "type": "chance",
+        "image": "chance_1.png"
+    },
+    {
+        "id": 8,
+        "name": "Rue Paul Blanchy",
+        "current_name": "Hai Bà Trưng",
+        "type": "property",
+        "color_group": "light_blue",
+        "price": 100,
+        "rent": 6,
+        "house_cost": 50,
+        "image": "rue_paul_blanchy.png"
+    },
+    {
+        "id": 9,
+        "name": "Rue d'Ormay",
+        "current_name": "Mạc Thị Bưởi",
+        "type": "property",
+        "color_group": "light_blue",
+        "price": 120,
+        "rent": 8,
+        "house_cost": 50,
+        "image": "rue_dormay.png"
+    },
+    {
+        "id": 10,
+        "name": "Nhà Giam (Jail / Just Visiting)",
+        "current_name": "Khám Lớn Sài Gòn",
+        "type": "corner",
+        "image": "jail.png"
+    },
+    {
+        "id": 11,
+        "name": "Rue Pellerin",
+        "current_name": "Pasteur",
+        "type": "property",
+        "color_group": "pink",
+        "price": 140,
+        "rent": 10,
+        "house_cost": 100,
+        "image": "rue_pellerin.png"
+    },
+    {
+        "id": 12,
+        "name": "Compagnie des Eaux (Công ty Cấp Nước)",
+        "current_name": "Thủy Cục Sài Gòn",
+        "type": "utility",
+        "price": 150,
+        "image": "compagnie_des_eaux.png"
+    },
+    {
+        "id": 13,
+        "name": "Rue La Grandière",
+        "current_name": "Lý Tự Trọng",
+        "type": "property",
+        "color_group": "pink",
+        "price": 140,
+        "rent": 10,
+        "house_cost": 100,
+        "image": "rue_la_grandiere.png"
+    },
+    {
+        "id": 14,
+        "name": "Rue d'Espagne",
+        "current_name": "Lê Thánh Tôn",
+        "type": "property",
+        "color_group": "pink",
+        "price": 160,
+        "rent": 12,
+        "house_cost": 100,
+        "image": "rue_despagne.png"
+    },
+    {
+        "id": 15,
+        "name": "Gare de Mytho",
+        "current_name": "Ga xe lửa Sài Gòn - Mỹ Tho",
+        "type": "station",
+        "price": 200,
+        "image": "gare_de_mytho.png"
+    },
+    {
+        "id": 16,
+        "name": "Boulevard de la Somme",
+        "current_name": "Hàm Nghi",
+        "type": "property",
+        "color_group": "orange",
+        "price": 180,
+        "rent": 14,
+        "house_cost": 100,
+        "image": "boulevard_de_la_somme.png"
+    },
+    {
+        "id": 17,
+        "name": "Khí Giới (Community Chest)",
+        "current_name": null,
+        "type": "chest",
+        "image": "community_chest_2.png"
+    },
+    {
+        "id": 18,
+        "name": "Boulevard Gallieni",
+        "current_name": "Trần Hưng Đạo",
+        "type": "property",
+        "color_group": "orange",
+        "price": 180,
+        "rent": 14,
+        "house_cost": 100,
+        "image": "boulevard_gallieni.png"
+    },
+    {
+        "id": 19,
+        "name": "Quai de Belgique",
+        "current_name": "Bến Chương Dương",
+        "type": "property",
+        "color_group": "orange",
+        "price": 200,
+        "rent": 16,
+        "house_cost": 100,
+        "image": "quai_de_belgique.png"
+    },
+    {
+        "id": 20,
+        "name": "Bãi Đậu Xe Miễn Phí (Free Parking)",
+        "current_name": null,
+        "type": "corner",
+        "image": "free_parking.png"
+    },
+    {
+        "id": 21,
+        "name": "Rue Taberd",
+        "current_name": "Nguyễn Du",
+        "type": "property",
+        "color_group": "red",
+        "price": 220,
+        "rent": 18,
+        "house_cost": 150,
+        "image": "rue_taberd.png"
+    },
+    {
+        "id": 22,
+        "name": "Cơ Hội (Chance)",
+        "current_name": null,
+        "type": "chance",
+        "image": "chance_2.png"
+    },
+    {
+        "id": 23,
+        "name": "Rue Richaud",
+        "current_name": "Nguyễn Đình Chiểu",
+        "type": "property",
+        "color_group": "red",
+        "price": 220,
+        "rent": 18,
+        "house_cost": 150,
+        "image": "rue_richaud.png"
+    },
+    {
+        "id": 24,
+        "name": "Rue Chasseloup-Laubat",
+        "current_name": "Nguyễn Thị Minh Khai",
+        "type": "property",
+        "color_group": "red",
+        "price": 240,
+        "rent": 20,
+        "house_cost": 150,
+        "image": "rue_chasseloup_laubat.png"
+    },
+    {
+        "id": 25,
+        "name": "Port de Commerce",
+        "current_name": "Cảng Thương Mại (Bến Nhà Rồng)",
+        "type": "station",
+        "price": 200,
+        "image": "port_de_commerce.png"
+    },
+    {
+        "id": 26,
+        "name": "Rue Testard",
+        "current_name": "Võ Văn Tần",
+        "type": "property",
+        "color_group": "yellow",
+        "price": 260,
+        "rent": 22,
+        "house_cost": 150,
+        "image": "rue_testard.png"
+    },
+    {
+        "id": 27,
+        "name": "Rue Garcerie",
+        "current_name": "Phạm Ngọc Thạch",
+        "type": "property",
+        "color_group": "yellow",
+        "price": 260,
+        "rent": 22,
+        "house_cost": 150,
+        "image": "rue_garcerie.png"
+    },
+    {
+        "id": 28,
+        "name": "Centrale Électrique (Nhà Máy Điện)",
+        "current_name": null,
+        "type": "utility",
+        "price": 150,
+        "image": "centrale_electrique.png"
+    },
+    {
+        "id": 29,
+        "name": "Boulevard Norodom",
+        "current_name": "Lê Duẩn",
+        "type": "property",
+        "color_group": "yellow",
+        "price": 280,
+        "rent": 24,
+        "house_cost": 150,
+        "image": "boulevard_norodom.png"
+    },
+    {
+        "id": 30,
+        "name": "Vào Tù (Go To Jail)",
+        "current_name": null,
+        "type": "corner",
+        "image": "go_to_jail.png"
+    },
+    {
+        "id": 31,
+        "name": "Boulevard Charner",
+        "current_name": "Nguyễn Huệ",
+        "type": "property",
+        "color_group": "green",
+        "price": 300,
+        "rent": 26,
+        "house_cost": 200,
+        "image": "boulevard_charner.png"
+    },
+    {
+        "id": 32,
+        "name": "Boulevard Bonard",
+        "current_name": "Lê Lợi",
+        "type": "property",
+        "color_group": "green",
+        "price": 300,
+        "rent": 26,
+        "house_cost": 200,
+        "image": "boulevard_bonard.png"
+    },
+    {
+        "id": 33,
+        "name": "Khí Giới (Community Chest)",
+        "current_name": null,
+        "type": "chest",
+        "image": "community_chest_3.png"
+    },
+    {
+        "id": 34,
+        "name": "Place Rigault de Genouilly",
+        "current_name": "Công trường Mê Linh",
+        "type": "property",
+        "color_group": "green",
+        "price": 320,
+        "rent": 28,
+        "house_cost": 200,
+        "image": "place_rigault_de_genouilly.png"
+    },
+    {
+        "id": 35,
+        "name": "Gare de Saïgon",
+        "current_name": "Ga Sài Gòn (cũ tại CV 23/9)",
+        "type": "station",
+        "price": 200,
+        "image": "gare_de_saigon.png"
+    },
+    {
+        "id": 36,
+        "name": "Cơ Hội (Chance)",
+        "current_name": null,
+        "type": "chance",
+        "image": "chance_3.png"
+    },
+    {
+        "id": 37,
+        "name": "Rue Catinat",
+        "current_name": "Đồng Khởi",
+        "type": "property",
+        "color_group": "dark_blue",
+        "price": 350,
+        "rent": 35,
+        "house_cost": 200,
+        "image": "rue_catinat.png"
+    },
+    {
+        "id": 38,
+        "name": "Thuế Xa Xỉ (Luxury Tax)",
+        "current_name": null,
+        "type": "tax",
+        "tax_amount": 100,
+        "image": "luxury_tax.png"
+    },
+    {
+        "id": 39,
+        "name": "Palais du Gouverneur",
+        "current_name": "Dinh Toàn Quyền (Dinh Độc Lập)",
+        "type": "property",
+        "color_group": "dark_blue",
+        "price": 400,
+        "rent": 50,
+        "house_cost": 200,
+        "image": "palais_du_gouverneur.png"
+    }
+]

@@ -1,0 +1,7 @@
+# Vercel tự dựng lại từ mã nguồn — đẩy sẵn bản build lên chỉ tốn thời gian tải.
+dist/
+node_modules/
+tests/
+test-result/
+.env
+.env.local
