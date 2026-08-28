@@ -130,6 +130,10 @@ vận tốc va chạm), tiếng gõ gỗ mỗi nhịp quân cờ nhảy sang ô 
 đất/xây nhà, tiếng giấy khi bóc thẻ, chuông chùa khi vào tù, quãng trượt ảm đạm khi phá sản,
 tiếng nổ pháo hoa.
 
+Bản online có thêm **một tiếng chuông nhỏ khi tới lượt mình** — ngân dài và trong, khác hẳn
+tiếng mõ gỗ khô của mọi hiệu ứng còn lại, để nghe một cái là biết đang gọi mình. Nhận được
+một đề nghị giao dịch cũng reo tiếng ấy, vì cũng là lúc cả bàn đang chờ mình bấm.
+
 Nhạc và hiệu ứng bật tắt **độc lập** bằng hai nút **♪** và **🔔**.
 
 ## Chữ và độ nét
@@ -317,7 +321,7 @@ node tests/online.mjs --full     # thêm phần đổ đầy phòng 6 người, 
 
 | Tệp | Kiểm tra |
 |---|---|
-| `tests/online.mjs` | Phòng online đa-tab: đường mời, màu do phòng chỉ định, tên chỉ hiện sau khi bấm Sẵn sàng, Khai cuộc khoá tới khi cả phòng sẵn sàng, có người rời thì ghế và màu mở lại, mời ra khỏi phòng chờ, khoá lượt theo người, trạng thái lan giữa các máy, rớt mạng rồi vào lại đúng ghế, đi luôn quá hạn thì đất về ngân hàng. Cờ `--full` thêm phần sức chứa 6 người |
+| `tests/online.mjs` | Phòng online đa-tab: đường mời, màu do phòng chỉ định, tên chỉ hiện sau khi bấm Sẵn sàng, Khai cuộc khoá tới khi cả phòng sẵn sàng, có người rời thì ghế và màu mở lại, mời ra khỏi phòng chờ, khoá lượt theo người, trạng thái lan giữa các máy, giao dịch giữa hai máy, đứt mạng giữa ván rồi tự nối lại, rớt mạng rồi vào lại đúng ghế, đi luôn quá hạn thì đất về ngân hàng, hết giờ đi và hết giờ trả lời giao dịch. Cờ `--full` thêm phần sức chứa 6 người |
 | `tests/play-through.mjs` | Chơi tự động 22 lượt với 4 người, bắt lỗi JS |
 | `tests/features.mjs` | Xây nhà đều tay, giới hạn 32 căn, lên khách sạn trả lại 4 nhà, thế chấp/chuộc lãi 10%, giao dịch hai chiều kèm đất thế chấp |
 | `tests/endgame.mjs` | Đổ đôi 3 lần vào tù, các cách ra tù, phá sản trả tài sản về ngân hàng, thắng cuộc |

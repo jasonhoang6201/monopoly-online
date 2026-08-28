@@ -376,13 +376,129 @@ ok(await A.evaluate((lots) => {
 await A.waitForTimeout(1200);
 await A.screenshot({ path: `${SHOT}/on-10-evicted.png` });
 
-/* ======================================= 11 · sức chứa (chậm, sau cờ --full) */
+/* ================================================ 11 · đồng hồ lượt hết giờ */
+
+/* Phải là **ván ba người** riêng, không dùng lại ván cũ: gạch một người trong
+   ván hai người là hạ màn ngay, mà điều đáng kiểm nhất lại là "gạch xong ván có
+   chạy tiếp không". Đóng tab cũ trước — mỗi tab giữ một ngữ cảnh WebGL và Chrome
+   chỉ cho một số lượng nhất định. */
+
+console.log('\n▸ 11. Hết giờ thì bị mời khỏi bàn');
+await A.close();
+
+const H = watch(await ctx.newPage(), 'H');
+await H.goto(BASE, { waitUntil: 'domcontentloaded' });
+await bootToLobby(H);
+const link3 = await H.locator('#lobby-link').inputValue();
+await H.locator('.lobby-seat.is-me input.lobby-name').fill('Chủ ván');
+await H.locator('.lobby-seat.is-me .lobby-ready').click();
+const P2 = await enter(link3, 'Người hai', 'P2');
+const P3 = await enter(link3, 'Người ba', 'P3');
+
+await H.bringToFront();
+await until(async () => (await seatCount(H)) === 3, 60000);
+await H.locator('#lobby-start').click();
+ok(await until(async () => (await P3.locator('.pcard').count()) === 3, 45000),
+  'ván ba người dựng xong trên mọi máy');
+await H.waitForTimeout(3800);
+
+const turnNow = (page) => page.evaluate(() => window.__monopoly.controller.state.turn);
+const turn0 = await turnNow(H);
+
+// -- vòng đếm ngược: cả bàn cùng thấy, cùng chỉ một người
+for (const [page, tag] of [[H, 'người đang đi'], [P2, 'người ngồi xem']]) {
+  await page.bringToFront();
+  ok(await until(async () => (await page.locator('#turn-clock.show').count()) === 1, 20000),
+    `vòng đếm ngược hiện ở máy ${tag}`);
+  // `innerText` trả về chữ **đã dựng hình**, mà CSS viết hoa nhãn ấy — so thường hoá
+  ok((await page.locator('#turn-clock .tc-who').innerText()).toLowerCase().includes('chủ ván'),
+    `vòng ấy ghi rõ đang đếm cho ai (${tag})`);
+}
+await P2.bringToFront();
+const num1 = Number(await P2.locator('#turn-clock .tc-num').innerText());
+await P2.waitForTimeout(2200);
+const num2 = Number(await P2.locator('#turn-clock .tc-num').innerText());
+ok(num1 > 0 && num2 < num1, 'kim chạy thật ở máy ngồi xem', `${num1}s → ${num2}s`);
+await P2.screenshot({ path: `${SHOT}/on-11-turn-clock.png` });
+
+/* Rút hạn xuống vài giây rồi lên dây lại. Chỉ đổi ở máy người đang đi là đủ:
+   hạn đi kèm trong tin lên dây, các máy khác cứ thế mà đếm. */
+await H.bringToFront();
+await H.evaluate(() => {
+  const c = window.__monopoly.controller;
+  c.turnMs = 6000;
+  c.clock = null;              // ép lên dây lại, khỏi bị chặn vì "vẫn việc cũ"
+  c.beginTurn();
+});
+/* Người ra tay là ghế sống nhỏ nhất **không phải** kẻ hết giờ, ở đây là P2 —
+   nên tab ấy phải nổi lên trước: tab ẩn bị Chrome bóp nhịp hẹn giờ. */
+await P2.bringToFront();
+ok(await until(async () => P2.evaluate(
+  (s) => window.__monopoly.controller.state.players[s].bankrupt, turn0), 40000),
+  'ngồi im hết giờ thì bị gạch khỏi bàn');
+ok(await until(async () => H.evaluate(
+  (s) => window.__monopoly.controller.state.players[s].bankrupt, turn0), 20000),
+  'chính máy người ấy cũng nhận được tin mình bị gạch');
+ok(!(await P2.evaluate(() => window.__monopoly.controller.state.over)),
+  'còn hai người nên ván vẫn chạy tiếp');
+ok(await until(async () => (await turnNow(P2)) !== turn0, 20000),
+  'lượt đi tiếp sang người kế');
+await P2.screenshot({ path: `${SHOT}/on-12-timed-out.png` });
+
+/* ============================= 12 · hết giờ trả lời giao dịch cũng bị mời ra */
+
+console.log('\n▸ 12. Để hết giờ trả lời giao dịch');
+const asker = (await turnNow(P2)) === (await P2.evaluate(() => window.__monopoly.controller.net.mySeat))
+  ? P2 : P3;
+const target = asker === P2 ? P3 : P2;
+const askSeat = await asker.evaluate(() => window.__monopoly.controller.net.mySeat);
+const tgtSeat = await target.evaluate(() => window.__monopoly.controller.net.mySeat);
+const T_GIVE = 16;
+const T_GET = 18;
+
+// Rút hạn trả lời ở cả hai máy: bên nhận để hộp thoại tự đóng, bên gửi để
+// vòng đếm ngược trên bàn khớp với con số hộp thoại đang đếm cho họ xem.
+for (const page of [asker, target]) {
+  await page.evaluate(() => { window.__monopoly.controller.tradeMs = 6000; });
+}
+await asker.bringToFront();
+await asker.evaluate(({ a, b, give, get }) => {
+  const c = window.__monopoly.controller;
+  c.state.buy(a, give);
+  c.state.buy(b, get);
+  c.sync();
+}, { a: askSeat, b: tgtSeat, give: T_GIVE, get: T_GET });
+await asker.waitForTimeout(700);
+
+await asker.locator('#actions button[data-key="t"]').click();
+await asker.locator(`.scrim.show .pick[data-id="${tgtSeat}"]`).click();
+await asker.locator(`.scrim.show .arow.selectable[data-side="mine"][data-tile="${T_GIVE}"]`).click();
+await asker.locator(`.scrim.show .arow.selectable[data-side="theirs"][data-tile="${T_GET}"]`).click();
+await asker.locator('.scrim.show button.btn', { hasText: 'Gửi đề nghị' }).click();
+
+await target.bringToFront();
+ok(await until(async () => (await target.locator('.scrim.show .trade-timer').count()) > 0, 30000),
+  'hộp xét duyệt kèm dòng đếm ngược để bên nhận biết mình có hạn');
+await target.screenshot({ path: `${SHOT}/on-13-trade-timer.png` });
+
+// Không bấm gì cả — đúng cái tình huống muốn kiểm
+ok(await until(async () => (await target.locator('.scrim.show button.btn')
+  .filter({ hasText: 'Đồng ý giao dịch' }).count()) === 0, 25000),
+  'hết giờ thì hộp thoại tự đóng, bên gửi không phải chờ mãi');
+ok(await until(async () => asker.evaluate(
+  (s) => window.__monopoly.controller.state.players[s].bankrupt, tgtSeat), 30000),
+  'để hết giờ trả lời cũng bị mời khỏi bàn');
+ok((await asker.locator('#broadcast').innerText()).includes('HẾT GIỜ')
+  || await until(async () => (await asker.locator('#broadcast').innerText()).includes('HẠ MÀN'), 15000),
+  'cả bàn đọc được lý do');
+
+/* ======================================= 13 · sức chứa (chậm, sau cờ --full) */
 
 if (FULL) {
-  console.log('\n▸ 11. Đổ đầy phòng và chặn người thứ 7 (--full)');
+  console.log('\n▸ 13. Đổ đầy phòng và chặn người thứ 7 (--full)');
   /* Đóng ván cũ trước. Mỗi tab giữ một ngữ cảnh WebGL, mà Chrome chỉ cho một số
      lượng nhất định — để tab cũ sống thì tab thứ tám không dựng nổi Phaser. */
-  await A.close();
+  for (const page of [H, P2, P3]) await page.close();
   const E = watch(await ctx.newPage(), 'E');
   await E.goto(BASE, { waitUntil: 'domcontentloaded' });
   await bootToLobby(E);
@@ -395,7 +511,7 @@ if (FULL) {
   await E.bringToFront();
   ok(await until(async () => (await seatCount(E)) === MAX, 60000), `phòng nhận đủ ${MAX} người`);
   ok((await E.locator('.lobby-count').innerText()).includes('đã đầy'), 'phòng chờ báo "Phòng đã đầy"');
-  await E.screenshot({ path: `${SHOT}/on-11-lobby-full.png` });
+  await E.screenshot({ path: `${SHOT}/on-14-lobby-full.png` });
 
   /* Người thứ 7 được kiểm ngay tại chỗ có luật, không mở thêm tab.
      Sáu bàn cờ Phaser đã chiếm hết ngữ cảnh WebGL mà Chrome cấp cho một tiến

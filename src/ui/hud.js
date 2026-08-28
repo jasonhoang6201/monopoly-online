@@ -59,6 +59,40 @@ export class Hud {
     $('link-warn')?.classList.toggle('show', !!lost);
   }
 
+  /**
+   * Bản online: đồng hồ đếm ngược của người đang phải ra quyết định.
+   *
+   * Nhận **mốc hết hạn** chứ không nhận số giây còn lại: vòng cung vẽ lại theo
+   * nhịp khung hình, nên tính lại từ mốc thì rớt khung hình mấy cái cũng vẫn
+   * chỉ đúng giờ. Truyền `null` để cất đồng hồ đi.
+   *
+   * @param {?{until:number,total:number,name:string,css:string,label:string}} c
+   */
+  setClock(c) {
+    const box = $('turn-clock');
+    if (!box) return;
+    cancelAnimationFrame(this.clockRaf);
+    if (!c) { box.classList.remove('show', 'warn'); return; }
+
+    const arc = box.querySelector('.tc-arc');
+    const num = box.querySelector('.tc-num');
+    const who = box.querySelector('.tc-who');
+    const C = 2 * Math.PI * 44;   // khớp với r=44 trong index.html
+    box.style.setProperty('--tc-color', c.css);
+    who.textContent = c.label ? `${c.name} · ${c.label}` : c.name;
+    box.classList.add('show');
+
+    const draw = () => {
+      const left = Math.max(0, c.until - Date.now());
+      arc.style.strokeDashoffset = String(C * (1 - left / c.total));
+      num.textContent = String(Math.ceil(left / 1000));
+      box.classList.toggle('warn', left <= 10000);
+      // Hết giờ thì đứng ở số 0 — người xử lý là controller, không phải HUD
+      if (left > 0) this.clockRaf = requestAnimationFrame(draw);
+    };
+    draw();
+  }
+
   buildPlayers() {
     const wrap = $('players');
     wrap.innerHTML = '';

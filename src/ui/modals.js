@@ -504,12 +504,20 @@ export function describe(state, ids, cash) {
 }
 
 /** Bước 3 — người nhận xem xét và quyết định. */
-export function tradeReviewModal(state, offer) {
+/**
+ * @param {GameState} state
+ * @param {object} offer
+ * @param {number} [ms] bản online: hạn trả lời. Quá hạn thì hộp thoại tự đóng
+ *   và trả về `'timeout'` — khác hẳn `false` (từ chối đàng hoàng), vì bên hỏi
+ *   phải phân biệt được hai chuyện: một bên là quyết định, bên kia là bỏ bàn.
+ */
+export function tradeReviewModal(state, offer, ms = 0) {
   const A = state.players[offer.from];
   const B = state.players[offer.to];
   const mortIn = offer.give.filter((id) => state.isMortgaged(id));
 
-  return openModal({
+  let ticker = 0;
+  const p = openModal({
     eyebrow: 'XÉT DUYỆT GIAO DỊCH',
     title: `${esc(A.name)} muốn thương lượng`,
     sub: `Quyết định thuộc về ${esc(B.name)} — giao dịch chỉ thành khi cả hai đồng ý.`,
@@ -540,7 +548,26 @@ export function tradeReviewModal(state, offer) {
       { label: 'Đồng ý giao dịch', value: true, cls: 'btn-jade' },
       { label: 'Từ chối', value: false, cls: 'btn-danger' },
     ],
+    onMount: (body, close) => {
+      if (!ms) return;
+      const el = document.createElement('div');
+      el.className = 'trade-timer';
+      body.appendChild(el);
+      const until = Date.now() + ms;
+      const tick = () => {
+        const left = Math.max(0, until - Date.now());
+        el.innerHTML = `Còn <b>${Math.ceil(left / 1000)} giây</b> để trả lời —
+          quá hạn coi như bỏ bàn và mất chỗ.`;
+        el.classList.toggle('warn', left <= 10000);
+        if (left <= 0) close('timeout');
+      };
+      tick();
+      ticker = setInterval(tick, 250);
+    },
   });
+  // Bấm nút hay hết giờ đều đi qua đây, nên dọn nhịp hẹn giờ ở đúng một chỗ
+  p.finally(() => clearInterval(ticker));
+  return p;
 }
 
 function offerListHtml(state, ids, cash) {

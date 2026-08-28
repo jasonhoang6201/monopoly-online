@@ -34,8 +34,8 @@ lại áp ảnh chụp và ngồi xem (thanh nút ghi *"Tới lượt …"*). Ch
 ván cũng không sao. Cách này tránh phải viết lại ~700 dòng luật trong
 `controller.js` cho phía mạng, và xí ngầu chỉ lăn ở đúng một chỗ.
 
-**Trọng tài** lo hai việc không thuộc lượt của ai: bỏ qua lượt của người vừa rớt
-mạng, và tịch thu tài sản của người đi quá lâu. Trọng tài là **ghế còn nối mạng
+**Trọng tài** lo những việc không thuộc lượt của ai: bỏ qua lượt của người vừa
+rớt mạng, và tịch thu tài sản của người đi quá lâu. Trọng tài là **ghế còn nối mạng
 có số nhỏ nhất** — một *luật*, không phải một *chức vụ*: mọi máy có cùng sổ ghế
 nên cùng tính ra một người, không cần bầu bán; trọng tài rớt thì ghế kế tiếp tự
 lên thay.
@@ -50,12 +50,57 @@ Không ai mời ai ra được nữa — vào ván rồi thì không còn quản
 | Máy **mình** rớt mạng | Dải đỏ *"Mất kết nối — đang nối lại…"* hiện giữa bàn, **thanh nút cất đi**; nối lại được thì máy tự xin ván hiện tại và bày nút ra lại |
 | Quay lại trong **45 giây** | Bấm lại đường mời là về đúng ghế cũ, đất nhà nguyên vẹn — trọng tài gửi ngay ảnh chụp ván hiện tại |
 | Quá 45 giây | Toàn bộ đất và nhà **trả về ngân hàng**, thành đất trống ai cũng mua lại được (đúng đường `GameState.bankrupt()` mà luật phá sản vẫn dùng) |
+| Ngồi im hết **1 phút** trong lượt của mình | Cũng trả hết về ngân hàng, cùng một đường — xem *Đồng hồ lượt* bên dưới |
+| Để hết **45 giây** không trả lời đề nghị giao dịch | Như trên |
 
 Ghế của người bị tịch thu **không bị xoá** khỏi sổ — số thứ tự người chơi phải
 nguyên vẹn, xoá đi thì tài sản trên bàn cờ trỏ nhầm chủ.
 
 Hạn 45 giây nằm ở `controller.awayGraceMs`; bộ kiểm thử hạ xuống vài giây cho đỡ
 phải ngồi chờ.
+
+### Đồng hồ lượt
+
+Mất kết nối không phải cách duy nhất treo bàn — **ngồi im cũng treo y hệt**, mà
+lại không rớt presence nên `checkAbsent` không bao giờ động tới. Nên có thêm một
+vòng đếm ngược giữa lòng bàn cờ, cả bàn cùng nhìn:
+
+| Việc | Hạn | Hằng số |
+|---|---|---|
+| Đi một nước (lắc, hay kết thúc lượt) | 60 giây | `controller.turnMs` |
+| Trả lời một đề nghị giao dịch | 45 giây | `controller.tradeMs` |
+| Làm nốt một hộp thoại đang mở dở | 120 giây | `controller.busyMs` |
+
+Hạn nới rộng cho người **đang mở hộp thoại** vì họ thao tác thật — chọn đất để
+đổi, tính toán xây nhà. Nhưng vẫn phải có đáy: mở hộp thoại rồi bỏ đi cũng làm
+cả bàn đứng hệt như ngồi im.
+
+Đồng hồ **không nằm trong ảnh chụp ván**. Người cầm lái phát tin `clock` kèm
+*khoảng còn lại*, mỗi máy tự cộng vào giờ máy mình. Gửi khoảng chứ không gửi mốc
+hết hạn, vì đồng hồ máy mỗi người lệch nhau vài giây là chuyện thường — mà chừng
+ấy đủ để một máy tưởng đã hết giờ trong khi máy kia còn thấy nửa phút.
+
+Lên dây lại ở `setTurnActions()`: thanh nút bày ra lại nghĩa là người ấy vừa làm
+xong một việc. Đặt ở đúng một chỗ nên lắc xong, đóng hộp thoại xong, đổi lượt…
+đều tự tính là còn sống. Cùng người cùng việc thì **không vặn lại kim** — nếu
+không, người ngồi im chỉ cần ai đó vào ra phòng (mỗi lần như thế `beginTurn()`
+chạy lại) là được tha mãi.
+
+Ai ra tay gạch tên thì tuỳ loại hạn, và **không phải lúc nào cũng là trọng tài**:
+
+- **Hết giờ đi**: ghế còn nối mạng nhỏ nhất **không phải kẻ hết giờ**
+  (`judgeSeat`). Trọng tài thường chính là ghế nhỏ nhất, mà kẻ đang treo bàn rất
+  có thể là họ — trông vào máy ấy thì chẳng bao giờ có ai bấm cả.
+- **Hết giờ trả lời giao dịch**: **người gửi đề nghị**. Họ đang đứng chờ ngay đó
+  và là máy duy nhất nhận được lời `'timeout'` của bên kia, nên không sợ hai máy
+  cùng gạch một tên. Vì thế `tradeReviewModal` trả về `'timeout'` chứ không trả
+  `false` — từ chối đàng hoàng và bỏ bàn là hai chuyện khác nhau.
+
+Đứt đường truyền thì **quên đồng hồ đi**, cả lúc đứt lẫn lúc nối lại. Nó vẫn
+chạy suốt quãng mình không nghe thấy gì, nên tới lúc thông trở lại kim đã cạn từ
+đời nào, trong khi bàn kia có thể đã gia hạn mấy lượt. Không quên thì máy vừa
+nối lại sẽ lập tức đòi gạch tên người đang đi — **đứt mạng của mình mà người
+khác chịu phạt**.
 
 ### Đứt rồi nối lại
 
@@ -114,8 +159,9 @@ dòng cảnh báo rõ khi đang chạy đường nội bộ.
 | `src/ui/lobby.js` | Phòng chờ, các hộp thoại bị mời ra / phòng đầy. |
 
 Trong `controller.js`, phần online gói gọn ở `startOnline()`, `isDriver()`,
-`sync()`, `onSync()`, `onEvent()`, `onAsk()`, `onRoomChange()`, `checkAbsent()`,
-`skipAbandonedTurn()` và `evictPlayer()`. Các chỗ còn lại chỉ thêm một dòng
+`sync()`, `onSync()`, `onEvent()`, `onAsk()`, `onLink()`, `onRoomChange()`,
+`checkAbsent()`, `skipAbandonedTurn()`, `evictPlayer()`, và khối đồng hồ lượt
+(`armClock()`, `clearClock()`, `applyClock()`, `checkClock()`, `judgeSeat()`). Các chỗ còn lại chỉ thêm một dòng
 `this.sync()` sau khi đổi trạng thái.
 
 Vì `id` nằm trong sessionStorage nên **bấm F5 hay rớt mạng rồi vào lại thì về
@@ -180,8 +226,8 @@ chỉ nối các tab dùng chung kho lưu trữ). Bộ lõi chạy: mở phòng,
 mời, tên chỉ hiện sau khi bấm Sẵn sàng, Khai cuộc khoá tới khi cả phòng sẵn
 sàng, có người rời thì ghế và màu mở lại, mời ra khỏi phòng chờ, khoá lượt theo
 người, trạng thái lan giữa các máy, **giao dịch giữa hai máy**, **đứt mạng giữa
-ván rồi tự nối lại**, rớt mạng rồi vào lại đúng ghế, và đi luôn quá hạn thì đất
-về ngân hàng. Cờ `--full` thêm phần đổ đầy 6 người.
+ván rồi tự nối lại**, rớt mạng rồi vào lại đúng ghế, đi luôn quá hạn thì đất về
+ngân hàng, và **hai kiểu hết giờ**. Cờ `--full` thêm phần đổ đầy 6 người.
 
 Hai mục đáng nói:
 
@@ -193,6 +239,13 @@ Hai mục đáng nói:
   browser context nên A cũng mất mạng theo — không tách riêng một tab được. Vẫn
   đủ dùng: A đi một nước trong lúc đứt, và điều cần kiểm là B có bắt kịp nước ấy
   sau khi nối lại hay không.
+- **Đồng hồ lượt** (§11) phải dựng hẳn một **ván ba người** riêng chứ không dùng
+  lại ván cũ: gạch một người trong ván hai người là hạ màn ngay, mà điều đáng
+  kiểm nhất lại là *"gạch xong ván có chạy tiếp không"*. Tab của người ra tay
+  phải `bringToFront()` — tab ẩn bị Chrome bóp nhịp hẹn giờ, mà mọi việc gạch
+  tên đều chạy bằng nhịp.
+- **Hết giờ trả lời giao dịch** (§12) gửi một đề nghị rồi *không bấm gì cả*:
+  kiểm hộp thoại tự đóng, bên gửi không treo, và bên nhận bị mời khỏi bàn.
 
 Cả bộ chạy trên **Supabase thật** khi có `.env`; thiếu khoá thì tụt về
 `LocalTransport` và §8 tự bỏ qua (BroadcastChannel không đứt được).

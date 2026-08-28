@@ -83,7 +83,7 @@ const sfxCheck = await page.evaluate(async () => {
   A.sfxGain.connect(an);
   const buf = new Float32Array(an.fftSize);
   const out = {};
-  for (const name of ['shake', 'diceHit', 'step', 'dice', 'coin', 'buy', 'card', 'jail', 'bankrupt', 'firework', 'trade']) {
+  for (const name of ['shake', 'diceHit', 'step', 'dice', 'coin', 'buy', 'card', 'jail', 'bankrupt', 'firework', 'trade', 'turn']) {
     A.sfx(name);
     let peak = 0;
     for (let i = 0; i < 8; i++) {

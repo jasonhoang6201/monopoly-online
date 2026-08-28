@@ -41,6 +41,25 @@ export class Game {
      * (Bộ kiểm thử hạ xuống vài giây cho đỡ phải ngồi chờ.)
      */
     this.awayGraceMs = 45000;
+    /**
+     * Hạn cho một nước đi. Hết giờ mà chưa nhúc nhích thì bị mời khỏi bàn —
+     * cùng cách xử như người mất kết nối quá lâu, vì hậu quả y hệt: cả bàn
+     * ngồi chờ một người không chơi nữa.
+     */
+    this.turnMs = 60000;
+    /** Hạn để trả lời một đề nghị giao dịch. */
+    this.tradeMs = 45000;
+    /**
+     * Hạn nới cho người đang mở dở một hộp thoại. Rộng hơn hạn lượt vì họ đang
+     * thao tác thật (chọn đất để đổi, tính xây nhà), nhưng vẫn phải có đáy:
+     * mở hộp thoại rồi bỏ đi cũng treo bàn hệt như ngồi im.
+     */
+    this.busyMs = 120000;
+    /**
+     * Đồng hồ đang chạy cho ai, tới lúc nào.
+     * @type {?{seat:number,until:number,total:number,label:string}}
+     */
+    this.clock = null;
   }
 
   // ---------------------------------------------------------------- khởi đầu
@@ -108,7 +127,10 @@ export class Game {
     /* Nhịp canh người vắng mặt. Phải là hẹn giờ chứ không thể chờ tin báo: lúc
        rớt mạng chỉ có đúng một tin, mà hạn ân thì tính bằng chục giây sau đó. */
     clearInterval(this.absentTimer);
-    this.absentTimer = setInterval(() => this.checkAbsent(), 2000);
+    this.absentTimer = setInterval(() => {
+      this.checkAbsent();
+      this.checkClock();
+    }, 2000);
 
     this.onRoomChange();
     this.bc.show('KHAI CUỘC',
@@ -165,6 +187,8 @@ export class Game {
 
   /** Diễn lại hoạt cảnh của người đang đi, cho bàn bên này cũng thấy động. */
   async onEvent(name, data) {
+    // Đồng hồ không phải hoạt cảnh — vào trước, khỏi xếp hàng sau tiếng xí ngầu
+    if (name === 'clock') { this.applyClock(data); return; }
     const sc = this.scene;
     if (name === 'dice') {
       await sc.rollDiceAnim(data.a, data.b);
@@ -187,8 +211,11 @@ export class Game {
    */
   async onAsk(name, data) {
     if (name !== 'trade-review') return null;
-    const accepted = await tradeReviewModal(this.state, data.offer);
-    return !!accepted;
+    // Cũng là một lần "tới lượt mình" — gọi họ về màn hình cho kịp trả lời
+    audio.sfx('turn');
+    /* Trả nguyên giá trị chứ không ép về true/false: `'timeout'` cho bên hỏi
+       biết đây là bỏ bàn, không phải một câu từ chối. */
+    return tradeReviewModal(this.state, data.offer, this.tradeMs);
   }
 
   /**
@@ -207,8 +234,93 @@ export class Game {
     if (!this.net || !this.state) return;
     const lost = status === 'lost';
     this.hud.setLinkLost(lost);
+
+    /* Quên đồng hồ cũ đi — cả lúc đứt lẫn lúc nối lại.
+     *
+     * Nó vẫn chạy suốt quãng mình không nghe thấy gì, nên tới lúc thông trở lại
+     * thì kim đã cạn từ đời nào, trong khi bàn kia có thể đã gia hạn mấy lượt.
+     * Không quên đi thì máy vừa nối lại sẽ lập tức đòi gạch tên người đang đi —
+     * đứt mạng của mình mà người khác chịu phạt. Người cầm lái lên dây lại ngay
+     * ở `beginTurn` bên dưới. */
+    this.applyClock(null);
+
     if (lost) { this.hud.clearActions(); return; }
     if (!this.busy) this.beginTurn();
+  }
+
+  // ------------------------------------------------------------- đồng hồ lượt
+
+  /**
+   * Đặt đồng hồ cho một ghế rồi báo cho cả bàn.
+   *
+   * Gửi đi **khoảng còn lại**, không gửi mốc hết hạn: đồng hồ máy mỗi người
+   * lệch nhau vài giây là chuyện thường, mà chừng ấy đủ để một máy tưởng đã
+   * hết giờ trong khi máy kia còn thấy nửa phút.
+   *
+   * Chỉ người đang cầm lái mới gọi tới đây — cũng như `sync()`, ván chỉ có một
+   * nguồn phát để hai máy khỏi ra hai con số.
+   */
+  armClock(seat, ms, label) {
+    if (!this.net) return;
+    /* Vẫn đúng người ấy, vẫn đúng việc ấy thì để đồng hồ chạy tiếp. `beginTurn`
+       bị gọi lại mỗi lần sổ ghế nhúc nhích, mà lần nào cũng vặn lại kim thì
+       người ngồi im chỉ cần ai đó vào ra phòng là được tha. */
+    if (this.clock && this.clock.seat === seat && this.clock.label === label) return;
+    this.applyClock({ seat, ms, label });
+    this.netEmit('clock', { seat, ms, label });
+  }
+
+  /** Cất đồng hồ đi trên mọi máy — hết ván, hoặc không còn ai phải chờ. */
+  clearClock() {
+    if (!this.net || !this.clock) return;
+    this.applyClock(null);
+    this.netEmit('clock', null);
+  }
+
+  /** Nhận đồng hồ (tự đặt hoặc do người cầm lái gửi sang) rồi vẽ vòng cung. */
+  applyClock(c) {
+    if (!c || !(c.seat >= 0)) {
+      this.clock = null;
+      this.hud?.setClock(null);
+      return;
+    }
+    const p = this.state?.players[c.seat];
+    if (!p || p.bankrupt) { this.clock = null; this.hud?.setClock(null); return; }
+    this.clock = {
+      seat: c.seat, until: Date.now() + c.ms, total: c.ms, label: c.label ?? '',
+    };
+    this.hud?.setClock({ ...this.clock, name: p.name, css: p.token.css });
+  }
+
+  /**
+   * Hết giờ mà người ấy vẫn chưa quyết → mời khỏi bàn.
+   *
+   * Người ra tay là **ghế sống nhỏ nhất không phải kẻ hết giờ**, chứ không phải
+   * trọng tài như mọi việc chung khác. Vì trọng tài thường chính là ghế nhỏ
+   * nhất, mà kẻ đang treo bàn rất có thể là họ — trông vào máy ấy thì chẳng bao
+   * giờ có ai bấm cả.
+   */
+  checkClock() {
+    const c = this.clock;
+    if (!this.net || !this.state || this.state.over || !c) return;
+    /* Đường truyền mình đang đứt: đếm ngược ở đây đã chạy suốt lúc mất tin, mà
+       bàn kia có thể đã gia hạn từ đời nào. Cùng lý do với `checkAbsent`. */
+    if (this.net.linkLost || this.busy) return;
+    /* Đồng hồ giao dịch không xử ở đây: người gửi đề nghị đang đứng chờ ngay
+       đó, họ nhận được lời "hết giờ" rồi tự gạch tên — xem `trade()`. Để cả
+       hai đường cùng ra tay là hai lần tịch thu cho một lỗi. */
+    if (c.seat !== this.state.turn) return;
+    if (Date.now() < c.until) return;
+    if (this.judgeSeat(c.seat) !== this.net.mySeat) return;
+
+    const p = this.state.players[c.seat];
+    if (!p || p.bankrupt) return;
+    this.guard(() => this.evictPlayer(c.seat, 'stall'));
+  }
+
+  /** Ghế còn nối mạng nhỏ nhất, bỏ qua `skip` — xem `checkClock`. */
+  judgeSeat(skip) {
+    return this.net.seats.findIndex((s, i) => i !== skip && this.net.isSeatLive(i));
   }
 
   /** Sổ ghế đổi (ai đó rớt mạng hay vào lại) — cập nhật danh sách bên cột trái. */
@@ -243,8 +355,16 @@ export class Game {
     if (seat >= 0) this.guard(() => this.evictPlayer(seat));
   }
 
-  /** Người rời bàn: tài sản trả hết về ngân hàng, ai cũng mua lại được. */
-  async evictPlayer(seat) {
+  /**
+   * Người rời bàn: tài sản trả hết về ngân hàng, ai cũng mua lại được.
+   *
+   * Hai đường dẫn tới đây — mất kết nối quá lâu, và ngồi im hết giờ. Hậu quả
+   * với cả bàn giống hệt nhau nên xử như nhau, chỉ khác lời báo.
+   *
+   * @param {number} seat
+   * @param {'away'|'stall'} [why]
+   */
+  async evictPlayer(seat, why = 'away') {
     const st = this.state;
     const p = st.players[seat];
     if (!p || p.bankrupt) return;
@@ -252,15 +372,20 @@ export class Game {
 
     audio.sfx('bankrupt');
     st.bankrupt(seat);
+    this.clearClock();
     this.hud.refresh();
     this.scene.refresh(st);
     this.scene.placeTokens();
 
-    // Trọng tài có thể đang không tới lượt, nhưng lời báo này cả bàn phải nghe.
+    // Người ra tay có thể đang không tới lượt, nhưng lời báo này cả bàn phải nghe.
     this.announcing = true;
-    await this.bc.show('RỜI BÀN',
-      `<b>${p.name}</b> mất kết nối quá lâu — ${props} ô đất cùng toàn bộ nhà cửa
-       trả về <b>ngân hàng</b>, ai cũng mua lại được.`, { kind: 'bad', ms: 5000 });
+    await this.bc.show(why === 'stall' ? 'HẾT GIỜ' : 'RỜI BÀN',
+      why === 'stall'
+        ? `<b>${p.name}</b> hết giờ mà chưa đi — ${props} ô đất cùng toàn bộ nhà cửa
+           trả về <b>ngân hàng</b>, ghế bỏ trống.`
+        : `<b>${p.name}</b> mất kết nối quá lâu — ${props} ô đất cùng toàn bộ nhà cửa
+           trả về <b>ngân hàng</b>, ai cũng mua lại được.`,
+      { kind: 'bad', ms: 5000 });
     this.announcing = false;
 
     this.sync();
@@ -282,6 +407,9 @@ export class Game {
   async skipAbandonedTurn() {
     const p = this.state.current;
     this.hud.clearActions();
+    // Người này đã không ngồi máy thì đếm ngược cho họ chẳng để làm gì;
+    // quá hạn vắng mặt đã có `checkAbsent` lo.
+    this.clearClock();
     await this.bc.show('BỎ QUA LƯỢT',
       `<b>${p.name}</b> đang mất kết nối — bỏ qua lượt này, tài sản vẫn giữ nguyên.`,
       { ms: 2600 });
@@ -298,6 +426,14 @@ export class Game {
        bàn đè lên khi nối lại. `onLink` bày lại giúp khi đường truyền thông. */
     if (this.net?.linkLost) { this.hud.clearActions(); return; }
     const p = st.current;
+
+    /* Tới lượt mình thì reo một tiếng chuông: chơi online người ta hay ngó sang
+       cửa sổ khác trong lúc chờ, phải có cái kéo họ về. `beginTurn` chạy lại
+       sau mỗi ảnh chụp nên nhớ ghế đã reo, kẻo reo mãi một lượt. */
+    if (this.net && st.turn !== this.bellSeat) {
+      this.bellSeat = st.turn;
+      if (st.turn === this.net.mySeat && !p.bankrupt) audio.sfx('turn');
+    }
 
     // Bản online: ván chỉ nhúc nhích dưới tay người cầm lái; những máy còn lại
     // vẽ theo ảnh chụp và ngồi xem.
@@ -340,6 +476,11 @@ export class Game {
     const st = this.state;
     const p = st.current;
     this.lastRolled = rolled;
+
+    /* Thanh nút bày ra lại nghĩa là người này vừa làm xong một việc — cho họ
+       trọn hạn mới. Nhờ đặt ở đây mà lắc xong, đóng hộp thoại xong, đổi lượt…
+       đều được tính là còn sống, không phải rắc lời gọi khắp nơi. */
+    if (this.net) this.armClock(p.id, this.turnMs, rolled ? 'kết thúc lượt' : 'lượt đi');
 
     // Hai nút phụ giống nhau ở mọi tình huống — giữ nguyên thứ tự cho quen tay
     const trade = {
@@ -385,6 +526,12 @@ export class Game {
     if (this.busy) return;
     this.busy = true;
     this.hud.clearActions();
+    /* Hộp thoại của chính mình vừa mở: nới hạn ra `busyMs`. Chỉ xét lượt của
+       mình — trọng tài chạy `guard` để gạch tên người khác thì không việc gì
+       phải gia hạn cho người sắp bị gạch. */
+    if (this.net && !this.state.over && this.state.turn === this.net.mySeat) {
+      this.armClock(this.state.turn, this.busyMs, 'đang thao tác');
+    }
     try { await fn(); } finally { this.busy = false; }
   }
 
@@ -816,7 +963,24 @@ export class Game {
     if (this.net) {
       await this.bc.show('CHỜ TRẢ LỜI',
         `Đang chờ <b>${B.name}</b> xem xét đề nghị…`, { kind: 'trade', ms: 3000 });
-      accepted = await this.net.ask(targetId, 'trade-review', { offer }, { fallback: false });
+      /* Đồng hồ chuyển sang B — giờ cả bàn chờ họ, không chờ A nữa. Hạn của B
+         nới thêm vài giây so với con số hộp thoại đếm cho họ xem, để người bấm
+         đúng giây cuối vẫn kịp về đích trước lúc bị gạch tên. */
+      this.armClock(targetId, this.tradeMs + 5000, 'trả lời giao dịch');
+      accepted = await this.net.ask(targetId, 'trade-review', { offer },
+        { fallback: false, timeout: this.tradeMs + 8000 });
+      // Trả lời rồi (hay hết giờ rồi) thì đồng hồ về lại người đang đi
+      this.armClock(A.id, this.busyMs, 'đang thao tác');
+
+      /* Bên kia để hết giờ → mời khỏi bàn, y như người ngồi im hết lượt.
+         Việc này để **người hỏi** làm chứ không để trọng tài: mình đang đứng
+         chờ ngay đây và là người duy nhất nhận được lời "hết giờ" của họ, nên
+         không sợ hai máy cùng gạch một tên. */
+      if (accepted === 'timeout') {
+        await this.evictPlayer(targetId, 'stall');
+        this.restoreActions();
+        return;
+      }
     } else {
       await handoff(B.name, B.token.css, `${A.name} gửi một đề nghị giao dịch. Chuyền máy cho ${B.name} xem xét.`);
       accepted = await tradeReviewModal(st, offer);
@@ -832,7 +996,16 @@ export class Game {
       return;
     }
 
-    // Kiểm tra lại tiền trước khi chốt (có thể đã đổi trong lúc thương lượng)
+    /* Kiểm lại trước khi chốt — thương lượng có thể kéo dài hơn ta tưởng. Tiền
+       thì đổi được (trả thuê, nhận thẻ), mà người thì cũng có thể rời bàn giữa
+       chừng: mình mải chọn đất trong hộp thoại quá hạn `busyMs` thì chính mình
+       cũng bị gạch, lúc ấy đất đem đổi đã về ngân hàng cả rồi. */
+    if (A.bankrupt || B.bankrupt) {
+      await this.bc.show('GIAO DỊCH HỎNG', 'Một bên đã rời bàn trước khi chốt.', { kind: 'bad' });
+      if (!this.net) await handoff(A.name, A.token.css);
+      this.restoreActions();
+      return;
+    }
     if (A.money < offer.giveMoney || B.money < offer.getMoney) {
       await this.bc.show('GIAO DỊCH HỎNG', 'Một bên không còn đủ tiền mặt như đã đề nghị.', { kind: 'bad' });
       if (!this.net) await handoff(A.name, A.token.css);
@@ -968,6 +1141,8 @@ export class Game {
     const w = st.winner();
     if (!w) return false;
     st.over = true;
+    this.clock = null;
+    this.hud.setClock(null);
     this.hud.refresh();
     this.hud.clearActions();
     this.scene.clearHighlight();

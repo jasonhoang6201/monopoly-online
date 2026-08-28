@@ -602,7 +602,7 @@ export class Audio {
 
   /**
    * @param {'dice'|'shake'|'diceHit'|'step'|'coin'|'buy'|'build'|'card'|'jail'
-   *        |'bankrupt'|'firework'|'trade'|'click'} name
+   *        |'bankrupt'|'firework'|'trade'|'turn'|'click'} name
    * @param {object} [opts] tham số riêng của từng hiệu ứng (gain, i, …)
    */
   sfx(name, opts = {}) {
@@ -686,6 +686,30 @@ export class Audio {
         [261.63, 349.23, 392.00, 523.25].forEach((f, i) =>
           this.pluckSfx(f, t + i * 0.075, 0.26));
       },
+      /**
+       * Tới lượt mình — một tiếng chuông nhỏ.
+       *
+       * Bản online người ta hay ngó sang cửa sổ khác trong lúc chờ, nên phải có
+       * tiếng gọi về. Ngân dài và trong, khác hẳn tiếng mõ gỗ khô của các hiệu
+       * ứng còn lại, để nghe một cái là biết ngay đang gọi mình.
+       */
+      turn(t) {
+        for (const [i, f] of [784, 1174.7, 1568].entries()) {
+          const o = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          o.type = 'sine';
+          o.frequency.value = f;
+          const w = t + i * 0.045;
+          const peak = 0.13 / (i * 0.9 + 1);
+          g.gain.setValueAtTime(0.0001, w);
+          g.gain.linearRampToValueAtTime(peak, w + 0.012);
+          g.gain.exponentialRampToValueAtTime(0.001, w + 1.5 - i * 0.35);
+          o.connect(g).connect(this.sfxGain);
+          g.connect(this.reverb);
+          o.start(w); o.stop(w + 1.6);
+        }
+      },
+
       /** Rút thẻ: tiếng giấy lướt. */
       card(t) {
         const n = this.noiseSource(0.34);

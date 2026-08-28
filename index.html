@@ -55,6 +55,16 @@
           <span class="lw-dot"></span>
           <span class="lw-text"><b>Mất kết nối</b> — đang nối lại…</span>
         </div>
+        <!-- Bản online: đồng hồ của người đang phải ra quyết định. Cả bàn cùng
+             nhìn một vòng cung nên ai cũng biết còn bao lâu, kể cả người ngồi xem. -->
+        <div id="turn-clock" role="timer">
+          <svg class="tc-ring" viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="tc-track" cx="50" cy="50" r="44"></circle>
+            <circle class="tc-arc" cx="50" cy="50" r="44"></circle>
+          </svg>
+          <span class="tc-num">–</span>
+          <span class="tc-who"></span>
+        </div>
         <div id="broadcast"></div>
         <footer id="actions"></footer>
       </div>
