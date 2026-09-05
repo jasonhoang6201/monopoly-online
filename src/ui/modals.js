@@ -550,19 +550,8 @@ export function tradeReviewModal(state, offer, ms = 0) {
     ],
     onMount: (body, close) => {
       if (!ms) return;
-      const el = document.createElement('div');
-      el.className = 'trade-timer';
-      body.appendChild(el);
-      const until = Date.now() + ms;
-      const tick = () => {
-        const left = Math.max(0, until - Date.now());
-        el.innerHTML = `Còn <b>${Math.ceil(left / 1000)} giây</b> để trả lời —
-          quá hạn coi như bỏ bàn và mất chỗ.`;
-        el.classList.toggle('warn', left <= 10000);
-        if (left <= 0) close('timeout');
-      };
-      tick();
-      ticker = setInterval(tick, 250);
+      ticker = attachTimer(body, ms, close, 'timeout',
+        'để trả lời — quá hạn coi như bỏ bàn và mất chỗ.');
     },
   });
   // Bấm nút hay hết giờ đều đi qua đây, nên dọn nhịp hẹn giờ ở đúng một chỗ
@@ -588,11 +577,42 @@ function offerListHtml(state, ids, cash) {
   return bits.length ? bits.join('') : '<div class="empty-note">Không có gì</div>';
 }
 
-/** Sau khi nhận đất thế chấp — mời chủ mới chuộc lại ngay. */
-export function redeemPromptModal(state, playerId, tileIds) {
+/**
+ * Gắn dòng đếm ngược vào thân hộp thoại; hết giờ thì tự đóng với `value`.
+ *
+ * Bản online mới cần tới: người kia ngồi máy khác, cả bàn đang đứng chờ họ bấm
+ * nên phải có đáy. Trả về hàm dọn nhịp hẹn giờ — bấm nút hay hết giờ đều đi
+ * qua đó, dọn ở đúng một chỗ.
+ */
+function attachTimer(body, ms, close, value, note) {
+  const el = document.createElement('div');
+  el.className = 'trade-timer';
+  body.appendChild(el);
+  const until = Date.now() + ms;
+  const tick = () => {
+    const left = Math.max(0, until - Date.now());
+    el.innerHTML = `Còn <b>${Math.ceil(left / 1000)} giây</b> ${note}`;
+    el.classList.toggle('warn', left <= 10000);
+    if (left <= 0) close(value);
+  };
+  tick();
+  return setInterval(tick, 250);
+}
+
+/**
+ * Sau khi nhận đất thế chấp — mời **chủ mới** chuộc lại ngay.
+ *
+ * Tiền chuộc lấy từ túi chủ mới nên hộp thoại này phải hiện ở máy của chính
+ * họ, không phải máy người dựng giao dịch — xem `Game.offerRedeem`.
+ *
+ * @param {number} [ms] bản online: hạn trả lời. Quá hạn coi như "để sau", đất
+ *   vẫn nguyên đó, chuộc lúc nào cũng được ở mục Quản lý tài sản.
+ */
+export function redeemPromptModal(state, playerId, tileIds, ms = 0) {
   const p = state.players[playerId];
   const total = tileIds.reduce((s, id) => s + BOARD[id].redeem, 0);
-  return openModal({
+  let ticker = 0;
+  const pr = openModal({
     eyebrow: 'TÀI SẢN ĐANG THẾ CHẤP',
     title: 'Chuộc lại với ngân hàng?',
     sub: `Phí chuộc = tiền thế chấp + lãi 10%. Bạn đang có ${money(p.money)}.`,
@@ -607,7 +627,61 @@ export function redeemPromptModal(state, playerId, tileIds) {
       { label: `Chuộc hết ${money(total)}`, value: 'all', cls: 'btn-gold', disabled: p.money < total },
       { label: 'Để sau', value: null, cls: 'btn-ghost' },
     ],
+    onMount: (body, close) => {
+      if (!ms) return;
+      ticker = attachTimer(body, ms, close, null, 'để quyết định — quá hạn coi như để sau.');
+    },
   });
+  pr.finally(() => clearInterval(ticker));
+  return pr;
+}
+
+/* ==================================================================
+   Lắc giành quyền đi trước
+   ================================================================== */
+
+/**
+ * Mời một người lắc lượt xí ngầu giành quyền đi trước.
+ *
+ * Bảng bên dưới bày kết quả những người đã lắc, để người sau biết mình phải
+ * vượt qua con số nào.
+ *
+ * @param {number} playerId người đang tới phiên lắc
+ * @param {Array<{seat:number,sum:number}>} rolls kết quả đã có
+ * @param {number} [ms] bản online: hạn bấm. Quá hạn thì bàn lắc hộ.
+ */
+export function rollOffModal(state, playerId, rolls = [], ms = 0) {
+  const p = state.players[playerId];
+  const done = new Map(rolls.map((r) => [r.seat, r.sum]));
+  const best = rolls.length ? Math.max(...rolls.map((r) => r.sum)) : 0;
+  let ticker = 0;
+
+  const pr = openModal({
+    eyebrow: 'GIÀNH QUYỀN ĐI TRƯỚC',
+    title: `Tới phiên ${esc(p.name)} lắc`,
+    sub: rolls.length
+      ? `Điểm cao nhất đang là <b>${best}</b>. Ai cao nhất được đi đầu; hoà thì bốc thăm.`
+      : 'Mỗi người lắc một lần. Ai cao nhất được đi đầu; hoà thì bốc thăm.',
+    dismissible: false,   // chưa lắc thì chưa có gì để quay về
+    body: `<div class="rolloff-list">
+        ${state.players.map((q) => `
+          <div class="arow ${q.id === playerId ? 'selected' : ''}">
+            <span class="arow-chip" style="background:${q.token.css}"></span>
+            <span class="arow-main"><span class="arow-name">${esc(q.name)}</span>
+              <span class="arow-meta">${q.token.name}</span></span>
+            <span class="arow-side" style="font-family:var(--serif);color:var(--gold-light)">
+              ${done.has(q.id) ? done.get(q.id)
+                : q.id === playerId ? 'đang lắc…' : '—'}</span>
+          </div>`).join('')}
+      </div>`,
+    buttons: [{ label: 'Lắc xí ngầu', value: true, cls: 'btn-primary' }],
+    onMount: (body, close) => {
+      if (!ms) return;
+      ticker = attachTimer(body, ms, close, true, 'để bấm — quá hạn thì bàn lắc hộ.');
+    },
+  });
+  pr.finally(() => clearInterval(ticker));
+  return pr;
 }
 
 /* ==================================================================
@@ -848,6 +922,10 @@ export function bankruptModal(state, playerId, forced, owed, raisable) {
           { label: 'Phá sản', value: true, cls: 'btn-danger' },
           { label: 'Chơi tiếp', value: false, cls: 'btn-ghost' },
         ],
+    /* Bỏ cả gia sản là việc phải bấm bằng tay: lỡ tay Enter (vừa đóng một hộp
+       thoại khác xong) mà mất ván thì không lấy lại được. Esc vẫn là "chơi
+       tiếp" nên đường thoát không mất. */
+    enter: !forced ? false : undefined,
   });
 }
 

@@ -7,7 +7,7 @@ import {
   BOARD, money, tileLabel, GO_SALARY, JAIL_FINE, JAIL_TILE, GOTO_JAIL_TILE,
   MAX_JAIL_TURNS,
 } from '../data/board.js';
-import { GameState, rollDice } from '../core/state.js';
+import { GameState, rollDice, orderFromRolls } from '../core/state.js';
 import { snapshot, fromSnapshot, applySnapshot } from '../core/serialize.js';
 import { Hud, Broadcast } from '../ui/hud.js';
 import { QuickView } from '../ui/quickview.js';
@@ -18,7 +18,7 @@ import { openModal, handoff } from '../ui/modal.js';
 import {
   setupModal, buyModal, cardModal, manageModal, tradePickModal,
   tradeBuildModal, tradeReviewModal, redeemPromptModal, bankruptModal,
-  winnerModal, describe, playerModal, tileModal,
+  winnerModal, describe, playerModal, tileModal, rollOffModal,
 } from '../ui/modals.js';
 import { audio } from '../audio/audio.js';
 
@@ -80,7 +80,7 @@ export class Game {
 
     await this.bc.show('KHAI CUỘC',
       `Ván cờ bắt đầu — mỗi người ${money(1500)} vốn liếng. Chúc may mắn!`, { ms: 2600 });
-    this.beginTurn();
+    await this.rollOff();
   }
 
   // ---------------------------------------------------------------- online
@@ -137,6 +137,113 @@ export class Game {
       `Ván bắt đầu với <b>${this.state.players.length} người</b> — mỗi người ${money(1500)}
        vốn liếng. Chúc may mắn!`, { ms: 2600 });
     this.beginTurn();
+  }
+
+  // ------------------------------------------------- lắc giành quyền đi trước
+
+  /**
+   * Ai đi trước: mỗi người lắc một lần, cao nhất đi đầu, hoà thì bốc thăm
+   * giữa đúng những người hoà.
+   *
+   * Màn này chạy ở **một máy duy nhất** — bản online là trọng tài (ghế sống
+   * nhỏ nhất, lúc khai cuộc chính là chủ phòng) — rồi phát thứ tự chốt được
+   * cho cả bàn qua ảnh chụp. Nút "Lắc" thì hiện ở máy của từng người: bấm là
+   * việc của họ, còn con xí ngầu vẫn do máy cầm lái gieo, y như mọi nước đi
+   * khác, để cả bàn chỉ có một nguồn ngẫu nhiên.
+   */
+  async rollOff() {
+    const st = this.state;
+    this.announcing = true;
+    try {
+      await this.bc.show('GIÀNH QUYỀN ĐI TRƯỚC',
+        'Mỗi người lắc một lần — ai cao nhất được đi đầu, hoà nhau thì bốc thăm.',
+        { ms: 2800 });
+
+      /* Chỉ người còn trong ván mới lắc. Lúc khai cuộc thì ai cũng còn, nhưng
+         trọng tài rớt giữa chừng là màn này chạy lại từ đầu ở máy khác — tới
+         lúc ấy có thể đã có người bị gạch tên. */
+      const seats = st.players.filter((p) => !p.bankrupt);
+
+      /** @type {Array<{seat:number,sum:number}>} */
+      const rolls = [];
+      for (const p of seats) {
+        await this.askRollOff(p.id, rolls);
+        const d = rollDice();
+        this.netEmit('dice', d);
+        await this.scene.rollDiceAnim(d.a, d.b);
+        rolls.push({ seat: p.id, sum: d.sum });
+        await this.bc.show('LẮC GIÀNH QUYỀN',
+          `<b>${p.name}</b> ra <b>${d.a} + ${d.b} = ${d.sum}</b>.`, { ms: 1900 });
+      }
+
+      // Người đã rời bàn xếp cuối, để `order` vẫn là hoán vị đủ mọi ghế
+      const order = [
+        ...orderFromRolls(rolls),
+        ...st.players.filter((p) => p.bankrupt).map((p) => p.id),
+      ];
+      const sums = new Map(rolls.map((r) => [r.seat, r.sum]));
+      const tied = rolls.length > 1 && sums.get(order[0]) === sums.get(order[1]);
+
+      st.setOrder(order);
+      this.scene.hideDice();
+      this.netEmit('hideDice', {});
+      this.hud.refresh();
+      this.sync();
+
+      await this.bc.show('THỨ TỰ ĐI',
+        `${order.filter((seat) => sums.has(seat)).map((seat, i) => `
+           <b style="color:${st.players[seat].token.css}">${i + 1}. ${st.players[seat].name}</b>
+           (${sums.get(seat)})`).join(' · ')}
+         <br>${tied ? '<i>Hoà điểm đầu bảng — thứ tự giữa những người hoà là bốc thăm.</i>'
+          : `<b>${st.players[order[0]].name}</b> đi trước.`}`,
+        { ms: 4600 });
+    } finally {
+      this.announcing = false;
+    }
+    this.beginTurn();
+  }
+
+  /**
+   * Mời người ở ghế `seat` bấm lắc.
+   *
+   * Bản online thì hộp thoại phải hiện ở máy của chính họ. Không trả lời (rớt
+   * mạng, bỏ đi lúc khai cuộc) thì quá hạn bàn lắc hộ — thà bốc thăm giúp còn
+   * hơn treo cả bàn từ trước khi ván kịp bắt đầu.
+   */
+  async askRollOff(seat, rolls) {
+    const st = this.state;
+    if (!this.net || seat === this.net.mySeat) {
+      if (this.net) audio.sfx('turn');
+      await rollOffModal(st, seat, rolls, this.net ? this.tradeMs : 0);
+      return;
+    }
+    await this.bc.show('CHỜ LẮC',
+      `Đang chờ <b>${st.players[seat].name}</b> lắc xí ngầu…`, { ms: 2000 });
+    await this.net.ask(seat, 'rolloff', { seat, rolls },
+      { fallback: true, timeout: this.tradeMs + 8000 });
+  }
+
+  /** Thanh nút của người đang ngồi chờ cả bàn bốc thăm quyền đi trước. */
+  showRollOffWaiting() {
+    this.hud.setActions([{
+      label: 'Đang giành quyền đi trước',
+      cls: 'btn-ghost',
+      disabled: true,
+      hint: 'chờ mọi người lắc xí ngầu',
+    }]);
+  }
+
+  /**
+   * Vào màn bốc thăm quyền đi trước.
+   *
+   * Đúng một máy chạy màn này. Trọng tài rớt giữa chừng thì ghế kế tiếp lên
+   * thay và bốc lại từ đầu — thà lắc lại một vòng còn hơn ván đứng im mãi ở
+   * cửa khai cuộc.
+   */
+  beginRollOff() {
+    this.hud.refresh();
+    if (this.net.isArbiter) { this.guard(() => this.rollOff()); return; }
+    this.showRollOffWaiting();
   }
 
   /**
@@ -210,12 +317,24 @@ export class Game {
    * kia dựng đề nghị trên máy họ, còn người bấm đồng ý phải là mình.
    */
   async onAsk(name, data) {
-    if (name !== 'trade-review') return null;
-    // Cũng là một lần "tới lượt mình" — gọi họ về màn hình cho kịp trả lời
-    audio.sfx('turn');
-    /* Trả nguyên giá trị chứ không ép về true/false: `'timeout'` cho bên hỏi
-       biết đây là bỏ bàn, không phải một câu từ chối. */
-    return tradeReviewModal(this.state, data.offer, this.tradeMs);
+    // Câu nào cũng là một lần "tới lượt mình" — gọi họ về màn hình cho kịp trả lời
+    if (name === 'trade-review') {
+      audio.sfx('turn');
+      /* Trả nguyên giá trị chứ không ép về true/false: `'timeout'` cho bên hỏi
+         biết đây là bỏ bàn, không phải một câu từ chối. */
+      return tradeReviewModal(this.state, data.offer, this.tradeMs);
+    }
+    if (name === 'rolloff') {
+      audio.sfx('turn');
+      return rollOffModal(this.state, this.net.mySeat, data.rolls ?? [], this.tradeMs);
+    }
+    /* Đất thế chấp vừa về tay mình: tiền chuộc lấy từ túi mình nên câu trả lời
+       cũng phải là của mình, dù giao dịch do người kia dựng. */
+    if (name === 'redeem') {
+      audio.sfx('turn');
+      return redeemPromptModal(this.state, this.net.mySeat, data.ids, this.tradeMs);
+    }
+    return null;
   }
 
   /**
@@ -425,6 +544,9 @@ export class Game {
     /* Mất kết nối thì không bày nút: mọi nước đi lúc này đều sẽ bị ảnh chụp của
        bàn đè lên khi nối lại. `onLink` bày lại giúp khi đường truyền thông. */
     if (this.net?.linkLost) { this.hud.clearActions(); return; }
+    /* Chưa bốc thăm xong thì chưa có lượt của ai. Cửa này chặn mọi đường vòng
+       tới `beginTurn` (sổ ghế đổi, nối lại mạng) trong lúc cả bàn còn đang lắc. */
+    if (this.net && !st.order) { this.beginRollOff(); return; }
     const p = st.current;
 
     /* Tới lượt mình thì reo một tiếng chuông: chơi online người ta hay ngó sang
@@ -1055,19 +1177,44 @@ export class Game {
     await this.offerRedeem(A.id, offer.get.filter((id) => st.isMortgaged(id)));
   }
 
-  /** Mời chủ mới chuộc các ô vừa nhận đang bị thế chấp. */
+  /**
+   * Mời **chủ mới** chuộc các ô vừa nhận đang bị thế chấp.
+   *
+   * Tiền chuộc lấy từ túi chủ mới, nên quyết định cũng phải là của chủ mới:
+   * hộp thoại hiện ở máy của họ chứ không ở máy người dựng giao dịch. Không
+   * hỏi tới nơi được (rớt mạng, hết giờ) thì coi như "để sau" — đất vẫn nguyên
+   * đó, chuộc lúc nào cũng được ở mục Quản lý tài sản.
+   */
   async offerRedeem(playerId, ids) {
     if (ids.length === 0) return;
     const st = this.state;
     const p = st.players[playerId];
-    const choice = await redeemPromptModal(st, playerId, ids);
-    if (choice !== 'all') {
+
+    let choice;
+    if (this.net && playerId !== this.net.mySeat) {
+      await this.bc.show('CHỜ TRẢ LỜI',
+        `Đang chờ <b>${p.name}</b> quyết định có chuộc ${ids.length} ô vừa nhận không…`,
+        { kind: 'trade', ms: 2600 });
+      choice = await this.net.ask(playerId, 'redeem', { ids },
+        { fallback: null, timeout: this.tradeMs + 8000 });
+    } else {
+      // Cả bàn một máy: chuyền máy cho chủ mới rồi mới hỏi
+      if (!this.net && playerId !== st.turn) {
+        await handoff(p.name, p.token.css,
+          `${p.name} vừa nhận đất đang thế chấp — chuyền máy cho họ quyết định.`);
+      }
+      choice = await redeemPromptModal(st, playerId, ids);
+    }
+
+    const total = ids.reduce((s, id) => s + BOARD[id].redeem, 0);
+    /* Chốt lại ở máy cầm lái: từ lúc hỏi tới lúc trả lời, túi tiền của họ có
+       thể đã vơi đi (trả tiền thuê, bóc thẻ) nên không tin câu trả lời suông. */
+    if (choice !== 'all' || p.money < total) {
       await this.bc.show('CÒN NỢ NGÂN HÀNG',
         `<b>${p.name}</b> giữ ${ids.length} ô đang thế chấp — có thể chuộc sau ở mục Quản lý tài sản.`,
         { ms: 3600 });
       return;
     }
-    const total = ids.reduce((s, id) => s + BOARD[id].redeem, 0);
     for (const id of ids) st.redeem(playerId, id);
     this.hud.refresh();
     this.scene.refresh(st);

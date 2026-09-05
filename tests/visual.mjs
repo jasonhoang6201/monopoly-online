@@ -7,7 +7,8 @@
  * Chạy:  node tests/visual.mjs          (cần dev server ở PORT, mặc định 5178)
  * Kết quả: test-result/*.png + test-result/video/*.webm
  */
-import { chromium } from 'playwright';
+import { launchChrome } from './launch.mjs';
+import { playRollOff } from './rolloff.mjs';
 import { mkdirSync, rmSync, readdirSync, renameSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -29,7 +30,7 @@ const shot = async (page, name, opts) => {
   log('  📸', file);
 };
 
-const browser = await chromium.launch({ channel: 'chrome' });
+const browser = await launchChrome();
 const ctx = await browser.newContext({
   viewport: { width: 1600, height: 1000 },
   deviceScaleFactor: 2,
@@ -50,6 +51,10 @@ for (const [i, n] of ['Bảy Viễn', 'Cô Ba Trà', 'Chú Hoả', 'Bà Từ'].e
 }
 await page.getByRole('button', { name: 'Khai cuộc' }).click();
 await page.waitForTimeout(3200);
+
+// Mở màn là vòng lắc giành quyền đi trước — bấm hộ rồi trả thứ tự về theo ghế
+await playRollOff(page);
+
 
 /* Dựng sẵn một thế cờ có đủ: nhà 1→4 căn, khách sạn, ô thế chấp, và có ô
    ở cả bốn cạnh bàn cờ để soi hướng trồi lên của bảng nhà. */

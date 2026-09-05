@@ -1,11 +1,9 @@
-import { chromium } from 'playwright';
+import { launchChrome } from './launch.mjs';
+import { playRollOff } from './rolloff.mjs';
 const log = (...a) => console.log(...a);
 const errors = [];
 
-const browser = await chromium.launch({
-  channel: 'chrome',
-  args: ['--autoplay-policy=no-user-gesture-required'],
-});
+const browser = await launchChrome({ args: ['--autoplay-policy=no-user-gesture-required'] });
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });
 page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
@@ -57,6 +55,10 @@ log('đo nhạc chờ (RMS):', JSON.stringify(rms));
 
 await page.getByRole('button', { name: 'Khai cuộc' }).click();
 await page.waitForTimeout(3000);
+
+// Mở màn là vòng lắc giành quyền đi trước — bấm hộ rồi trả thứ tự về theo ghế
+await playRollOff(page);
+
 
 // Vào ván: nhạc nền phải tắt hẳn, chỉ còn hiệu ứng
 const inGame = await page.evaluate(async () => {

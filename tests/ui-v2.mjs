@@ -1,7 +1,8 @@
-import { chromium } from 'playwright';
+import { launchChrome } from './launch.mjs';
+import { playRollOff } from './rolloff.mjs';
 const SHOT='/private/tmp/claude-501/-Users-jasonhoang-Desktop-monopoly/a29323e2-f3f4-4b2d-9c9c-70118d22612f/scratchpad';
 const errors=[]; const log=(...a)=>console.log(...a);
-const browser = await chromium.launch({ channel:'chrome' });
+const browser = await launchChrome();
 const page = await browser.newPage({ viewport:{width:1600,height:1000}, deviceScaleFactor:2 });
 page.on('pageerror', e=>errors.push('PAGEERROR: '+e.message+'\n  '+(e.stack||'').split('\n')[1]));
 page.on('console', m=>{ if(m.type()==='error') errors.push('CONSOLE: '+m.text()); });
@@ -20,6 +21,10 @@ for (const [i,n] of ['Bảy Viễn','Cô Ba Trà','Chú Hoả','Bà Từ'].entri
   await page.locator('#name-list input').nth(i).fill(n);
 await page.getByRole('button',{name:'Khai cuộc'}).click();
 await page.waitForTimeout(3200);
+
+// Mở màn là vòng lắc giành quyền đi trước — bấm hộ rồi trả thứ tự về theo ghế
+await playRollOff(page);
+
 
 // dựng tài sản
 await page.evaluate(()=>{

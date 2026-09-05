@@ -70,6 +70,11 @@ export class GameState {
     };
     /** Đặt true khi ván đã kết thúc. */
     this.over = false;
+    /**
+     * Thứ tự đi, ghi bằng số ghế — kết quả của màn lắc giành quyền đi trước.
+     * `null` nghĩa là chưa bốc thăm; lúc ấy tạm hiểu là đi theo thứ tự ghế.
+     */
+    this.order = null;
   }
 
   // ---------------------------------------------------------- truy vấn
@@ -77,6 +82,15 @@ export class GameState {
   get current() { return this.players[this.turn]; }
 
   alive() { return this.players.filter((p) => !p.bankrupt); }
+
+  /** Thứ tự đi thật sự — chưa bốc thăm thì cứ theo thứ tự ghế. */
+  get playOrder() { return this.order ?? this.players.map((_, i) => i); }
+
+  /** Chốt thứ tự đi sau màn lắc giành quyền, và trao lượt cho người đầu bảng. */
+  setOrder(seats) {
+    this.order = [...seats];
+    this.turn = this.order[0];
+  }
 
   ownerOf(tileId) {
     const id = this.owner.get(tileId);
@@ -348,11 +362,16 @@ export class GameState {
     p.inJail = false;
   }
 
-  /** Chuyển lượt cho người chơi còn sống kế tiếp. */
+  /**
+   * Chuyển lượt cho người chơi còn sống kế tiếp **theo thứ tự đã bốc thăm**,
+   * chứ không theo số ghế: ghế là chỗ ngồi, thứ tự đi là kết quả lắc xí ngầu
+   * lúc khai cuộc.
+   */
   nextTurn() {
-    const n = this.players.length;
-    for (let i = 1; i <= n; i++) {
-      const idx = (this.turn + i) % n;
+    const ord = this.playOrder;
+    const at = Math.max(0, ord.indexOf(this.turn));
+    for (let i = 1; i <= ord.length; i++) {
+      const idx = ord[(at + i) % ord.length];
       if (!this.players[idx].bankrupt) { this.turn = idx; return this.players[idx]; }
     }
     return null;
@@ -363,6 +382,23 @@ export class GameState {
     const alive = this.alive();
     return alive.length === 1 ? alive[0] : null;
   }
+}
+
+/**
+ * Xếp thứ tự đi từ kết quả lắc giành quyền: cao nhất đi đầu.
+ *
+ * Hoà nhau thì bốc thăm **giữa đúng những người hoà** — mỗi người mang sẵn một
+ * số ngẫu nhiên làm khoá phụ, nên chỉ các nhóm cùng điểm mới bị xáo, còn thứ
+ * bậc giữa các mức điểm khác nhau vẫn nguyên.
+ *
+ * @param {Array<{seat:number,sum:number}>} rolls
+ * @returns {number[]} danh sách số ghế theo thứ tự đi
+ */
+export function orderFromRolls(rolls) {
+  return rolls
+    .map((r) => ({ seat: r.seat, sum: r.sum, tie: Math.random() }))
+    .sort((a, b) => b.sum - a.sum || a.tie - b.tie)
+    .map((r) => r.seat);
 }
 
 /** Lắc 2 xí ngầu. */

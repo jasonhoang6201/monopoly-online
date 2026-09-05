@@ -1,9 +1,10 @@
-import { chromium } from 'playwright';
+import { launchChrome } from './launch.mjs';
+import { playRollOff } from './rolloff.mjs';
 
 const SHOT = '/private/tmp/claude-501/-Users-jasonhoang-Desktop-monopoly/a29323e2-f3f4-4b2d-9c9c-70118d22612f/scratchpad';
 const errors = [];
 
-const browser = await chromium.launch({ channel: 'chrome' });
+const browser = await launchChrome();
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 2 });
 
 page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });
@@ -31,6 +32,10 @@ await page.screenshot({ path: `${SHOT}/02-setup-4p.png` });
 
 await page.getByRole('button', { name: 'Khai cuộc' }).click();
 await page.waitForTimeout(3500);
+
+// Mở màn là vòng lắc giành quyền đi trước — bấm hộ rồi trả thứ tự về theo ghế
+await playRollOff(page);
+
 await page.screenshot({ path: `${SHOT}/03-board.png` });
 
 console.log('--- players rendered:', await page.locator('.pcard').count());

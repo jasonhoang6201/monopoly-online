@@ -92,6 +92,7 @@ window.addEventListener('blur', () => setPeek(false));
  * @param {boolean}[o.scrimClose] true = hộp thoại chỉ để xem, bấm ra nền là đóng
  * @param {boolean}[o.peekable] false = không cho tạm ẩn để ngó bàn cờ
  * @param {any}    [o.escValue] giá trị khi đóng bằng Esc (mặc định: nút cuối cùng)
+ * @param {boolean}[o.enter]    false = không cho Enter bấm nút đầu tiên
  * @param {Function}[o.onMount] (bodyEl, close, modalEl) — gắn sự kiện động
  * @returns {Promise<any>} giá trị của nút được bấm
  */
@@ -149,6 +150,10 @@ export function openModal(o) {
     resolveFn(value);
   };
 
+  /* Chỉ những nút do caller khai báo mới nhận phím tắt. Có hộp thoại tự dựng
+     thêm nút trong `onMount` (phòng chờ) — bắt nhầm cái đó thì Enter hoá ra
+     bấm "Rời phòng". */
+  const btnEls = [];
   for (const b of o.buttons ?? []) {
     const btn = document.createElement('button');
     btn.className = `btn ${b.cls ?? ''}`;
@@ -156,6 +161,7 @@ export function openModal(o) {
     btn.disabled = !!b.disabled;
     btn.addEventListener('click', () => close(b.value));
     foot.appendChild(btn);
+    btnEls.push(btn);
   }
   if (!o.buttons?.length) foot.remove();
 
@@ -165,16 +171,58 @@ export function openModal(o) {
     ? o.escValue
     : (o.buttons?.length ? o.buttons[o.buttons.length - 1].value : undefined);
 
+  /* Hộp thoại có/không nào cũng bấm được bằng bàn phím: **Enter là đồng ý**
+     (nút đầu tiên còn bấm được), **Esc là thôi** (đường sẵn có ở trên). Đọc
+     trạng thái `disabled` ngay lúc bấm chứ không lúc dựng, vì có hộp thoại bật
+     tắt nút theo thao tác của người chơi (chọn đất để đổi, đủ tiền hay chưa). */
+  const enterBtn = () => (o.enter === false ? null : btnEls.find((b) => !b.disabled) ?? null);
+
+  /** Con dấu phím in trên nút, để người chơi biết mà dùng. */
+  const stamp = (btn, text) => {
+    if (!btn) return;
+    const kbd = document.createElement('kbd');
+    kbd.className = 'btn-key';
+    kbd.textContent = text;
+    kbd.setAttribute('aria-hidden', 'true');
+    btn.appendChild(kbd);
+  };
+  const yes = enterBtn();
+  stamp(yes, '⏎');
+  // Nút "thôi" chỉ đóng dấu Esc khi Esc thật sự rơi đúng vào nó
+  const no = btnEls[btnEls.length - 1];
+  if (o.dismissible !== false && !('escValue' in o) && no && no !== yes) stamp(no, 'Esc');
+
+  /** Nháy nút một cái cho thấy phím vừa ăn vào đâu — giống thanh nút hành động. */
+  const hit = (btn) => {
+    btn.classList.add('key-hit');
+    setTimeout(() => btn.classList.remove('key-hit'), 200);
+    btn.click();
+  };
+
   function onKey(e) {
-    if (e.key !== 'Escape' || settled) return;
-    // Chỉ modal trên cùng mới nhận phím Esc (bỏ qua modal đang chạy hiệu ứng đóng)
+    if (settled || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    // Chỉ modal trên cùng mới nhận phím (bỏ qua modal đang chạy hiệu ứng đóng)
     const open = root().querySelectorAll('.scrim:not(.hide)');
     if (open[open.length - 1] !== scrim) return;
+
+    if (e.key === 'Escape') {
+      if (o.dismissible === false) return;
+      e.preventDefault();
+      e.stopPropagation();
+      close(escValue);
+      return;
+    }
+    if (e.key !== 'Enter') return;
+    // Đang gõ nhiều dòng thì Enter là xuống dòng, không phải "đồng ý"
+    if (e.target instanceof HTMLTextAreaElement
+      || (e.target instanceof HTMLElement && e.target.isContentEditable)) return;
+    const btn = enterBtn();
+    if (!btn) return;
     e.preventDefault();
     e.stopPropagation();
-    close(escValue);
+    hit(btn);
   }
-  if (o.dismissible !== false) window.addEventListener('keydown', onKey, true);
+  window.addEventListener('keydown', onKey, true);
 
   /* Hộp thoại chỉ để xem: bấm ra vùng nền tối là đóng.
      Đòi hỏi cả lúc nhấn lẫn lúc thả đều ở trên nền, để người chơi quét chữ

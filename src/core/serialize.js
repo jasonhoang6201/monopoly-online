@@ -24,6 +24,7 @@ export function snapshot(st) {
       doubles: p.doubles,
     })),
     turn: st.turn,
+    order: st.order ? [...st.order] : null,
     owner: [...st.owner],
     houses: [...st.houses],
     mortgaged: [...st.mortgaged],
@@ -61,6 +62,7 @@ export function applySnapshot(st, snap) {
     p.doubles = s.doubles;
   });
   st.turn = snap.turn;
+  st.order = snap.order ? [...snap.order] : null;
   st.owner = new Map(snap.owner);
   st.houses = new Map(snap.houses);
   st.mortgaged = new Set(snap.mortgaged);
