@@ -5,6 +5,9 @@
  */
 import { money, TOTAL_HOUSES, tileLabel } from '../data/board.js';
 import { paintToken } from '../render/pieces.js';
+import {
+  eventsOn, unlocked, pressureRatio, threshold, eraOpen, modLabel,
+} from '../core/events.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -311,11 +314,53 @@ export class Hud {
     $('bank-houses').textContent =
       `${st.bankHouses}/${TOTAL_HOUSES} nhà · ${st.bankHotels} k.sạn`;
 
+    this.paintFate();
+
     // Bảng tóm tắt đang bung ra thì cập nhật theo luôn (tiền vừa đổi chủ…)
     if (this.popFor != null) this.showPop(this.popFor);
 
     // Bảng xem nhanh ăn theo cùng dữ liệu (chủ mới, nhà mới xây, thế chấp…)
     this.quick?.refresh();
+  }
+
+  /**
+   * Thanh Thời Cuộc — cho cả bàn thấy sự kiện còn xa hay sắp tới.
+   *
+   * Báo trước là cố ý. Sự kiện ập xuống không một lời nào thì người thua sẽ
+   * thấy mình bị xử ép; thấy thanh gần đầy thì đó lại thành một bài toán —
+   * bán bớt nhà đi hay liều giữ, đổi đất ngay hay chờ.
+   */
+  paintFate() {
+    const st = this.state;
+    const box = $('fate-meter');
+    if (!box) return;
+    if (!eventsOn(st) || st.over) { box.hidden = true; return; }
+    box.hidden = false;
+
+    const ready = unlocked(st);
+    const r = ready ? pressureRatio(st) : 0;
+    const near = r >= 0.75;
+    box.classList.toggle('warn', near);
+    box.classList.toggle('idle', !ready);
+
+    box.querySelector('.fm-state').textContent = !ready
+      ? 'chưa tới lúc'
+      : (near ? 'SẮP CÓ BIẾN' : `${Math.round(r * 100)}%`);
+    box.querySelector('.fm-bar i').style.width = `${Math.round(r * 100)}%`;
+
+    const bits = [];
+    if (eraOpen(st) === 2) bits.push('Kỳ 2 · nhà đất');
+    if (st.pot > 0) bits.push(`Quỹ Công ${money(st.pot)}`);
+    for (const m of st.mods) {
+      const l = modLabel(m);
+      if (l) bits.push(l);
+    }
+    const note = box.querySelector('.fm-note');
+    note.textContent = bits.join(' · ');
+    note.hidden = bits.length === 0;
+    box.title = ready
+      ? `Áp lực ${st.pressure}/${threshold(st)} — đầy thì nổ một thẻ Thời Cuộc.`
+      : 'Sự kiện chỉ bắt đầu khi bàn đã bán gần hết đất.';
   }
 
   /** Nhấp nháy số tiền khi tăng/giảm — cả thẻ lớn lẫn thẻ nhỏ trong danh sách. */

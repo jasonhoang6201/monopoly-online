@@ -32,6 +32,7 @@
  *   ask/reply  giữa hai người   hỏi–đáp có chờ trả lời (dùng cho giao dịch)
  */
 import { MAX_PLAYERS } from '../core/state.js';
+import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
 import { makeTransport } from './transport.js';
 
 /** Mã phòng 4 ký tự, bỏ các chữ dễ đọc nhầm (I, O, 0, 1). */
@@ -99,6 +100,13 @@ export class Room {
       : [];
     this.hostId = asHost ? me.id : null;
     this.phase = 'lobby';
+    /**
+     * Luật tuỳ chọn của ván sắp mở — chủ phòng chốt, cả phòng cùng thấy.
+     *
+     * Đi kèm sổ ghế chứ không gửi riêng: người vào phòng muộn phải biết ngay
+     * ván này chơi luật gì, mà sổ ghế thì lúc nào cũng được phát lại cho họ.
+     */
+    this.options = { events: DEFAULT_EVENT_LEVEL };
 
     this.on = {
       room: () => {}, kicked: () => {}, full: () => {}, closed: () => {},
@@ -442,7 +450,12 @@ export class Room {
     // Phòng chờ do chủ phòng ghi sổ; vào ván rồi thì chỉ còn trọng tài phát sổ,
     // và cũng chỉ để đón người vào lại.
     if (!(this.phase === 'lobby' ? this.isHost : this.isArbiter)) return;
-    const payload = { hostId: this.hostId ?? this.me.id, seats: this.seats, phase: this.phase };
+    const payload = {
+      hostId: this.hostId ?? this.me.id,
+      seats: this.seats,
+      phase: this.phase,
+      options: this.options,
+    };
     this.tp.send('room', payload);
     this.#applyRoom(payload);   // chủ phòng không nhận lại thông điệp của mình
   }
@@ -452,6 +465,7 @@ export class Room {
     this.hostId = m.hostId;
     this.seats = m.seats;
     this.phase = m.phase;
+    if (m.options) this.options = m.options;
     if (this.mySeat >= 0) this.onceSeated?.();
     this.on.room(this);
   }
@@ -471,6 +485,14 @@ export class Room {
     if (i < 0) return false;
     this.seats.splice(i, 1);
     this.tp.send('kick', { id });
+    this.#publishRoom();
+    return true;
+  }
+
+  /** Chủ phòng đổi luật tuỳ chọn trong lúc chờ. Vào ván rồi thì thôi. */
+  setOptions(patch) {
+    if (this.phase !== 'lobby' || !this.isHost) return false;
+    this.options = { ...this.options, ...patch };
     this.#publishRoom();
     return true;
   }

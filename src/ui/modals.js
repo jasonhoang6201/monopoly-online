@@ -9,6 +9,7 @@ import {
 } from '../data/board.js';
 import { TOKENS, MAX_PLAYERS } from '../core/state.js';
 import { DECK_META } from '../data/cards.js';
+import { EVENT_LEVELS, DEFAULT_EVENT_LEVEL } from '../data/events.js';
 import { deedCard, deedGrid, rentLevels, priceItems, tileCardUrl } from './deed.js';
 import { tokenImage } from './hud.js';
 import { buildGlyphs, buildLabel, houseSvg, hotelSvg, bankSvg, keySvg } from '../render/glyphs.js';
@@ -36,6 +37,7 @@ function hexA(hex, a) {
 
 export function setupModal() {
   let count = 2;
+  let events = DEFAULT_EVENT_LEVEL;
   const names = Array.from({ length: MAX_PLAYERS }, (_, i) => `Người chơi ${i + 1}`);
   const counts = Array.from({ length: MAX_PLAYERS - 1 }, (_, i) => i + 2);   // 2…6
 
@@ -57,6 +59,18 @@ export function setupModal() {
             ${counts.map((n) => `<button class="count-btn ${n === count ? 'on' : ''}" data-n="${n}">${n}</button>`).join('')}
           </div>
           <div id="name-list"></div>
+          <div class="lobby-rule" style="margin-top:16px">
+            <div class="rule-head">
+              <span class="rule-label">THẺ THỜI CUỘC</span>
+              <i>${esc(EVENT_LEVELS[events].short)}</i>
+            </div>
+            <div class="rule-pick">
+              ${Object.values(EVENT_LEVELS).map((lv) => `
+                <button type="button" class="rule-btn ${lv.key === events ? 'on' : ''}"
+                        data-lv="${lv.key}" title="${esc(lv.desc)}">${lv.name}</button>`).join('')}
+            </div>
+            <p class="rule-note">${esc(EVENT_LEVELS[events].desc)}</p>
+          </div>
           <div class="trade-summary" style="margin-top:16px;text-align:left">
             <b style="color:var(--gold-light)">Luật rút gọn</b>
             <ul class="rules" style="margin-top:6px">
@@ -79,6 +93,9 @@ export function setupModal() {
         inner.querySelectorAll('.count-btn').forEach((b) => {
           b.addEventListener('click', () => { count = +b.dataset.n; render(); });
         });
+        inner.querySelectorAll('.rule-btn').forEach((b) => {
+          b.addEventListener('click', () => { events = b.dataset.lv; render(); });
+        });
         list.querySelectorAll('input').forEach((inp) => {
           inp.addEventListener('input', () => { names[+inp.dataset.i] = inp.value; });
         });
@@ -86,10 +103,15 @@ export function setupModal() {
       render();
 
       foot.querySelector('.btn').addEventListener('click', () => {
-        close(names.slice(0, count).map((n, i) => (n.trim() || `Người chơi ${i + 1}`)));
+        close({
+          names: names.slice(0, count).map((n, i) => (n.trim() || `Người chơi ${i + 1}`)),
+          settings: { events },
+        });
       }, { once: true, capture: true });
     },
-  }).then((v) => (Array.isArray(v) ? v : names.slice(0, count)));
+  }).then((v) => (v?.names
+    ? v
+    : { names: names.slice(0, count), settings: { events } }));
 }
 
 /* ==================================================================
@@ -584,7 +606,11 @@ function offerListHtml(state, ids, cash) {
  * nên phải có đáy. Trả về hàm dọn nhịp hẹn giờ — bấm nút hay hết giờ đều đi
  * qua đó, dọn ở đúng một chỗ.
  */
-function attachTimer(body, ms, close, value, note) {
+/**
+ * Đồng hồ đếm ngược gắn dưới thân hộp thoại: hết giờ thì tự bấm hộ `value`.
+ * Xuất ra cho các hộp thoại sự kiện dùng chung một kiểu đếm.
+ */
+export function attachTimer(body, ms, close, value, note) {
   const el = document.createElement('div');
   el.className = 'trade-timer';
   body.appendChild(el);

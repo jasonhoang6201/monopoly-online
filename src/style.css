@@ -610,8 +610,16 @@ html, body {
 }
 #turn-clock.show { display: flex; }
 
-.tc-ring {
+/* Mặt đồng hồ tự làm mốc cho con số ở giữa. Neo số theo cả #turn-clock thì nó
+   bị dòng tên người chơi bên dưới — rộng hơn vòng cung — kéo lệch sang một bên. */
+.tc-dial {
+  position: relative;
   width: 76px; height: 76px;
+  flex: none;
+}
+.tc-ring {
+  display: block;
+  width: 100%; height: 100%;
   transform: rotate(-90deg);   /* vòng cung chạy từ đỉnh, thuận mắt hơn */
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .55));
 }
@@ -634,10 +642,12 @@ html, body {
 }
 
 .tc-num {
-  position: absolute; top: 0; left: 0;
-  width: 76px; height: 76px;
+  position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--serif); font-size: 26px; color: var(--paper);
+  font-family: var(--serif); font-size: 26px; line-height: 1; color: var(--paper);
+  /* Chữ số nằm trọn trên đường chân chữ, canh giữa theo hộp dòng là nhìn hơi
+     trễ xuống — nhấc 1px cho đúng tâm mắt thấy. */
+  padding-bottom: 1px;
   text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
 }
 .tc-who {
@@ -650,11 +660,13 @@ html, body {
 /* Mười giây cuối: đỏ và đập nhịp, để người đang mải nhìn chỗ khác kịp nhận ra. */
 #turn-clock.warn .tc-arc { stroke: var(--bad); }
 #turn-clock.warn .tc-num { color: #FF9A8C; }
-#turn-clock.warn .tc-ring { animation: tc-beat .9s ease-in-out infinite; }
+/* Đập cả mặt đồng hồ, không riêng vòng cung — có thế con số mới nở ra cùng
+   thay vì đứng yên giữa cái vòng đang phình. */
+#turn-clock.warn .tc-dial { animation: tc-beat .9s ease-in-out infinite; }
 
 @keyframes tc-beat {
-  0%, 100% { transform: rotate(-90deg) scale(1); }
-  50%      { transform: rotate(-90deg) scale(1.09); }
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.09); }
 }
 
 /* Đếm ngược trong hộp thoại xét duyệt giao dịch — xem tradeReviewModal. */
@@ -1945,3 +1957,137 @@ html, body {
 .lobby-foot b { color: var(--gold-light); }
 
 .hidden { display: none !important; }
+
+/* ------------------------------------------------------------
+   Thẻ THỜI CUỘC: thanh áp lực bên cột trái + hộp thoại sự kiện
+   ------------------------------------------------------------ */
+
+#fate-meter {
+  flex: none;
+  margin-top: 10px; padding: 9px 10px 10px;
+  border-radius: 9px;
+  background: rgba(16, 27, 51, .38);
+  border: 1px solid rgba(200, 160, 72, .22);
+  transition: border-color .25s, background .25s;
+}
+#fate-meter.idle { opacity: .62; }
+#fate-meter.warn {
+  border-color: rgba(179, 50, 42, .7);
+  background: rgba(94, 20, 14, .32);
+  animation: fm-pulse 1.7s ease-in-out infinite;
+}
+@keyframes fm-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(179, 50, 42, .0); }
+  50%      { box-shadow: 0 0 0 3px rgba(179, 50, 42, .18); }
+}
+
+.fm-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+}
+.fm-label { font-size: 9px; letter-spacing: .22em; color: var(--gold); opacity: .8; }
+.fm-state {
+  font-family: var(--serif); font-size: 10.5px; color: var(--paper-deep);
+  white-space: nowrap;
+}
+#fate-meter.warn .fm-state {
+  color: #FFC9BE; font-weight: 700; letter-spacing: .06em;
+}
+
+.fm-bar {
+  margin-top: 6px; height: 5px; border-radius: 3px; overflow: hidden;
+  background: rgba(0, 0, 0, .34);
+}
+.fm-bar i {
+  display: block; height: 100%; width: 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold-light));
+  transition: width .45s var(--ease-out-back);
+}
+#fate-meter.warn .fm-bar i {
+  background: linear-gradient(90deg, #8B2318, #E0705C);
+}
+
+.fm-note {
+  margin-top: 6px;
+  font-size: 10px; line-height: 1.5; color: var(--paper-deep); opacity: .8;
+}
+
+/* --- mặt thẻ sự kiện ------------------------------------------------- */
+
+.event-card {
+  width: 330px;
+  border-color: var(--ev, var(--gold-deep));
+}
+.event-kind {
+  font-family: var(--display); font-size: 10.5px; letter-spacing: .3em;
+  text-transform: uppercase; color: var(--ev, var(--lac)); opacity: .9;
+}
+.event-title {
+  font-family: var(--display); font-size: 19px; letter-spacing: .05em;
+  color: var(--ink); margin: 2px 0 12px;
+}
+.event-detail {
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px dashed rgba(94, 20, 14, .3);
+  font-family: var(--serif); font-size: 13px; line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* --- chọn một ô đất -------------------------------------------------- */
+
+.pick-list { display: flex; flex-direction: column; gap: 4px; }
+.pick-row { cursor: pointer; }
+.pick-row input { position: absolute; opacity: 0; pointer-events: none; }
+.pick-row.on {
+  background: rgba(200, 160, 72, .16);
+  box-shadow: inset 0 0 0 1px rgba(200, 160, 72, .55);
+}
+
+/* --- ghi giá đấu ----------------------------------------------------- */
+
+.bid-box { margin-top: 12px; text-align: left; }
+.bid-box label {
+  display: block; font-size: 10px; letter-spacing: .2em;
+  color: var(--gold); opacity: .8; margin-bottom: 5px;
+}
+.bid-box input {
+  width: 100%; padding: 9px 11px;
+  font-family: var(--serif); font-size: 17px;
+  color: var(--paper); background: rgba(0, 0, 0, .3);
+  border: 1px solid rgba(200, 160, 72, .4); border-radius: 7px;
+}
+.bid-box input:focus { outline: none; border-color: var(--gold-light); }
+.bid-quick { display: flex; gap: 6px; margin-top: 8px; }
+.bid-quick .btn { flex: 1; padding: 6px 4px; font-size: 11.5px; }
+
+/* Chọn nấc thẻ Thời Cuộc trong phòng chờ */
+.lobby-rule {
+  margin-top: 14px; padding: 11px 12px;
+  border-radius: 9px;
+  background: rgba(16, 27, 51, .3);
+  border: 1px solid rgba(200, 160, 72, .22);
+}
+.rule-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+}
+.rule-label { font-size: 9.5px; letter-spacing: .22em; color: var(--gold); opacity: .85; }
+.rule-head i { font-size: 11px; color: var(--paper-deep); }
+.rule-pick { display: flex; gap: 6px; margin-top: 8px; }
+.rule-btn {
+  flex: 1; padding: 7px 4px;
+  font-family: var(--display); font-size: 12px; letter-spacing: .04em;
+  color: var(--paper-deep); cursor: pointer;
+  background: rgba(0, 0, 0, .26);
+  border: 1px solid rgba(200, 160, 72, .28); border-radius: 7px;
+  transition: background .16s, color .16s, border-color .16s;
+}
+.rule-btn:hover:not(:disabled) { background: rgba(200, 160, 72, .18); color: var(--paper); }
+.rule-btn.on {
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  border-color: var(--gold-light); color: #2A1A08; font-weight: 700;
+}
+.rule-btn:disabled { cursor: default; opacity: .75; }
+.rule-note {
+  margin-top: 8px; font-size: 11px; line-height: 1.6;
+  color: var(--paper-deep); opacity: .85;
+}

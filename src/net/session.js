@@ -166,7 +166,10 @@ async function runRoom(controller, room) {
   // Chủ phòng bấm Khai cuộc: dựng ván đầu rồi phát cho cả phòng.
   if (res === 'start') {
     const seats = room.seats;
-    const st = new GameState(seats.map((s) => s.name), seats.map((s) => s.token));
+    // Luật tuỳ chọn của phòng đi thẳng vào ván, rồi theo ảnh chụp sang mọi máy
+    const st = new GameState(
+      seats.map((s) => s.name), seats.map((s) => s.token), room.options,
+    );
     opening = { snapshot: snapshot(st) };
     room.startGame(opening.snapshot);
   }

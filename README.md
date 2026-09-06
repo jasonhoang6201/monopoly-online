@@ -95,6 +95,39 @@ kho nhà của ngân hàng và ba nút tiện ích. Không rê ô nào thì bả
 | **Thiếu tiền** | Còn xoay đủ (tiền mặt + bán nhà + thế chấp) thì được mời bán nhà / thế chấp. **Xoay hết vẫn không đủ → vỡ nợ ngay**, khỏi hỏi han |
 | **Phá sản** | Tự nguyện hoặc khi hết khả năng chi trả. Toàn bộ tài sản **trả về ngân hàng**, nhà cửa nhập lại kho chung |
 
+## Thẻ Thời Cuộc — sự kiện toàn bàn
+
+Bật/tắt ngay ở màn bày bàn cờ (bản một máy) hoặc trong phòng chờ (chủ phòng
+chốt cho cả phòng): **Tắt · Nhẹ · Chuẩn · Hỗn loạn**.
+
+Sinh ra để chữa đúng một cái bệnh của ván ít người: đất bán hết, không ai chịu
+đổi chác, mỗi lượt chỉ còn lắc xí ngầu đi vòng vòng và tiền đứng yên.
+
+**Thanh áp lực** bên cột trái (`#fate-meter`) đầy dần theo những gì xảy ra trên
+bàn — mỗi lần ai đó qua ô Bắt Đầu (+1), **một lượt trôi qua mà không đồng nào
+đổi chủ (+2)**, một đề nghị giao dịch bị từ chối (+1), một người phải cắm đất
+(+3). Đầy tới ngưỡng thì nổ một thẻ. Ngưỡng **hạ dần** sau mỗi lần nổ, nên càng
+về cuối ván sự kiện càng dày và ván buộc phải ngã ngũ.
+
+Thanh chỉ bắt đầu tính khi bàn đã **bán gần hết đất** (hoặc đã đi đủ 8 vòng) —
+nổ sự kiện lúc đất còn ế là phá ván. Gần đầy thì thanh đổi sang màu son và ghi
+*SẮP CÓ BIẾN*: báo trước để người chơi kịp tính, chứ không phải ập xuống bất ngờ.
+
+| Kỳ | Mở khi nào | Thẻ |
+|---|---|---|
+| **Kỳ 1** — tiền và luật tạm thời | ngay từ lần nổ đầu | Sưu cao thuế nặng (tiền vào **Quỹ Công**, ai ghé Bến Đậu thì ẵm trọn) · Giá gạo leo thang (thuê +25%) · Mất mùa (lương qua ô Bắt Đầu còn một nửa) · Bão giá vật liệu · Ngân hàng siết tín dụng · Giới nghiêm (cấm xây) · Hội chợ Đấu Xảo · Ân xá · Quỹ Công phát chẩn |
+| **Kỳ 2** — nhà cửa và quyền sở hữu | sau vài lần nổ (nấc *Hỗn loạn* mở ngay) | **Động đất** (cả khu sập một tầng, bỏ tiền chống đỡ thì giữ được) · **Hoả hoạn** · **Mất giấy tờ** (mỗi người chọn một ô ngưng thu tiền thuê) · **Trưng thu quy hoạch** · **Sang nhượng bắt buộc** · **Hoán đổi địa bạ** · Mở đường lớn · Đại hạ giá |
+
+Ba thẻ *Trưng thu*, *Sang nhượng bắt buộc* và *Đại hạ giá* đem đất ra **đấu giá
+kín**: mọi người ghi một con số cùng lúc, cao nhất lấy đất, hoà thì người đi
+trước trong vòng lượt thắng. Đây là đường duy nhất khiến đất đổi chủ **mà không
+cần đối phương gật đầu**.
+
+Thẻ nào cũng có một quyết định để ra, và thiệt hại luôn nhắm theo tiêu chí công
+khai (khu nào, ô đông nhà nhất, người giàu nhất) chứ không bốc thăm xem ai xui.
+Khoản thu tự động thì máy **cấn nợ hộ** — thế chấp ô rẻ nhất trước, hết đường
+mới hạ nhà — vì hỏi bốn người cùng lúc "bán nhà đi" là treo cả bàn.
+
 ## Hiệu ứng
 
 - Lắc xí ngầu: hai khối lập phương 3D thật rơi từ trên cao, nảy trên mặt bàn, lăn qua
@@ -327,5 +360,7 @@ node tests/online.mjs --full     # thêm phần đổ đầy phòng 6 người, 
 | `tests/endgame.mjs` | Đổ đôi 3 lần vào tù, các cách ra tù, phá sản trả tài sản về ngân hàng, thắng cuộc |
 | `tests/jail-debt.mjs` | Đáp xuống ô Vào Tù là hết lượt, ở tù cầu đôi từng lượt một (hụt lần 3 nộp 50$), vỡ nợ ngay khi tổng tài sản không đủ trả |
 | `tests/audio.mjs` | Đo biên độ RMS thật: nhạc có tiếng ở màn hình chờ, **im hẳn sau khi khai cuộc**, 11 hiệu ứng đều kêu; kiểm tra hai công tắc độc lập |
+| `tests/events.mjs` | Thẻ Thời Cuộc: thanh áp lực chỉ chạy khi bàn đã bão hoà, ngưỡng hạ dần, hệ số tiền thuê / giá xây / lương, ô mất giấy tờ, cấn nợ tự động, ảnh chụp mang đủ phần mới (kể cả ảnh chụp cũ thiếu trường), và **cả tám thẻ Kỳ 2 chạy thật từ đầu tới cuối** |
+| `tests/events-online.mjs` | Nấc luật đồng bộ trong phòng chờ, thẻ hiện ở mọi máy, và một **phiên đấu giá kín hai máy** chạy trọn: ai trả cao thì lấy đất, tiền trừ đúng, sổ chủ đất khớp nhau |
 | `tests/ui-v2.mjs` | Độ nét theo DPR, bàn cờ chiếm hết khoảng trống và dựng lại khi đổi cỡ cửa sổ, bảng tài sản người chơi, chi tiết ô khi bấm vào bàn cờ, thẻ đất trong danh sách |
 | `tests/visual.mjs` | Chụp ảnh & quay video: vệt đèn báo đất có nhà ở cả bốn cạnh bàn cờ, ngăn nhà trượt ra khi rê chuột (hàng ngang & cột dọc), bảng quản lý tài sản dạng thẻ hai cột, **đất đang thế chấp và thao tác chuộc lại**. Kết quả ra thư mục `test-result/` |

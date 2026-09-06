@@ -5,8 +5,10 @@
 import {
   BOARD, GROUPS, GROUP_TILES, STATION_RENT, UTILITY_MULT,
   START_MONEY, TOTAL_HOUSES, TOTAL_HOTELS, JAIL_TILE, MAX_JAIL_TURNS,
+  GO_SALARY,
 } from '../data/board.js';
 import { CHANCE, CHEST, Deck } from '../data/cards.js';
+import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
 
 /**
  * Sáu quân cờ — chỉ phân biệt bằng MÀU, không mang biểu tượng riêng.
@@ -51,8 +53,10 @@ export class GameState {
    *   chỉ định màu ngay lúc vào phòng chờ, mà ghế có thể trống ở giữa (người ta
    *   ra vào), nên thứ tự người chơi không còn trùng với thứ tự màu. Bỏ trống
    *   thì mỗi người lấy màu theo đúng chỗ ngồi như bản một máy.
+   * @param {{events?:string}} [settings] luật tuỳ chọn của ván — hiện chỉ có
+   *   nấc thẻ Thời Cuộc, do chủ phòng chốt trước khi khai cuộc.
    */
-  constructor(names, tokenIndexes = null) {
+  constructor(names, tokenIndexes = null, settings = null) {
     this.players = names.map((n, i) => new Player(i, n, tokenIndexes ? tokenIndexes[i] : i));
     this.turn = 0;
     /** tileId → playerId */
@@ -75,6 +79,77 @@ export class GameState {
      * `null` nghĩa là chưa bốc thăm; lúc ấy tạm hiểu là đi theo thứ tự ghế.
      */
     this.order = null;
+
+    /* ------------------------------------------------------ thẻ Thời Cuộc */
+
+    /** Luật tuỳ chọn — chốt lúc khai cuộc, cả ván không đổi nữa. */
+    this.settings = { events: DEFAULT_EVENT_LEVEL, ...(settings ?? {}) };
+    /** Thanh áp lực: đầy tới ngưỡng thì nổ một sự kiện. */
+    this.pressure = 0;
+    /** Đã nổ mấy lần — ngưỡng hạ dần theo con số này, và Kỳ 2 mở theo nó. */
+    this.eventsFired = 0;
+    /** Tổng số lần cả bàn đi ngang ô Bắt Đầu. */
+    this.laps = 0;
+    /** Quỹ Công: tiền sưu thuế nằm giữa bàn, ai ghé Bến Đậu thì ẵm trọn. */
+    this.pot = 0;
+    /**
+     * Lượt đang chơi chưa có đồng nào đổi chủ.
+     *
+     * Đây chính là triệu chứng của thế bí cuối ván — đất bán hết, không ai
+     * chịu đổi chác, mỗi lượt chỉ lắc xí ngầu đi vòng vòng. Lượt "khô" như vậy
+     * đẩy thanh áp lực nhanh hơn lượt có tiền chảy.
+     */
+    this.dryTurn = true;
+    /**
+     * Hiệu ứng đang có hiệu lực, mỗi cái đếm ngược bằng **số lượt** (`turns`),
+     * `-1` là vĩnh viễn. @type {Array<object>}
+     */
+    this.mods = [];
+    /** Chồng thẻ Thời Cuộc đã xáo, tách theo kỳ. */
+    this.eventPiles = { 1: [], 2: [] };
+  }
+
+  // ------------------------------------------------- hiệu ứng đang hiệu lực
+
+  addMod(mod) {
+    // Cùng một hiệu ứng chồng lên nhau thì gia hạn, không nhân đôi sức mạnh
+    const old = this.mods.findIndex((m) => m.id === mod.id);
+    if (old >= 0) this.mods[old] = { ...mod, turns: Math.max(this.mods[old].turns, mod.turns) };
+    else this.mods.push({ ...mod });
+  }
+
+  hasMod(type) { return this.mods.some((m) => m.type === type); }
+
+  /** Tích các hệ số cùng loại — hai thẻ tăng giá thuê thì nhân dồn. */
+  modMult(type, match = null) {
+    return this.mods.reduce((k, m) => (
+      m.type === type && (!match || match(m)) ? k * (m.mult ?? 1) : k), 1);
+  }
+
+  /** Hệ số tiền thuê đang áp lên một ô: lạm phát toàn bàn × đường mới mở. */
+  rentMult(tileId) {
+    const group = BOARD[tileId].color_group;
+    return this.modMult('rent') * this.modMult('group-rent', (m) => m.group === group);
+  }
+
+  /** Ô đang bị treo giấy tờ — chủ vẫn giữ đất nhưng không thu được tiền thuê. */
+  isFrozen(tileId) {
+    return this.mods.some((m) => m.type === 'frozen' && m.tiles.includes(tileId));
+  }
+
+  /** Giá xây một căn ở ô này, đã tính bão giá vật liệu. */
+  buildCost(tileId) {
+    return Math.ceil(BOARD[tileId].house_cost * this.modMult('build'));
+  }
+
+  /** Lương lãnh khi qua ô Bắt Đầu, đã tính mất mùa. */
+  salary() { return Math.round(GO_SALARY * this.modMult('salary')); }
+
+  /** Đếm ngược mọi hiệu ứng một lượt, bỏ những cái đã hết hạn. */
+  tickMods() {
+    this.mods = this.mods
+      .map((m) => (m.turns < 0 ? m : { ...m, turns: m.turns - 1 }))
+      .filter((m) => m.turns !== 0);
   }
 
   // ---------------------------------------------------------- truy vấn
@@ -163,19 +238,23 @@ export class GameState {
   rentFor(tileId, diceSum) {
     const t = BOARD[tileId];
     const ownerId = this.owner.get(tileId);
-    if (ownerId === undefined || this.isMortgaged(tileId)) return 0;
+    // Giấy tờ thất lạc thì chủ đất chưa đòi tiền ai được, y như đang thế chấp.
+    if (ownerId === undefined || this.isMortgaged(tileId) || this.isFrozen(tileId)) return 0;
 
+    const k = this.rentMult(tileId);
     if (t.type === 'station') {
-      return STATION_RENT[this.stationCount(ownerId)];
+      return Math.round(STATION_RENT[this.stationCount(ownerId)] * k);
     }
     if (t.type === 'utility') {
-      return diceSum * UTILITY_MULT[this.utilityCount(ownerId)];
+      return Math.round(diceSum * UTILITY_MULT[this.utilityCount(ownerId)] * k);
     }
     if (t.type === 'property') {
       const h = this.housesOn(tileId);
-      if (h > 0) return t.rents[h];
       // Đủ bộ màu mà chưa xây nhà → giá thuê gấp đôi.
-      return this.hasFullGroup(ownerId, t.color_group) ? t.rents[0] * 2 : t.rents[0];
+      const base = h > 0
+        ? t.rents[h]
+        : (this.hasFullGroup(ownerId, t.color_group) ? t.rents[0] * 2 : t.rents[0]);
+      return Math.round(base * k);
     }
     return 0;
   }
@@ -189,6 +268,7 @@ export class GameState {
   canBuild(playerId, tileId) {
     const t = BOARD[tileId];
     if (t.type !== 'property') return { ok: false, reason: 'Chỉ đất mới xây được nhà.' };
+    if (this.hasMod('freeze-build')) return { ok: false, reason: 'Đang giới nghiêm — thợ thuyền nghỉ hết.' };
     if (this.owner.get(tileId) !== playerId) return { ok: false, reason: 'Không phải đất của bạn.' };
     if (!this.hasFullGroup(playerId, t.color_group)) {
       return { ok: false, reason: `Cần đủ bộ ${GROUPS[t.color_group].name}.` };
@@ -212,7 +292,7 @@ export class GameState {
       return { ok: false, reason: 'Ngân hàng đã hết nhà (32 căn).' };
     }
 
-    const cost = t.house_cost;
+    const cost = this.buildCost(tileId);
     if (this.players[playerId].money < cost) return { ok: false, reason: 'Không đủ tiền.' };
 
     return { ok: true, isHotel, cost };
@@ -222,8 +302,7 @@ export class GameState {
   build(playerId, tileId) {
     const check = this.canBuild(playerId, tileId);
     if (!check.ok) return check;
-    const t = BOARD[tileId];
-    this.players[playerId].money -= t.house_cost;
+    this.players[playerId].money -= check.cost;
     if (check.isHotel) {
       this.houses.set(tileId, 5);
       this.bankHouses += 4;   // trả 4 căn nhà về kho
@@ -368,6 +447,9 @@ export class GameState {
    * lúc khai cuộc.
    */
   nextTurn() {
+    this.tickMods();
+    // Lượt mới bắt đầu ở thế "chưa có đồng nào đổi chủ"
+    this.dryTurn = true;
     const ord = this.playOrder;
     const at = Math.max(0, ord.indexOf(this.turn));
     for (let i = 1; i <= ord.length; i++) {

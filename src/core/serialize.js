@@ -32,6 +32,17 @@ export function snapshot(st) {
     bankHotels: st.bankHotels,
     piles: { chance: [...st.decks.chance.pile], chest: [...st.decks.chest.pile] },
     over: st.over,
+    /* Thẻ Thời Cuộc: nấc luật, thanh áp lực, hiệu ứng đang chạy và hai chồng
+       bài. Thiếu bất cứ thứ nào ở đây là người vào lại giữa ván sẽ chơi bằng
+       một bộ luật khác cả bàn — giá thuê tính sai, sự kiện nổ lệch nhịp. */
+    settings: { ...st.settings },
+    pressure: st.pressure,
+    eventsFired: st.eventsFired,
+    laps: st.laps,
+    pot: st.pot,
+    dryTurn: st.dryTurn,
+    mods: st.mods.map((m) => ({ ...m })),
+    eventPiles: { 1: [...st.eventPiles[1]], 2: [...st.eventPiles[2]] },
   };
 }
 
@@ -40,6 +51,7 @@ export function fromSnapshot(snap) {
   const st = new GameState(
     snap.players.map((p) => p.name),
     snap.players.map((p) => Math.max(0, TOKENS.findIndex((t) => t.key === p.token))),
+    snap.settings ?? null,
   );
   applySnapshot(st, snap);
   return st;
@@ -71,5 +83,16 @@ export function applySnapshot(st, snap) {
   st.decks.chance.pile = [...snap.piles.chance];
   st.decks.chest.pile = [...snap.piles.chest];
   st.over = snap.over;
+
+  /* Ảnh chụp của bản cũ (hay của ván mở trước khi có thẻ Thời Cuộc) không mang
+     mấy trường này — giữ nguyên cái đang có thay vì ghi `undefined` đè lên. */
+  if (snap.settings) st.settings = { ...st.settings, ...snap.settings };
+  st.pressure = snap.pressure ?? st.pressure;
+  st.eventsFired = snap.eventsFired ?? st.eventsFired;
+  st.laps = snap.laps ?? st.laps;
+  st.pot = snap.pot ?? st.pot;
+  st.dryTurn = snap.dryTurn ?? st.dryTurn;
+  st.mods = (snap.mods ?? st.mods).map((m) => ({ ...m }));
+  if (snap.eventPiles) st.eventPiles = { 1: [...snap.eventPiles[1]], 2: [...snap.eventPiles[2]] };
   return st;
 }

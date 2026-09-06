@@ -12,6 +12,7 @@ import { money, START_MONEY } from '../data/board.js';
 import { inviteLink } from '../net/room.js';
 import { transportKind } from '../net/transport.js';
 import { myName, setMyName } from '../net/identity.js';
+import { EVENT_LEVELS } from '../data/events.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -58,9 +59,11 @@ export function lobbyModal(room, handle = {}) {
         </div>
         <div class="lobby-count"></div>
         <div class="lobby-seats"></div>
+        <div class="lobby-rule"></div>
         <p class="lobby-foot"></p>`;
 
       const seatsEl = box.querySelector('.lobby-seats');
+      const ruleEl = box.querySelector('.lobby-rule');
       const countEl = box.querySelector('.lobby-count');
       const footNote = box.querySelector('.lobby-foot');
 
@@ -86,7 +89,7 @@ export function lobbyModal(room, handle = {}) {
         const iAmReady = !!room.seats[mine]?.ready;
         const sig = JSON.stringify([
           room.seats.map((s) => [s.name, s.token, s.ready, s.online]),
-          room.hostId, mine,
+          room.hostId, mine, room.options?.events,
         ]);
         // Đang gõ dở mà vẽ lại cả danh sách là mất chữ và mất con trỏ — chỉ vẽ
         // khi sổ ghế thật sự khác lần trước.
@@ -153,6 +156,30 @@ export function lobbyModal(room, handle = {}) {
         seatsEl.querySelectorAll('[data-kick]').forEach((b) => {
           b.addEventListener('click', () => room.kick(b.dataset.kick));
         });
+
+        /* Thẻ Thời Cuộc — sự kiện toàn bàn. Chỉ chủ phòng chỉnh được, và chỉ
+           chỉnh trong phòng chờ: luật đổi giữa ván thì người đã đầu tư theo
+           luật cũ chịu thiệt oan, mà mỗi máy lại chạy một bộ luật khác nhau. */
+        const level = room.options?.events ?? 'chuan';
+        const cur = EVENT_LEVELS[level] ?? EVENT_LEVELS.chuan;
+        ruleEl.innerHTML = `
+          <div class="rule-head">
+            <span class="rule-label">THẺ THỜI CUỘC</span>
+            <i>${esc(cur.short)}</i>
+          </div>
+          <div class="rule-pick">
+            ${Object.values(EVENT_LEVELS).map((lv) => `
+              <button type="button" class="rule-btn ${lv.key === level ? 'on' : ''}"
+                      data-lv="${lv.key}" ${iAmHost ? '' : 'disabled'}
+                      title="${esc(lv.desc)}">${lv.name}</button>`).join('')}
+          </div>
+          <p class="rule-note">${esc(cur.desc)}</p>`;
+
+        if (iAmHost) {
+          ruleEl.querySelectorAll('.rule-btn').forEach((b) => {
+            b.addEventListener('click', () => room.setOptions({ events: b.dataset.lv }));
+          });
+        }
 
         footNote.innerHTML = iAmHost
           ? `Bạn là chủ phòng: khi <b>mọi người đã sẵn sàng</b> thì nút

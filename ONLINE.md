@@ -156,13 +156,24 @@ dòng cảnh báo rõ khi đang chạy đường nội bộ.
 | `src/net/session.js` | Chọn chế độ → mở/vào phòng → phòng chờ → trao ván cho controller; cả đường vào lại giữa ván. |
 | `src/net/identity.js` | `id` theo tab (sessionStorage) nên hai tab là hai người chơi; `name` theo máy. |
 | `src/core/serialize.js` | `GameState` ↔ JSON: `Map`, `Set`, `Deck` không tự qua được `JSON.stringify`. |
-| `src/ui/lobby.js` | Phòng chờ, các hộp thoại bị mời ra / phòng đầy. |
+| `src/ui/lobby.js` | Phòng chờ, chọn nấc thẻ Thời Cuộc, các hộp thoại bị mời ra / phòng đầy. |
+| `src/core/events.js` | Luật thẻ Thời Cuộc: thanh áp lực, rút thẻ, **kế hoạch** của mỗi sự kiện, cấn nợ tự động. Thuần dữ liệu như `state.js`. |
+| `src/game/eventRunner.js` | Thi hành một sự kiện: bày thẻ cho cả bàn, hỏi nhiều người **cùng lúc**, đấu giá kín. |
 
 Trong `controller.js`, phần online gói gọn ở `startOnline()`, `isDriver()`,
 `sync()`, `onSync()`, `onEvent()`, `onAsk()`, `onLink()`, `onRoomChange()`,
 `checkAbsent()`, `skipAbandonedTurn()`, `evictPlayer()`, và khối đồng hồ lượt
 (`armClock()`, `clearClock()`, `applyClock()`, `checkClock()`, `judgeSeat()`). Các chỗ còn lại chỉ thêm một dòng
 `this.sync()` sau khi đổi trạng thái.
+
+Thẻ Thời Cuộc theo đúng luật ấy, chỉ khác ở chỗ nó hỏi **nhiều người một lúc**:
+máy cầm lái lập kế hoạch (gieo hết phần ngẫu nhiên ở một chỗ), gửi câu hỏi đi
+bằng `ask` rồi `Promise.all` chờ cả bàn, mỗi câu có hạn và **câu trả lời mặc
+định lúc hết giờ** — người bỏ đi giữa phiên đấu giá coi như bỏ qua, không treo
+bàn. Vì một sự kiện dài hơn hạn một nước đi, `EventRunner.bumpClock()` vặn lại
+đồng hồ sau mỗi chặng, kẻo mấy máy ngồi xem lại gạch tên chính người đang chạy
+sự kiện. Nấc luật đi kèm sổ ghế (`room.options`) và nằm trong ảnh chụp
+(`snapshot.settings`), nên người vào lại giữa ván chơi đúng bộ luật của bàn.
 
 Vì `id` nằm trong sessionStorage nên **bấm F5 hay rớt mạng rồi vào lại thì về
 đúng ghế cũ**, còn đóng hẳn tab rồi mở tab mới thì thành người lạ — coi như bỏ ván.

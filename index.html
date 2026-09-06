@@ -33,6 +33,17 @@
         <!-- Xem nhanh ô đang rê chuột trên bàn cờ -->
         <section id="quickview"></section>
 
+        <!-- Thanh Thời Cuộc: đầy tới ngưỡng là nổ một thẻ sự kiện.
+             Ẩn hẳn khi ván tắt tính năng này. -->
+        <div id="fate-meter" hidden>
+          <div class="fm-head">
+            <span class="fm-label">THỜI CUỘC</span>
+            <span class="fm-state"></span>
+          </div>
+          <div class="fm-bar"><i></i></div>
+          <div class="fm-note"></div>
+        </div>
+
         <div class="side-foot">
           <div id="bank-plate">
             <span class="bank-label">NGÂN HÀNG</span>
@@ -58,11 +69,13 @@
         <!-- Bản online: đồng hồ của người đang phải ra quyết định. Cả bàn cùng
              nhìn một vòng cung nên ai cũng biết còn bao lâu, kể cả người ngồi xem. -->
         <div id="turn-clock" role="timer">
-          <svg class="tc-ring" viewBox="0 0 100 100" aria-hidden="true">
-            <circle class="tc-track" cx="50" cy="50" r="44"></circle>
-            <circle class="tc-arc" cx="50" cy="50" r="44"></circle>
-          </svg>
-          <span class="tc-num">–</span>
+          <div class="tc-dial">
+            <svg class="tc-ring" viewBox="0 0 100 100" aria-hidden="true">
+              <circle class="tc-track" cx="50" cy="50" r="44"></circle>
+              <circle class="tc-arc" cx="50" cy="50" r="44"></circle>
+            </svg>
+            <span class="tc-num">–</span>
+          </div>
           <span class="tc-who"></span>
         </div>
         <div id="broadcast"></div>
