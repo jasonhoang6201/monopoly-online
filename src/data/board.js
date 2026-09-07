@@ -5,7 +5,7 @@
  */
 import raw from '../../assets/board-info.json';
 
-export const START_MONEY = 500;
+export const START_MONEY = 750;
 export const GO_SALARY = 200;
 export const JAIL_FINE = 50;
 export const JAIL_TILE = 10;

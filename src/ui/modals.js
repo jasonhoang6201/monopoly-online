@@ -40,6 +40,33 @@ export function setupModal() {
   let events = DEFAULT_EVENT_LEVEL;
   const names = Array.from({ length: MAX_PLAYERS }, (_, i) => `Người chơi ${i + 1}`);
   const counts = Array.from({ length: MAX_PLAYERS - 1 }, (_, i) => i + 2);   // 2…6
+  /** Màu quân từng chỗ ngồi. Mặc định là sáu sắc đầu bảng, bấm chấm màu để đổi. */
+  const picks = Array.from({ length: MAX_PLAYERS }, (_, i) => i);
+
+  /**
+   * Bấm chấm màu: nhảy tới sắc kế tiếp chưa ai trong bàn giữ, vòng hết bảng
+   * rồi quay lại. Bàn nhiều nhất sáu người mà bảng có mười tám sắc nên luôn
+   * còn chỗ trống — vòng lặp dừng chậm nhất ở đúng màu đang đứng.
+   */
+  const nextColor = (row) => {
+    const held = new Set(picks.slice(0, count).filter((_, i) => i !== row));
+    for (let k = 1; k <= TOKENS.length; k++) {
+      const t = (picks[row] + k) % TOKENS.length;
+      if (!held.has(t)) { picks[row] = t; return; }
+    }
+  };
+
+  /**
+   * Thêm người chơi có thể lôi vào bàn một chỗ ngồi mang màu mặc định trùng
+   * với màu ai đó đã tự chọn trước đó; đẩy chỗ ngồi mới sang màu còn trống.
+   */
+  const dedupe = () => {
+    const seen = new Set();
+    for (let i = 0; i < count; i++) {
+      if (seen.has(picks[i])) nextColor(i);
+      seen.add(picks[i]);
+    }
+  };
 
   return openModal({
     eyebrow: 'CỜ TỶ PHÚ · SÀI GÒN – GIA ĐỊNH',
@@ -83,21 +110,34 @@ export function setupModal() {
           </div>`;
 
         const list = inner.querySelector('#name-list');
-        list.innerHTML = names.slice(0, count).map((n, i) => `
-          <div class="name-row">
-            <span class="dot" style="background:${TOKENS[i].css}"></span>
-            <input type="text" maxlength="14" value="${esc(n)}" data-i="${i}" />
-            <span style="font-size:11px;opacity:.6">${TOKENS[i].name}</span>
-          </div>`).join('');
+
+        /* Đổi màu chỉ vẽ lại danh sách tên chứ không dựng lại cả khung — ai
+           đang gõ tên ở hàng khác thì không mất chữ đang gõ. */
+        const renderNames = () => {
+          list.innerHTML = names.slice(0, count).map((n, i) => `
+            <div class="name-row">
+              <button type="button" class="dot" data-c="${i}"
+                      style="background:${TOKENS[picks[i]].css}"
+                      title="Bấm để đổi màu quân"
+                      aria-label="Đổi màu quân của người chơi ${i + 1}"></button>
+              <input type="text" maxlength="14" value="${esc(n)}" data-i="${i}" />
+              <span style="font-size:11px;opacity:.6">${TOKENS[picks[i]].name}</span>
+            </div>`).join('');
+
+          list.querySelectorAll('input').forEach((inp) => {
+            inp.addEventListener('input', () => { names[+inp.dataset.i] = inp.value; });
+          });
+          list.querySelectorAll('.dot[data-c]').forEach((b) => {
+            b.addEventListener('click', () => { nextColor(+b.dataset.c); renderNames(); });
+          });
+        };
+        renderNames();
 
         inner.querySelectorAll('.count-btn').forEach((b) => {
-          b.addEventListener('click', () => { count = +b.dataset.n; render(); });
+          b.addEventListener('click', () => { count = +b.dataset.n; dedupe(); render(); });
         });
         inner.querySelectorAll('.rule-btn').forEach((b) => {
           b.addEventListener('click', () => { events = b.dataset.lv; render(); });
-        });
-        list.querySelectorAll('input').forEach((inp) => {
-          inp.addEventListener('input', () => { names[+inp.dataset.i] = inp.value; });
         });
       };
       render();
@@ -105,13 +145,14 @@ export function setupModal() {
       foot.querySelector('.btn').addEventListener('click', () => {
         close({
           names: names.slice(0, count).map((n, i) => (n.trim() || `Người chơi ${i + 1}`)),
+          tokens: picks.slice(0, count),
           settings: { events },
         });
       }, { once: true, capture: true });
     },
   }).then((v) => (v?.names
     ? v
-    : { names: names.slice(0, count), settings: { events } }));
+    : { names: names.slice(0, count), tokens: picks.slice(0, count), settings: { events } }));
 }
 
 /* ==================================================================

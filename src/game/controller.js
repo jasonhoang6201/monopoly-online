@@ -95,9 +95,9 @@ export class Game {
     // Nhạc nền chỉ sống ở màn hình chờ; khai cuộc xong là nhường chỗ
     // cho tiếng xí ngầu và tiếng quân cờ.
     audio.startMusic();
-    const { names, settings } = await setupModal();
+    const { names, tokens, settings } = await setupModal();
     audio.stopMusic();
-    this.state = new GameState(names, null, settings);
+    this.state = new GameState(names, tokens ?? null, settings);
     this.quick.setState(this.state);
     this.hud = new Hud(this.state, (id) => this.showPlayer(id), this.quick);
     this.scene.onTileClick = (id) => this.showTile(id);

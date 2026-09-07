@@ -11,25 +11,48 @@ import { CHANCE, CHEST, Deck } from '../data/cards.js';
 import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
 
 /**
- * Sáu quân cờ — chỉ phân biệt bằng MÀU, không mang biểu tượng riêng.
- * Sắc lấy từ hộp sơn mài: son, thếp vàng, ngọc, chàm, tím Huế và men lam.
+ * Bảng màu quân — quân cờ chỉ phân biệt bằng MÀU, không mang biểu tượng riêng.
+ * Sắc lấy từ hộp sơn mài và men gốm: son, thếp vàng, ngọc, chàm, tím Huế…
  *
- * Sáu sắc rải đều vòng sắc độ (5° · 38° · 152° · 186° · 224° · 285°) nên không
- * hai quân nào lẫn nhau, kể cả khi màu ấy bị pha loãng thành nước phủ trên ô.
- * Chỗ thứ sáu trước là *mun đen* — sắc gần trung tính ấy phủ lên mặt ô chỉ ra
- * một vệt xám bẩn, khó nói là đất của ai; men lam sáng thì phủ tới đâu rõ tới đó.
+ * Sáu sắc đầu là bộ cũ, giữ nguyên thứ tự vì `#freeToken()` phát màu theo chỉ
+ * số nhỏ nhất còn trống: bàn ít người vẫn ra đúng sáu màu ấy, mười hai sắc
+ * thêm chỉ hiện ra cho ai muốn tự chọn. `key` đi vào ảnh chụp ván (serialize.js
+ * dò lại màu theo key), nên đổi tên khoá cũ là làm hỏng ván đang lưu.
+ *
+ * Sắc độ rải đều vòng màu và không sắc nào rơi vào vùng trung tính: màu quân
+ * còn bị pha loãng thành nước phủ trên ô đất, mà xám thì phủ tới đâu cũng chỉ
+ * ra một vệt bẩn, không nói được đó là đất của ai. Trắng ngà đứng được vì nó
+ * sáng hơn hẳn mặt giấy, không phải vì nó có sắc.
  */
 export const TOKENS = [
-  { key: 'son',   name: 'Son đỏ',    color: 0xC0392B, css: '#C0392B' },
-  { key: 'kim',   name: 'Hoàng kim', color: 0xD4A24C, css: '#D4A24C' },
-  { key: 'bich',  name: 'Ngọc bích', color: 0x2E9E70, css: '#2E9E70' },
-  { key: 'lam',   name: 'Chàm lam',  color: 0x4A6FC4, css: '#4A6FC4' },
-  { key: 'tia',   name: 'Tím Huế',   color: 0x8B5AA8, css: '#8B5AA8' },
-  { key: 'men',   name: 'Men lam',   color: 0x2FB8C6, css: '#2FB8C6' },
+  // Bộ sáu gốc — thứ tự này là thứ tự phát màu tự động
+  { key: 'son',   name: 'Son đỏ',      color: 0xC0392B, css: '#C0392B' },
+  { key: 'kim',   name: 'Hoàng kim',   color: 0xD4A24C, css: '#D4A24C' },
+  { key: 'bich',  name: 'Ngọc bích',   color: 0x2E9E70, css: '#2E9E70' },
+  { key: 'lam',   name: 'Chàm lam',    color: 0x4A6FC4, css: '#4A6FC4' },
+  { key: 'tia',   name: 'Tím Huế',     color: 0x8B5AA8, css: '#8B5AA8' },
+  { key: 'men',   name: 'Men lam',     color: 0x2FB8C6, css: '#2FB8C6' },
+  // Mười hai sắc thêm, xếp theo vòng sắc độ để bảng chọn đọc thành dải màu
+  { key: 'cam',   name: 'Cam nung',    color: 0xE2743A, css: '#E2743A' },
+  { key: 'nghe',  name: 'Vàng nghệ',   color: 0xE8C233, css: '#E8C233' },
+  { key: 'ma',    name: 'Lục mạ',      color: 0x86B93C, css: '#86B93C' },
+  { key: 'reu',   name: 'Rêu đá',      color: 0x5E7F4B, css: '#5E7F4B' },
+  { key: 'vit',   name: 'Xanh cổ vịt', color: 0x1C8C82, css: '#1C8C82' },
+  { key: 'thien', name: 'Thanh thiên', color: 0x2A7FD4, css: '#2A7FD4' },
+  { key: 'sim',   name: 'Tím sim',     color: 0x6C55C0, css: '#6C55C0' },
+  { key: 'sen',   name: 'Hồng sen',    color: 0xE0699A, css: '#E0699A' },
+  { key: 'man',   name: 'Rượu mận',    color: 0x9E2F53, css: '#9E2F53' },
+  { key: 'nau',   name: 'Nâu đất',     color: 0x8A5A3B, css: '#8A5A3B' },
+  { key: 'khoi',  name: 'Xám khói',    color: 0x6E8091, css: '#6E8091' },
+  { key: 'nga',   name: 'Trắng ngà',   color: 0xE8DCC0, css: '#E8DCC0' },
 ];
 
-/** Số người chơi tối đa — bằng số quân cờ và số chỗ đứng trên một ô. */
-export const MAX_PLAYERS = TOKENS.length;
+/**
+ * Số người chơi tối đa — do số chỗ đứng trên một ô quyết định, **không** phải
+ * số màu: bảng màu dài ra là để có cái mà chọn, chứ thêm người thứ bảy thì
+ * quân chồng lên nhau ở góc ô và ô Vào Tù không đủ chỗ xếp.
+ */
+export const MAX_PLAYERS = 6;
 
 export class Player {
   constructor(id, name, tokenIndex) {

@@ -1860,7 +1860,15 @@ html, body {
   background: rgba(239, 226, 198, .05);
   border: 1px solid rgba(200, 160, 72, .2);
 }
-.name-row .dot { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid rgba(0,0,0,.4); flex: none; }
+.name-row .dot {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1.5px solid rgba(0, 0, 0, .4); flex: none;
+  padding: 0; cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3);
+  transition: transform .14s, box-shadow .14s;
+}
+.name-row .dot:hover { transform: scale(1.12); }
+.name-row .dot:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
 .name-row input {
   flex: 1; min-width: 0; background: transparent; border: 0; outline: none;
   font-family: var(--serif); font-size: 15px; color: var(--paper);
@@ -2141,9 +2149,14 @@ html, body {
   background: rgba(16, 27, 51, .3);
   border: 1px solid rgba(200, 160, 72, .22);
 }
-.color-pick { display: flex; gap: 8px; margin-top: 9px; flex-wrap: wrap; }
+/* Bảng màu dài (18 sắc): xếp lưới tự chia cột thay vì hàng ngang cuộn dài,
+   nên thu nhỏ cửa sổ thì số cột giảm chứ ô không co lại méo */
+.color-pick {
+  display: grid; gap: 7px; margin-top: 9px;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+}
 .color-swatch {
-  width: 40px; height: 34px; flex: none;
+  width: 100%; height: 32px;
   display: grid; place-items: center;
   background: var(--sw); cursor: pointer;
   border: 2px solid rgba(0, 0, 0, .45); border-radius: 8px;
@@ -2158,10 +2171,16 @@ html, body {
 /* Màu người khác đang giữ: mờ đi nhưng vẫn bấm được, để còn hiện lời nhắc */
 .color-swatch.taken { opacity: .38; }
 .color-swatch.taken:hover { transform: none; }
+/* Dấu ✓/✕ nằm trên đĩa sáng: bảng có cả Rêu đá lẫn Trắng ngà, chữ trần một
+   màu thì nền này đọc được nền kia mất hút */
 .color-mark {
-  font-style: normal; font-size: 13px; line-height: 1;
-  color: #23140A; text-shadow: 0 1px 0 rgba(255, 255, 255, .35);
+  font-style: normal; font-size: 11px; line-height: 1;
+  display: grid; place-items: center;
+  color: #23140A; min-width: 16px; height: 16px; border-radius: 50%;
+  background: rgba(255, 253, 245, .92);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .35);
 }
+.color-mark:empty { display: none; }
 .color-pick.is-locked .color-swatch { cursor: default; }
 .color-note {
   margin-top: 8px; font-size: 11px; line-height: 1.6;

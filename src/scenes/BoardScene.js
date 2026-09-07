@@ -19,7 +19,6 @@ import {
   qRandom, qAxis, qMul, qNorm, qSlerp, qForValue,
 } from '../render/dice3d.js';
 import { BOARD, money } from '../data/board.js';
-import { TOKENS } from '../core/state.js';
 import { audio } from '../audio/audio.js';
 import { DPR, px } from '../dpr.js';
 
@@ -140,10 +139,9 @@ export default class BoardScene extends Phaser.Scene {
     this.boardPx = boardTextureSize();
     this.textures.addCanvas('board', paintBoard(this.boardPx));
 
-    // Quân cờ và xúc xắc vẽ dư độ phân giải để không bị rỗ khi bàn cờ lớn
-    for (const t of TOKENS) {
-      this.textures.addCanvas(`tok-${t.key}`, paintToken(t.css, 288));
-    }
+    /* Quân cờ vẽ dư độ phân giải để không bị rỗ khi bàn cờ lớn, nhưng chỉ vẽ
+       khi biết ván này gồm những màu nào (xem `setPlayers`) — bảng có 18 sắc mà
+       một ván nhiều nhất 6 người, dựng cả 18 tấm là phí bộ nhớ ảnh. */
     this.textures.addCanvas('die-shadow', paintDieShadow(128));
     this.textures.addCanvas('house', paintHouseGlyph(192));
     this.textures.addCanvas('hotel', paintHotelGlyph(192));
@@ -376,7 +374,9 @@ export default class BoardScene extends Phaser.Scene {
     this.players = players;
     this.tokenLayer.removeAll(true);
     this.tokens = players.map((p) => {
-      const spr = this.add.image(0, 0, `tok-${p.token.key}`).setOrigin(0.5, 0.86);
+      const key = `tok-${p.token.key}`;
+      if (!this.textures.exists(key)) this.textures.addCanvas(key, paintToken(p.token.css, 288));
+      const spr = this.add.image(0, 0, key).setOrigin(0.5, 0.86);
       this.tokenLayer.add(spr);
       return spr;
     });

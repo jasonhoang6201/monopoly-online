@@ -32,7 +32,7 @@
  *   bc      người tới lượt → tất cả   dòng thông báo giữa bàn
  *   ask/reply  giữa hai người   hỏi–đáp có chờ trả lời (dùng cho giao dịch)
  */
-import { MAX_PLAYERS } from '../core/state.js';
+import { MAX_PLAYERS, TOKENS } from '../core/state.js';
 import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
 import { makeTransport } from './transport.js';
 
@@ -349,10 +349,14 @@ export class Room {
     return this.seats.length >= 2 && this.seats.every((s) => s.ready);
   }
 
-  /** Màu quân nhỏ nhất còn trống — ghế giữa bị bỏ trống thì màu ấy dùng lại được. */
+  /**
+   * Màu quân nhỏ nhất còn trống — ghế giữa bị bỏ trống thì màu ấy dùng lại được.
+   * Quét cả bảng màu chứ không dừng ở `MAX_PLAYERS`: ai đó tự chọn một sắc ở
+   * cuối bảng thì người vào sau vẫn còn màu để phát.
+   */
   #freeToken() {
     const taken = new Set(this.seats.map((s) => s.token));
-    for (let i = 0; i < MAX_PLAYERS; i++) if (!taken.has(i)) return i;
+    for (let i = 0; i < TOKENS.length; i++) if (!taken.has(i)) return i;
     return 0;
   }
 
@@ -395,7 +399,7 @@ export class Room {
     if (this.phase !== 'lobby') return false;
     const mine = this.mySeat;
     if (mine < 0 || this.seats[mine].ready) return false;
-    if (!Number.isInteger(index) || index < 0 || index >= MAX_PLAYERS) return false;
+    if (!Number.isInteger(index) || index < 0 || index >= TOKENS.length) return false;
     const held = this.tokenSeat(index);
     if (held >= 0 && held !== mine) return false;
     const m = { id: this.me.id, token: index };
@@ -409,7 +413,7 @@ export class Room {
     if (!this.isHost || this.phase !== 'lobby') return;
     const i = this.seatOf(m?.id);
     const index = Number(m?.token);
-    if (i < 0 || !Number.isInteger(index) || index < 0 || index >= MAX_PLAYERS) return;
+    if (i < 0 || !Number.isInteger(index) || index < 0 || index >= TOKENS.length) return;
     if (this.seats[i].ready) return;
     // Hai người bấm cùng một màu gần như cùng lúc: chỉ tin nào tới trước được
     // ghi, tin sau rơi ở đây và máy người ấy vẫn giữ nguyên màu cũ.
