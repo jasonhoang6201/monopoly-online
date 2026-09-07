@@ -10,6 +10,7 @@
 import fs from 'node:fs';
 import { launchChrome } from './launch.mjs';
 import { playRollOff } from './rolloff.mjs';
+import { pickOnBoard, markedTiles, picking } from './pick.mjs';
 
 const errors = [];
 const fails = [];
@@ -351,6 +352,8 @@ const clickThrough = async (maxMs = 60000) => {
   const t0 = Date.now();
   while (Date.now() - t0 < maxMs) {
     await page.waitForTimeout(600);
+    // Bảng chọn ô nằm trên bàn cờ chứ không có nền tối — phải bấm vào ô
+    if (await picking(page)) { await pickOnBoard(page).catch(() => {}); continue; }
     const btn = page.locator('.scrim.show .modal-foot button.btn').first();
     if (await btn.isVisible().catch(() => false)) { await btn.click(); continue; }
     // Không còn hộp nào mà ván cũng rảnh tay → chuỗi hộp thoại đã xong
@@ -358,12 +361,6 @@ const clickThrough = async (maxMs = 60000) => {
   }
   return false;
 };
-
-/** Ô mà hộp chọn đang chọn sẵn — hộp tự chọn ô rẻ nhất. */
-const pickedTile = () => page.evaluate(() => {
-  const row = document.querySelector('.pick-row.on');
-  return row ? +row.dataset.id : null;
-});
 
 /** Mở túi thẻ và bấm dùng tấm đầu tiên còn dùng được. */
 const useFromBag = async () => {
@@ -385,8 +382,9 @@ ok('thẻ dỡ nhà nằm trong túi chứ không nổ ngay', await page.evaluat
 }));
 
 await useFromBag();
-ok('hộp chọn mục tiêu hiện ra', await page.locator('.pick-row').first().isVisible());
-await page.locator('.scrim.show .modal-foot button.btn').first().click();     // chốt ô
+ok('bàn cờ mời chọn mục tiêu', await page.locator('.tile-pick').first().isVisible());
+ok('chỉ ô có nhà của người khác được sáng', (await markedTiles(page)).join() === '39');
+await pickOnBoard(page);                                                     // bấm ô rồi chốt
 await page.waitForTimeout(2600);
 const after = await page.evaluate(() => {
   const st = window.__monopoly.controller.state;
@@ -405,7 +403,7 @@ await page.waitForTimeout(900);
 await page.locator('.scrim.show .modal-foot button.btn').first().click();
 await page.waitForTimeout(1400);
 await useFromBag();
-await page.locator('.scrim.show .modal-foot button.btn').first().click();
+await pickOnBoard(page);
 await page.waitForTimeout(2600);
 ok('thẻ Cơ Hội dỡ đúng hai cấp', await page.evaluate(() => (
   window.__monopoly.controller.state.housesOn(39) === 2)));
@@ -418,16 +416,16 @@ await page.waitForTimeout(900);
 await page.locator('.scrim.show .modal-foot button.btn').first().click();     // cất vào túi
 await page.waitForTimeout(1400);
 await useFromBag();
-ok('giải toả cũng hỏi chọn lô', await page.locator('.pick-row').first().isVisible());
+ok('giải toả cũng mời chọn lô trên bàn cờ', await page.locator('.tile-pick').first().isVisible());
 
-// Lô nào đang được chọn sẵn thì chốt lô ấy, rồi đối chiếu theo đúng lô đó
-const lot = await pickedTile();
+// Chốt lô sáng đầu tiên, rồi đối chiếu theo đúng lô đó
+const lot = (await markedTiles(page))[0];
 const beforeResume = await page.evaluate((id) => {
   const st = window.__monopoly.controller.state;
   const seat = st.owner.get(id);
   return { seat, money: st.players[seat].money };
 }, lot);
-await page.locator('.scrim.show .modal-foot button.btn').first().click();     // chốt lô
+await pickOnBoard(page, lot);                                                 // chốt lô
 // Phiên đấu giá kín: chuyền máy qua từng người, ai cũng để giá 0 → phiên ế
 await clickThrough();
 await page.waitForTimeout(1200);

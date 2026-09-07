@@ -32,8 +32,9 @@ import {
   winnerModal, describe, playerModal, tileModal, rollOffModal,
 } from '../ui/modals.js';
 import {
-  eventCardModal, bracePromptModal, firePromptModal, pickTileModal, auctionBidModal,
+  eventCardModal, bracePromptModal, firePromptModal, auctionBidModal,
 } from '../ui/eventModals.js';
+import { pickTileOnBoard } from '../ui/tilePicker.js';
 import { EVENT_BY_ID } from '../data/events.js';
 import { audio } from '../audio/audio.js';
 
@@ -405,7 +406,7 @@ export class Game {
     }
     if (name === 'ev-pick') {
       audio.sfx('turn');
-      return pickTileModal(this.state, this.net.mySeat, data.ids, data.text, ms);
+      return this.pickTile(data.ids, data.text, ms);
     }
     if (name === 'ev-bid') {
       audio.sfx('turn');
@@ -1110,6 +1111,16 @@ export class Game {
   }
 
   /**
+   * Chỉ một ô ngay trên bàn cờ rồi xác nhận — xem `ui/tilePicker.js`.
+   *
+   * Gom vào đây vì cả `answer()` (câu hỏi gửi từ máy khác) lẫn `EventRunner`
+   * đều cần đúng một cách hỏi, mà chỗ duy nhất giữ `scene` là controller.
+   */
+  pickTile(ids, text, ms = 0) {
+    return pickTileOnBoard(this.scene, this.state, ids, text, ms);
+  }
+
+  /**
    * Ba thẻ đụng thẳng vào nhà đất người khác: ép bán nhà, dỡ nhà, cưỡng chiếm
    * — và thẻ giải toả chỉ định.
    *
@@ -1164,7 +1175,7 @@ export class Game {
       seat: p.id,
       name: 'ev-pick',
       data: { ids, text },
-      local: () => pickTileModal(st, p.id, ids, text, this.events.localMs),
+      local: () => this.pickTile(ids, text, this.events.localMs),
       fallback,
       note: 'họ vừa lôi ra một thẻ nhắm vào nhà đất người khác',
     });

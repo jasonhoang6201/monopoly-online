@@ -17,7 +17,7 @@ import { BOARD, GROUPS, GROUP_TILES, money, tileLabel, tileShortLabel } from '..
 import { drawEvent, planEvent, autoRaise } from '../core/events.js';
 import { handoff } from '../ui/modal.js';
 import {
-  eventCardModal, bracePromptModal, firePromptModal, pickTileModal, auctionBidModal,
+  eventCardModal, bracePromptModal, firePromptModal, auctionBidModal,
 } from '../ui/eventModals.js';
 import { audio } from '../audio/audio.js';
 
@@ -307,28 +307,21 @@ export class EventRunner {
     const st = this.state;
     const seats = plan.seats.filter((s) => !st.players[s].bankrupt);
 
+    const lostText = {
+      eyebrow: 'MẤT GIẤY TỜ',
+      title: 'Ô nào thất lạc giấy tờ?',
+      sub: 'Ô bạn chọn sẽ <b>không thu được tiền thuê</b> cho tới khi làm lại giấy.',
+      note: 'Chọn khôn ngoan: ô ít người đáp xuống thì mất cũng chẳng đau.',
+      confirm: 'Chốt ô này',
+    };
+
     const answers = await this.askMany(seats.map((seat) => {
       const ids = st.propertiesOf(seat);
       return {
         seat,
         name: 'ev-pick',
-        data: {
-          ids,
-          text: {
-            eyebrow: 'MẤT GIẤY TỜ',
-            title: 'Ô nào thất lạc giấy tờ?',
-            sub: 'Ô bạn chọn sẽ <b>không thu được tiền thuê</b> cho tới khi làm lại giấy.',
-            note: 'Chọn khôn ngoan: ô ít người đáp xuống thì mất cũng chẳng đau.',
-            confirm: 'Chốt ô này',
-          },
-        },
-        local: () => pickTileModal(st, seat, ids, {
-          eyebrow: 'MẤT GIẤY TỜ',
-          title: 'Ô nào thất lạc giấy tờ?',
-          sub: 'Ô bạn chọn sẽ <b>không thu được tiền thuê</b> cho tới khi làm lại giấy.',
-          note: 'Chọn khôn ngoan: ô ít người đáp xuống thì mất cũng chẳng đau.',
-          confirm: 'Chốt ô này',
-        }, this.localMs),
+        data: { ids, text: lostText },
+        local: () => this.g.pickTile(ids, lostText, this.localMs),
         // Không trả lời thì lấy ô rẻ nhất — phạt người vắng mặt nhẹ tay nhất có thể
         fallback: [...st.propertiesOf(seat)].sort((a, b) => BOARD[a].price - BOARD[b].price)[0],
         note: 'giấy tờ nhà đất của họ thất lạc',
@@ -417,7 +410,7 @@ export class EventRunner {
       seat: from,
       name: 'ev-pick',
       data: { ids: bare(from), text: text(st.players[to].name) },
-      local: () => pickTileModal(st, from, bare(from), text(st.players[to].name), this.localMs),
+      local: () => this.g.pickTile(bare(from), text(st.players[to].name), this.localMs),
       fallback: [...bare(from)].sort((a, b) => BOARD[a].price - BOARD[b].price)[0],
       note: 'họ phải giao một lô đất cho người kế tiếp',
     })));

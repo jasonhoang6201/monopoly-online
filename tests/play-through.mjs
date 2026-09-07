@@ -1,5 +1,6 @@
 import { launchChrome } from './launch.mjs';
 import { playRollOff } from './rolloff.mjs';
+import { pickOnBoard, picking } from './pick.mjs';
 
 const SHOT = '/private/tmp/claude-501/-Users-jasonhoang-Desktop-monopoly/a29323e2-f3f4-4b2d-9c9c-70118d22612f/scratchpad';
 const errors = [];
@@ -52,6 +53,8 @@ async function drain(maxMs = 20000) {
   const order = ['Mua ', 'Nhận tiền', 'Đành chịu', 'Tiếp tục', 'Chấp nhận',
                  'Xong', 'Đóng', 'Bỏ qua', 'Để sau', 'Chơi tiếp', 'Thôi', 'Huỷ'];
   while (Date.now() - t0 < maxMs) {
+    // Bảng chọn ô trên bàn cờ không có nền tối; không bấm thì ván đứng ở đó
+    if (await picking(page)) { await pickOnBoard(page).catch(() => {}); continue; }
     if (await page.locator('#modal-root .scrim.show').count() === 0) {
       await page.waitForTimeout(300);
       if (await page.locator('#modal-root .scrim.show').count() === 0) return;

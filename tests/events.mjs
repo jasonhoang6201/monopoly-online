@@ -6,6 +6,7 @@
  */
 import { launchChrome } from './launch.mjs';
 import { playRollOff } from './rolloff.mjs';
+import { pickOnBoard, picking } from './pick.mjs';
 
 const errors = [];
 const fails = [];
@@ -211,6 +212,13 @@ async function clearModals(page, ms = 120000) {
   const t0 = Date.now();
   let calm = 0;
   while (Date.now() - t0 < ms) {
+    /* Bảng chọn ô nằm ngay trên bàn cờ, không có nền tối — vòng lặp chỉ soi
+       hộp thoại sẽ tưởng màn hình đã sạch rồi bỏ mặc nó đứng đó. */
+    if (await picking(page)) {
+      calm = 0;
+      await pickOnBoard(page).catch(() => {});
+      continue;
+    }
     const scrim = page.locator('#modal-root .scrim.show');
     if (await scrim.count()) {
       calm = 0;

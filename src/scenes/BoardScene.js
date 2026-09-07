@@ -162,6 +162,12 @@ export default class BoardScene extends Phaser.Scene {
        đang đứng, quay xong là tắt và bàn cờ trở lại y như cũ. */
     this.spinGfx = this.add.rectangle(0, 0, 1, 1, 0xC8A048, 1)
       .setDepth(1.6).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
+    /* Các ô đang được phép chọn trong lúc một thẻ bắt chỉ mục tiêu ngay trên
+       bàn cờ (xem `ui/tilePicker.js`). Lớp riêng vì vệt ô quân đang đứng vẫn
+       phải sáng suốt lúc ấy — hai vệt không được giẫm lên nhau. */
+    this.markLayer = this.add.container(0, 0).setDepth(1.4);
+    this.marked = null;
+    this.markSet = null;
     this.overlay = this.add.container(0, 0).setDepth(2);
     /* Vệt đèn báo ô đã có nhà — nằm trên nước màu chủ đất, dưới quân cờ */
     this.glowLayer = this.add.container(0, 0).setDepth(3);
@@ -265,6 +271,7 @@ export default class BoardScene extends Phaser.Scene {
     if (this.state) this.refresh(this.state);
     this.placeTokens();
     if (this.highlightedTile != null) this.highlightTile(this.highlightedTile, this.highlightColor);
+    if (this.marked) this.markTiles(this.marked.ids, this.marked);
     if (this.hoverTile != null) this.coverTile(this.hoverGfx, this.hoverTile);
   }
 
@@ -321,7 +328,8 @@ export default class BoardScene extends Phaser.Scene {
       this.hoverTile = id;
       this.drawHover(id);
       this.showHousePlaque(id);
-      this.input.setDefaultCursor(id == null ? 'default' : 'pointer');
+      this.input.setDefaultCursor(id == null ? 'default'
+        : this.markSet && !this.markSet.has(id) ? 'not-allowed' : 'pointer');
       // Bảng xem nhanh bên cột trái bám theo ô đang rê chuột
       this.onTileHover?.(id);
     };
@@ -918,6 +926,55 @@ export default class BoardScene extends Phaser.Scene {
         pl.destroy();
       },
     });
+  }
+
+  /**
+   * Sáng tất cả những ô đang được phép chọn, và chỉ những ô ấy.
+   *
+   * Dùng lúc một thẻ bắt người chơi chỉ mục tiêu: thay vì đọc tên ô trong một
+   * danh sách rồi đoán nó nằm đâu, họ bấm thẳng vào ô trên bàn. `markSet` cũng
+   * là thứ đổi con trỏ chuột ở `setupTileInput`, nên ô ngoài danh sách nhìn là
+   * biết bấm không ăn.
+   *
+   * @param {number[]} ids
+   * @param {{focus?:number, color?:number}} [o] `focus` là ô vừa bấm, đang chờ
+   *   xác nhận — sáng gắt hơn hẳn phần còn lại cho khỏi lẫn.
+   */
+  markTiles(ids, o = {}) {
+    this.markTween?.remove();
+    this.markLayer.removeAll(true);
+    this.marked = { ids: [...ids], focus: o.focus, color: o.color };
+    this.markSet = new Set(ids);
+
+    /* Tô đè bằng nước vàng **thường**, không phải blend cộng: mặt ô đã sáng màu
+       giấy, cộng thêm sáng nữa thì gần như không thấy gì. Viền vàng nhạt kẻ
+       quanh ô là thứ đọc ra ngay cả trên ô góc lẫn ô sẫm màu. */
+    const color = o.color ?? 0xC8A048;
+    const marks = ids.map((id) => {
+      const focus = id === o.focus;
+      const r = this.add.rectangle(0, 0, 1, 1, color, focus ? 0.52 : 0.30)
+        .setStrokeStyle(Math.max(2, this.size * 0.004), 0xFFE9B0, focus ? 1 : 0.85);
+      this.coverTile(r, id);
+      this.markLayer.add(r);
+      return { r, base: focus ? 1 : 0.9 };
+    });
+
+    // Một nhịp chung cho cả tập ô, cùng cách làm với vệt đèn nhà cửa
+    const beat = { t: 0 };
+    this.markTween = this.tweens.add({
+      targets: beat, t: 1,
+      duration: 880, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      onUpdate: () => { for (const m of marks) m.r.setAlpha(m.base * (0.72 + beat.t * 0.28)); },
+    });
+  }
+
+  clearMarks() {
+    this.markTween?.remove();
+    this.markTween = null;
+    this.markLayer.removeAll(true);
+    this.marked = null;
+    this.markSet = null;
+    if (this.hoverTile != null) this.input.setDefaultCursor('pointer');
   }
 
   /**
