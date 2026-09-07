@@ -9,7 +9,7 @@ import Phaser from 'phaser';
 import {
   TEX, DEPTH, EDGE, tileCenter, tokenSpot, tileEdgePoint, tileSize, tileAngle, isCorner,
 } from '../render/geometry.js';
-import { paintBoard, P } from '../render/boardArt.js';
+import { paintBoard, nameBand, P } from '../render/boardArt.js';
 import { paintToken, paintCoin } from '../render/pieces.js';
 import {
   paintHouseGlyph, paintHotelGlyph, paintEdgeGlow, paintEdgeSpill, SPILL_ROOT,
@@ -46,6 +46,19 @@ const POS_TINT = 0xA87C28;        // quân đang đứng: màu dự phòng khi k
 
 /** Tông giấy trung bình của mặt ô — mốc đo độ nổi của màu chủ đất. */
 const PAPER_TINT = 0xE4D2AC;
+
+/**
+ * Độ dày nước màu chủ đất phủ lên mặt ô. Sắc càng chìm vào nền giấy thì phủ
+ * càng dày, nhưng có chặn trên: dày quá thì tên đường và giá tiền in trên ô
+ * chìm theo.
+ */
+const OWNER_WASH = (own) => Phaser.Math.Clamp(0.20 / paperContrast(own), 0.34, 0.48);
+
+/**
+ * Phần nước màu còn giữ lại trên dải tên ô. Để trắng hẳn thì ô nhìn như chưa
+ * ai mua; một lớp mỏng đủ nối dải tên vào mảng màu của chủ đất mà chữ vẫn rõ.
+ */
+const BAND_WASH = 0.34;
 
 /**
  * Độ sáng của vệt đèn trên mép ô theo mức xây dựng (1…4 nhà, 5 = khách sạn).
@@ -147,6 +160,10 @@ export default class BoardScene extends Phaser.Scene {
       .setDepth(1).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0).setVisible(false);
     this.tileHighlight = this.add.rectangle(0, 0, 1, 1, POS_TINT, 1)
       .setDepth(1.5).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
+    /* Ô đang sáng trong lúc bốc thăm — lớp riêng để không giẫm lên vệt ô quân
+       đang đứng, quay xong là tắt và bàn cờ trở lại y như cũ. */
+    this.spinGfx = this.add.rectangle(0, 0, 1, 1, 0xC8A048, 1)
+      .setDepth(1.6).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
     this.overlay = this.add.container(0, 0).setDepth(2);
     /* Vệt đèn báo ô đã có nhà — nằm trên nước màu chủ đất, dưới quân cờ */
     this.glowLayer = this.add.container(0, 0).setDepth(3);
@@ -639,24 +656,33 @@ export default class BoardScene extends Phaser.Scene {
          mảng màu thì rõ hơn hẳn một cái gờ mỏng ở rìa, nên không cần gờ, cũng
          không cần đánh dấu riêng cho ô đủ bộ nữa.
          Độ dày nước màu nương theo độ nổi của sắc đó trên nền giấy: sắc nhạt
-         như hoàng kim phải phủ dày tay hơn mới thấy, nhưng chặn trên để tên ô
-         và giá tiền in trên mặt ô vẫn đọc được. */
+         như hoàng kim phải phủ dày tay hơn mới thấy. Chặn trên hạ xuống 0,48
+         (trước là 0,62) và dải tên ô được dán lại nguyên bản đè lên — xem
+         `addNameBand` — nên đọc tên đất không còn phải nheo mắt. */
       const own = ownerTint(p.token.color);
       // Ô thế chấp nhạt đi để thấy ngay là đất đang cầm, nhưng đừng nhạt quá —
       // nước màu là thứ duy nhất còn nói lên đất của ai
       const dim = state.isMortgaged(t.id) ? 0.5 : 1;
-      const wash = Phaser.Math.Clamp(0.24 / paperContrast(own), 0.45, 0.62) * dim;
+      const wash = OWNER_WASH(own) * dim;
       g.fillStyle(own, wash);
       g.fillRect(-sw / 2, -sh / 2, sw, sh);
+      this.overlay.add(g);
+
+      // Dải tên ô + sắc nhóm đất nổi lên trên nước màu
+      this.addNameBand(t, own, wash * BAND_WASH);
 
       if (state.isMortgaged(t.id)) {
-        g.lineStyle(Math.max(1.5, sw * 0.045), 0xB3322A, 0.85);
-        g.beginPath();
-        g.moveTo(-sw * 0.34, -sh * 0.28); g.lineTo(sw * 0.34, sh * 0.28);
-        g.moveTo(sw * 0.34, -sh * 0.28); g.lineTo(-sw * 0.34, sh * 0.28);
-        g.strokePath();
+        // Vẽ sau dải tên: gạch chéo báo đất đang cầm phải nằm trên cùng, không
+        // thì dải tên dán đè lên làm mất một nửa nét gạch.
+        const x = this.add.graphics();
+        x.setPosition(sc.x, sc.y).setRotation(a);
+        x.lineStyle(Math.max(1.5, sw * 0.045), 0xB3322A, 0.85);
+        x.beginPath();
+        x.moveTo(-sw * 0.34, -sh * 0.28); x.lineTo(sw * 0.34, sh * 0.28);
+        x.moveTo(sw * 0.34, -sh * 0.28); x.lineTo(-sw * 0.34, sh * 0.28);
+        x.strokePath();
+        this.overlay.add(x);
       }
-      this.overlay.add(g);
 
       /* Đất đã xây thì KHÔNG dựng nóc nhà lên mặt ô nữa — mặt ô để trống cho
          tên đất và quân cờ. Thay vào đó mép trong của ô sáng lên một vệt đèn
@@ -666,6 +692,53 @@ export default class BoardScene extends Phaser.Scene {
     }
     this.placeTokens();
     this.updateHousePlaque();
+  }
+
+  /**
+   * Dán lại dải tên ô — sắc nhóm đất, biển tên, giá — đè lên nước màu chủ đất.
+   *
+   * "Vẽ lại" ở đây không vẽ gì cả: mặt bàn là một tấm ảnh dựng sẵn, nên chỉ
+   * cần cắt đúng dải ấy trên chính tấm ảnh đó rồi đặt trùng chỗ cũ. Không tốn
+   * thêm texture, không dựng lại chữ, mà đổi cỡ bàn cờ vẫn khớp từng điểm ảnh.
+   *
+   * Cắt được vì mọi ô thường đều xoay theo bội số của 90°: dải tên trong hệ
+   * toạ độ ô là hình chữ nhật, xoay xong vẫn nằm thẳng trục của tấm ảnh, đúng
+   * dạng vùng cắt mà Phaser nhận.
+   *
+   * @param {object} t ô cờ
+   * @param {number} tint sắc chủ đất, đã nắn qua `ownerTint`
+   * @param {number} alpha lớp nước màu mỏng giữ lại trên dải, để dải không
+   *   trông như ô chưa ai mua
+   */
+  addNameBand(t, tint, alpha) {
+    if (isCorner(t.id)) return;
+    const band = nameBand(t.type);
+    const c = tileCenter(t.id, TEX);
+    const { w, h } = tileSize(t.id, TEX);
+    const a = tileAngle(t.id);
+    const cos = Math.cos(a), sin = Math.sin(a);
+    const at = (lx, ly) => ({ x: c.x + lx * cos - ly * sin, y: c.y + lx * sin + ly * cos });
+
+    const p1 = at(-w / 2, -h / 2 + h * band.top);
+    const p2 = at(w / 2, -h / 2 + h * band.bottom);
+    const rx = Math.min(p1.x, p2.x), ry = Math.min(p1.y, p2.y);
+    const rw = Math.abs(p2.x - p1.x), rh = Math.abs(p2.y - p1.y);
+
+    // Vùng cắt đo bằng điểm ảnh của tấm ảnh gốc, mà tấm ấy vẽ ở độ phân giải
+    // riêng (`boardPx`) chứ không phải hệ toạ độ hình học `TEX`.
+    const k = this.boardPx / TEX;
+    const strip = this.add.image(this.board.x, this.board.y, 'board')
+      .setOrigin(0.5)
+      .setDisplaySize(this.size, this.size)
+      .setCrop(rx * k, ry * k, rw * k, rh * k);
+    this.overlay.add(strip);
+
+    const g = this.add.graphics();
+    const s = this.toScreen(rx + rw / 2, ry + rh / 2);
+    g.setPosition(s.x, s.y);
+    g.fillStyle(tint, alpha);
+    g.fillRect(-rw * this.scaleF / 2, -rh * this.scaleF / 2, rw * this.scaleF, rh * this.scaleF);
+    this.overlay.add(g);
   }
 
   /**
@@ -788,7 +861,7 @@ export default class BoardScene extends Phaser.Scene {
     // Nước màu chủ đất, đúng công thức đang phủ lên mặt ô (nhạt hơn chút cho
     // hình nhà còn nổi lên được)
     const own = ownerTint(owner.token.color);
-    g.fillStyle(own, Phaser.Math.Clamp(0.24 / paperContrast(own), 0.45, 0.62) * 0.8)
+    g.fillStyle(own, OWNER_WASH(own) * 0.8)
       .fillRoundedRect(x0, y0, bw, bh, corners);
     g.lineStyle(Math.max(1, this.size * 0.0016), 0x221A11, 0.62)
       .strokeRoundedRect(x0, y0, bw, bh, corners);
@@ -873,6 +946,59 @@ export default class BoardScene extends Phaser.Scene {
           .setFillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b), 1)
           .setAlpha(0.32 + beat.t * 0.24);
       },
+    });
+  }
+
+  /**
+   * Bốc thăm ngay trên bàn cờ: sáng chạy qua từng ô ứng viên, **chậm dần** rồi
+   * dừng hẳn ở ô trúng.
+   *
+   * Có hoạt cảnh này thì kết quả không rơi từ trên trời xuống — cả bàn thấy
+   * vòng quay đi qua đúng những ô nào, nên tin là bốc thật. Ô trúng được nháy
+   * thêm mấy nhịp cho khỏi lẫn với những ô vừa chạy qua.
+   *
+   * @param {number[]} ids  các ô được đem ra bốc, theo đúng vòng bàn cờ
+   * @param {number} pickId ô trúng — vòng quay dừng đúng ở đây
+   */
+  spinTiles(ids, pickId, o = {}) {
+    if (!ids.length) return Promise.resolve();
+    const at = Math.max(0, ids.indexOf(pickId));
+    /* Quay đủ vòng cho mắt kịp bắt nhịp rồi mới thả đuôi dừng ở ô trúng. Bàn
+       chỉ còn dăm lô trống thì phải quay nhiều vòng hơn, không thì vừa chớp
+       một cái đã xong, chẳng ai kịp thấy nó chạy qua đâu. */
+    const rounds = o.rounds ?? Math.max(2, Math.ceil(14 / ids.length));
+    const seq = [];
+    for (let r = 0; r < rounds; r++) seq.push(...ids);
+    seq.push(...ids.slice(0, at + 1));
+
+    this.spinGfx.setFillStyle(o.color ?? 0xC8A048, 1);
+    return new Promise((resolve) => {
+      let i = 0;
+      const step = () => {
+        const id = seq[i];
+        this.coverTile(this.spinGfx, id);
+        this.spinGfx.setVisible(true).setAlpha(0.5);
+        const c = tileCenter(id, TEX);
+        const sc = this.toScreen(c.x, c.y);
+        audio.sfx('step', { i });
+
+        if (i === seq.length - 1) {
+          // Ô trúng: sáng hẳn lên rồi nháy vài nhịp trước khi tắt
+          this.flash(sc.x, sc.y, o.color ?? 0xC8A048, 0.9);
+          this.tweens.add({
+            targets: this.spinGfx,
+            alpha: { from: 0.72, to: 0.3 },
+            duration: 320, yoyo: true, repeat: 2, ease: 'Sine.easeInOut',
+            onComplete: () => { this.spinGfx.setVisible(false); resolve(); },
+          });
+          return;
+        }
+        // Chậm dần: mấy bước đầu vun vút, mấy bước cuối nhả ra thấy rõ
+        const t = i / (seq.length - 1);
+        i += 1;
+        this.time.delayedCall(38 + 300 * t * t * t, step);
+      };
+      step();
     });
   }
 

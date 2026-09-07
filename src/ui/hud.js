@@ -4,6 +4,7 @@
  * cho cả bàn cùng đọc.
  */
 import { money, TOTAL_HOUSES, tileLabel } from '../data/board.js';
+import { cardOf, CARD_KINDS } from '../data/cards.js';
 import { paintToken } from '../render/pieces.js';
 import {
   eventsOn, unlocked, pressureRatio, threshold, eraOpen, modLabel,
@@ -224,6 +225,13 @@ export class Hud {
     const tags = [];
     if (p.bankrupt) tags.push('<span class="pop-tag bad">Đã phá sản</span>');
     else if (p.inJail) tags.push(`<span class="pop-tag bad">Đang ở tù ${p.jailTurns}/3</span>`);
+    // Thẻ đang giữ là chuyện cả bàn nên biết — nó đổi cách người ta ra giá
+    if (!p.bankrupt && p.cards?.length) {
+      for (const ref of p.cards) {
+        const c = cardOf(ref);
+        tags.push(`<span class="pop-tag">${CARD_KINDS[c?.type]?.name ?? 'Thẻ'}</span>`);
+      }
+    }
     if (st.turn === p.id && !st.over) tags.push('<span class="pop-tag turn">Đang tới lượt</span>');
 
     return `
@@ -287,6 +295,9 @@ export class Hud {
       const meta = el.querySelector('.pcard-meta');
       meta.innerHTML = bits.join(' · ')
         + (p.inJail ? ` <span class="pcard-jail">TÙ ${p.jailTurns}/3</span>` : '')
+        + (p.cards?.length
+          ? ` <span class="pcard-ticket" title="Thẻ đang giữ trong túi">TÚI THẺ${
+            p.cards.length > 1 ? ` ×${p.cards.length}` : ''}</span>` : '')
         + (away ? ' <span class="pcard-off">MẤT KẾT NỐI</span>' : '');
 
       // Chỗ đang đứng — chỉ hiện cho người tới lượt cho đỡ rối mắt

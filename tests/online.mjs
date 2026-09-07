@@ -385,8 +385,12 @@ console.log('\n▸ 9. Rớt mạng rồi vào lại — về đúng ghế cũ, t
 // Cho người sắp rớt giữ hai ô đất ở dãy cuối (một cú lắc xa nhất 12 ô nên
 // người vừa đi chắc chắn chưa mua mất)
 const LOTS = [31, 34];
-await A.evaluate(({ s, lots }) => {
+await A.evaluate(async ({ s, lots }) => {
+  const { BOARD } = await import('/src/data/board.js');
   const st = window.__monopoly.controller.state;
+  /* Vốn khởi điểm không ôm nổi hai lô dãy cuối — bơm đủ tiền rồi mới mua. Mục
+     kiểm ở đây là vào lại giữ nguyên tài sản, không phải đủ tiền hay không. */
+  st.players[s].money += lots.reduce((n, id) => n + BOARD[id].price, 0);
   for (const id of lots) st.buy(s, id);
   window.__monopoly.controller.sync();
 }, { s: seatB, lots: LOTS });

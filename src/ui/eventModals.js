@@ -135,7 +135,12 @@ export function firePromptModal(state, playerId, plan, ms = 0) {
  * Hết giờ thì hộp tự chọn ô **rẻ nhất**: bỏ trống thì sự kiện đứng lại, mà tự
  * chọn ô đắt thì hoá ra phạt người mất kết nối nặng hơn người ngồi bấm.
  *
- * @param {{eyebrow:string,title:string,sub:string,note?:string,confirm:string}} text
+ * `text.owned` = false thì đây là ô của **người khác** (mấy thẻ Cơ Hội cưỡng
+ * chiếm, dỡ nhà): dòng phụ in tên chủ đất thay cho tiền thuê, vì lúc ấy người
+ * chọn cần biết mình đang nhắm vào ai.
+ *
+ * @param {{eyebrow:string,title:string,sub:string,note?:string,confirm:string,
+ *          owned?:boolean}} text
  */
 export function pickTileModal(state, playerId, ids, text, ms = 0) {
   const cheapest = [...ids].sort((a, b) => BOARD[a].price - BOARD[b].price)[0];
@@ -153,8 +158,7 @@ export function pickTileModal(state, playerId, ids, text, ms = 0) {
           <span class="arow-thumb" style="background-image:url('${tileCardUrl(id, 30)}')"></span>
           <span class="arow-main">
             <span class="arow-name">${esc(tileShortLabel(id))}</span>
-            <span class="arow-meta">Giá gốc ${money(BOARD[id].price)}
-              · thuê ${money(state.rentFor(id, 7))}</span>
+            <span class="arow-meta">${tileMeta(state, id, text.owned !== false)}</span>
           </span>
         </label>`).join('')}</div>
       ${text.note ? `<div class="trade-summary">${text.note}</div>` : ''}`,
@@ -170,6 +174,18 @@ export function pickTileModal(state, playerId, ids, text, ms = 0) {
     },
   });
   return pr.finally(() => clearInterval(ticker)).then(() => choice);
+}
+
+/** Dòng phụ dưới tên ô: đất mình thì xem tiền thuê, đất người thì xem chủ. */
+function tileMeta(state, id, owned) {
+  const houses = state.housesOn(id);
+  const built = houses === 5 ? 'khách sạn' : `${houses} nhà`;
+  if (owned) {
+    return `Giá gốc ${money(BOARD[id].price)} · thuê ${money(state.rentFor(id, 7))}`;
+  }
+  const owner = state.ownerOf(id);
+  return `${owner ? `<b style="color:${owner.token.css}">${esc(owner.name)}</b> · ` : ''}
+          ${houses ? `${built} · ` : ''}thuê ${money(state.rentFor(id, 7))}`;
 }
 
 /**

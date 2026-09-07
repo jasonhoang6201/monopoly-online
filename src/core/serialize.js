@@ -22,15 +22,22 @@ export function snapshot(st) {
       jailTurns: p.jailTurns,
       bankrupt: p.bankrupt,
       doubles: p.doubles,
+      cards: p.cards.map((c) => ({ ...c })),
     })),
     turn: st.turn,
     order: st.order ? [...st.order] : null,
+    /* Số thứ tự ảnh chụp — người nhận dựa vào đây để bỏ ảnh về trễ. */
+    rev: st.rev,
     owner: [...st.owner],
     houses: [...st.houses],
     mortgaged: [...st.mortgaged],
     bankHouses: st.bankHouses,
     bankHotels: st.bankHotels,
     piles: { chance: [...st.decks.chance.pile], chest: [...st.decks.chest.pile] },
+    /* Mấy lá đang nằm trong túi người chơi. Thiếu chỗ này thì máy vào lại giữa
+       ván sẽ xáo chúng trở vào bộ — cả bàn ai cũng rút được một tấm mà đáng lẽ
+       nó đang nằm trong tay người khác. */
+    gone: { chance: [...st.decks.chance.gone], chest: [...st.decks.chest.gone] },
     over: st.over,
     /* Thẻ Thời Cuộc: nấc luật, thanh áp lực, hiệu ứng đang chạy và hai chồng
        bài. Thiếu bất cứ thứ nào ở đây là người vào lại giữa ván sẽ chơi bằng
@@ -72,9 +79,12 @@ export function applySnapshot(st, snap) {
     p.jailTurns = s.jailTurns;
     p.bankrupt = s.bankrupt;
     p.doubles = s.doubles;
+    // `jailCards` là tên cũ hồi túi thẻ mới chỉ đựng vé ra tù
+    p.cards = (s.cards ?? s.jailCards ?? []).map((c) => ({ ...c }));
   });
   st.turn = snap.turn;
   st.order = snap.order ? [...snap.order] : null;
+  st.rev = snap.rev ?? st.rev;
   st.owner = new Map(snap.owner);
   st.houses = new Map(snap.houses);
   st.mortgaged = new Set(snap.mortgaged);
@@ -82,6 +92,8 @@ export function applySnapshot(st, snap) {
   st.bankHotels = snap.bankHotels;
   st.decks.chance.pile = [...snap.piles.chance];
   st.decks.chest.pile = [...snap.piles.chest];
+  st.decks.chance.gone = new Set(snap.gone?.chance ?? []);
+  st.decks.chest.gone = new Set(snap.gone?.chest ?? []);
   st.over = snap.over;
 
   /* Ảnh chụp của bản cũ (hay của ván mở trước khi có thẻ Thời Cuộc) không mang

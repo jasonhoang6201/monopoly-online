@@ -5,18 +5,25 @@
  */
 import {
   BOARD, money, tileLabel, GO_SALARY, JAIL_FINE, JAIL_TILE, GOTO_JAIL_TILE,
+  START_MONEY,
   MAX_JAIL_TURNS,
 } from '../data/board.js';
 import { GameState, rollDice, orderFromRolls } from '../core/state.js';
 import {
   addPressure, eventDue, eventsOn, pressureRatio, threshold, eraOpen, PRESSURE,
 } from '../core/events.js';
+import {
+  cardType, isKeepable, demolishLevels, usableCard, useReason, cardTargets,
+  othersOf, shareEach, repairBill, seizePrice, forcedSaleRefund, resumePrice,
+} from '../core/cards.js';
+import { cardOf, CARD_KINDS } from '../data/cards.js';
+import { inventoryModal } from '../ui/inventory.js';
 import { EventRunner } from './eventRunner.js';
 import { snapshot, fromSnapshot, applySnapshot } from '../core/serialize.js';
 import { Hud, Broadcast } from '../ui/hud.js';
 import { QuickView } from '../ui/quickview.js';
 import {
-  diceSvg, tradeSvg, estateSvg, bankruptSvg, doneSvg, coinSvg,
+  diceSvg, tradeSvg, estateSvg, bankruptSvg, doneSvg, coinSvg, cardSvg,
 } from '../ui/actionIcons.js';
 import { openModal, handoff } from '../ui/modal.js';
 import {
@@ -70,6 +77,16 @@ export class Game {
      * @type {?{seat:number,until:number,total:number,label:string}}
      */
     this.clock = null;
+    /**
+     * Số thứ tự tin đồng hồ máy này đã phát — cùng lý do với `state.rev`.
+     *
+     * Gieo bằng đồng hồ máy chứ không bằng 0: người bấm F5 rồi vào lại vẫn ngồi
+     * đúng ghế ấy, mà đếm lại từ 0 thì mọi tin sau đó đều bị bên kia coi là tin
+     * cũ và bỏ hết.
+     */
+    this.clockN = Date.now();
+    /** Ghế phát → số thứ tự tin đồng hồ mới nhất đã nhận của họ. */
+    this.clockSeen = new Map();
   }
 
   // ---------------------------------------------------------------- khởi đầu
@@ -89,7 +106,7 @@ export class Game {
     this.bc.clear();
 
     await this.bc.show('KHAI CUỘC',
-      `Ván cờ bắt đầu — mỗi người ${money(1500)} vốn liếng. Chúc may mắn!`, { ms: 2600 });
+      `Ván cờ bắt đầu — mỗi người ${money(START_MONEY)} vốn liếng. Chúc may mắn!`, { ms: 2600 });
     await this.rollOff();
   }
 
@@ -144,7 +161,7 @@ export class Game {
 
     this.onRoomChange();
     this.bc.show('KHAI CUỘC',
-      `Ván bắt đầu với <b>${this.state.players.length} người</b> — mỗi người ${money(1500)}
+      `Ván bắt đầu với <b>${this.state.players.length} người</b> — mỗi người ${money(START_MONEY)}
        vốn liếng. Chúc may mắn!`, { ms: 2600 });
     this.beginTurn();
   }
@@ -281,9 +298,14 @@ export class Game {
    * Phát ảnh chụp trạng thái cho cả phòng.
    * Chỉ người đang cầm lái chạy tới được các chỗ gọi hàm này, nên không cần
    * kiểm tra lại quyền ở đây.
+   *
+   * Mỗi lần phát nhích `state.rev` lên một nấc. Con số ấy đi kèm ảnh chụp và là
+   * cơ sở để người nhận bỏ ảnh về trễ — xem `onSync`.
    */
   sync() {
-    if (this.net) this.net.publishSync(snapshot(this.state));
+    if (!this.net) return;
+    this.state.rev = (this.state.rev ?? 0) + 1;
+    this.net.publishSync(snapshot(this.state));
   }
 
   /** Báo một việc cần diễn hoạt cho các máy đang ngồi xem. */
@@ -291,9 +313,19 @@ export class Game {
     if (this.net) this.net.emit(name, data);
   }
 
-  /** Nhận ảnh chụp từ người đang cầm lái — ảnh chụp là lời cuối. */
+  /**
+   * Nhận ảnh chụp từ người đang cầm lái — ảnh chụp **mới nhất** là lời cuối.
+   *
+   * "Mới nhất" phải xét theo `rev` chứ không theo lúc tin tới nơi: đường truyền
+   * không hứa giữ đúng thứ tự, mà một phiên đấu giá phát liên tiếp bảy tám ảnh,
+   * hai ảnh cuối (kết thúc sự kiện, rồi trao lượt) cách nhau chưa tới một mili
+   * giây. Nhận ngược thứ tự thì ảnh cũ ghi đè lượt vừa trao: máy ấy tưởng lượt
+   * vẫn của người trước, người tới lượt thật thì không còn nút nào để bấm, mà
+   * bàn cờ chỉ hiện người kia đang thao tác.
+   */
   onSync(snap) {
     if (!this.state) return;
+    if (snap.rev != null && this.state.rev != null && snap.rev <= this.state.rev) return;
     applySnapshot(this.state, snap);
     this.hud.refresh();
     this.scene.refresh(this.state);
@@ -305,7 +337,7 @@ export class Game {
   /** Diễn lại hoạt cảnh của người đang đi, cho bàn bên này cũng thấy động. */
   async onEvent(name, data) {
     // Đồng hồ không phải hoạt cảnh — vào trước, khỏi xếp hàng sau tiếng xí ngầu
-    if (name === 'clock') { this.applyClock(data); return; }
+    if (name === 'clock') { if (!this.staleClock(data)) this.applyClock(data); return; }
     const sc = this.scene;
     if (name === 'dice') {
       await sc.rollDiceAnim(data.a, data.b);
@@ -319,6 +351,9 @@ export class Game {
     } else if (name === 'hideDice') {
       sc.hideDice();
       sc.clearHighlight();
+    } else if (name === 'spin') {
+      // Bốc thăm giải toả: máy nào cũng quay đúng vòng ấy, dừng đúng ô ấy
+      await sc.spinTiles(data.ids, data.tileId);
     } else if (name === 'quake') {
       audio.sfx('shake');
       sc.shake(0.012, 700);
@@ -429,14 +464,31 @@ export class Game {
        người ngồi im chỉ cần ai đó vào ra phòng là được tha. */
     if (this.clock && this.clock.seat === seat && this.clock.label === label) return;
     this.applyClock({ seat, ms, label });
-    this.netEmit('clock', { seat, ms, label });
+    this.netEmit('clock', { seat, ms, label, from: this.mySeat, n: ++this.clockN });
   }
 
   /** Cất đồng hồ đi trên mọi máy — hết ván, hoặc không còn ai phải chờ. */
   clearClock() {
     if (!this.net || !this.clock) return;
     this.applyClock(null);
-    this.netEmit('clock', null);
+    // `seat: -1` cũng là "cất đi" như `null`, nhưng còn chỗ mang số thứ tự
+    this.netEmit('clock', { seat: -1, from: this.mySeat, n: ++this.clockN });
+  }
+
+  /**
+   * Tin đồng hồ này có phải tin cũ về trễ không.
+   *
+   * Cùng một nỗi với ảnh chụp (xem `onSync`): người cầm lái bắn liền mấy tin
+   * đồng hồ trong một nhịp (vào việc → thời cuộc → trao lượt), nhận ngược thứ
+   * tự thì cả bàn đứng ở nhãn cũ, đếm ngược cho người đã đi xong.
+   */
+  staleClock(c) {
+    // Bản cũ không đánh số — thà nhận thừa còn hơn bỏ mất đồng hồ
+    if (!c || c.n == null || c.from == null) return false;
+    const last = this.clockSeen.get(c.from);
+    if (last != null && c.n <= last) return true;
+    this.clockSeen.set(c.from, c.n);
+    return false;
   }
 
   /** Nhận đồng hồ (tự đặt hoặc do người cầm lái gửi sang) rồi vẽ vòng cung. */
@@ -664,14 +716,28 @@ export class Game {
       onClick: () => this.guard(() => this.declareBankrupt()),
     };
 
+    // Túi thẻ chỉ bày ra khi trong túi có gì — bàn cờ đã đủ nút rồi
+    const bag = p.cards.length ? [{
+      label: `Túi thẻ · ${p.cards.length}`, key: 'b', cls: 'btn-ghost', icon: cardSvg(),
+      hint: 'thẻ giữ để dùng sau', title: 'Xem và dùng thẻ Cơ Hội / Khí Vận đang giữ',
+      onClick: () => this.guard(() => this.openBag()),
+    }] : [];
+
     if (p.inJail) {
+      const ticket = st.jailCardAt(p.id);
       this.hud.setActions([
+        // Có vé thì bày trước tiên — ra tù miễn phí thì chẳng ai muốn nộp tiền
+        ...(ticket >= 0 ? [{
+          label: 'Dùng vé ra tù', key: 'v', cls: 'btn-jade', icon: coinSvg(), pulse: true,
+          title: 'Chìa tờ giấy bãi nại — được thả ngay, miễn phí',
+          onClick: () => this.guard(() => this.useJailCard()),
+        }] : []),
         { label: `Nộp ${money(JAIL_FINE)} ra tù`, key: 'n', cls: 'btn-gold', icon: coinSvg(),
           disabled: p.money < JAIL_FINE, onClick: () => this.guard(() => this.payOutOfJail()) },
         { label: 'Lắc xí ngầu (cầu đôi)', key: 'r', cls: 'btn-primary', pulse: true,
           icon: diceSvg(), title: 'Ra đôi thì được thả ngay',
           onClick: () => this.guard(() => this.rollInJail()) },
-        trade, manage, bankrupt,
+        ...bag, trade, manage, bankrupt,
       ]);
       return;
     }
@@ -682,7 +748,7 @@ export class Game {
             onClick: () => this.guard(() => this.endTurn()) }
         : { label: 'Lắc xí ngầu', key: 'r', cls: 'btn-primary', pulse: true, icon: diceSvg(),
             onClick: () => this.guard(() => this.takeRoll()) },
-      trade, manage, bankrupt,
+      ...bag, trade, manage, bankrupt,
     ]);
   }
 
@@ -902,22 +968,331 @@ export class Game {
     await this.payPlayer(p.id, ownerId, rent);
   }
 
-  /** Rút thẻ Cơ Hội / Khí Vận — chỉ có hiệu ứng cộng hoặc trừ tiền. */
+  /**
+   * Rút thẻ Cơ Hội / Khí Vận.
+   *
+   * Hai ngả: thẻ **nổ ngay** (tiền nong, thuế nhà) xử luôn tại chỗ, thẻ **giữ
+   * được** thì cất vào túi chờ đúng lúc. Bộ bài bỏ qua những lá nổ ngay mà lúc
+   * này vô nghĩa (thuế nhà khi chưa cất căn nào) — xem `core/cards.js`.
+   */
   async resolveCard(p, kind) {
     const st = this.state;
-    const card = st.decks[kind].draw();
-    audio.sfx('card');
-    await cardModal(kind, card);
+    const drawn = st.decks[kind].draw((c) => usableCard(st, c, p.id));
+    // Cả bộ không lá nào dùng được: coi như ghé qua, đừng bày một tấm thẻ rỗng
+    if (!drawn) return;
 
+    audio.sfx('card');
+    const title = kind === 'chance' ? 'CƠ HỘI' : 'KHÍ VẬN';
+    if (isKeepable(drawn.card)) return this.keepCard(p, kind, drawn, title);
+    switch (cardType(drawn.card)) {
+      case 'collect': return this.cardCollect(p, kind, drawn.card, title);
+      case 'repair':  return this.cardRepair(p, kind, drawn.card, title);
+      default:        return this.cardMoney(p, kind, drawn.card, title);
+    }
+  }
+
+  /** Thẻ cũ: cộng hoặc trừ tiền với ngân hàng. */
+  async cardMoney(p, kind, card, title) {
+    await cardModal(kind, card, { amount: card.amount });
     if (card.amount > 0) {
-      await this.bc.show(kind === 'chance' ? 'CƠ HỘI' : 'KHÍ VẬN',
+      await this.bc.show(title,
         `<b>${p.name}</b>: ${card.text} <span class="up">+${money(card.amount)}</span>`);
       await this.receiveFromBank(p.id, card.amount);
     } else {
-      await this.bc.show(kind === 'chance' ? 'CƠ HỘI' : 'KHÍ VẬN',
+      await this.bc.show(title,
         `<b>${p.name}</b>: ${card.text} <span class="down">−${money(-card.amount)}</span>`, { kind: 'bad' });
       await this.payBank(p.id, -card.amount);
     }
+  }
+
+  /**
+   * Tiền mừng: **chia đều cho những người còn lại cùng góp**, chứ ngân hàng
+   * không bao. Ai không xoay đủ thì đi qua đúng cửa `payPlayer` như trả tiền
+   * thuê — bán nhà, thế chấp, cùng lắm là vỡ nợ.
+   */
+  async cardCollect(p, kind, card, title) {
+    const st = this.state;
+    const each = shareEach(st, p.id, card.amount);
+    await cardModal(kind, card, {
+      amount: card.amount,
+      note: `Mỗi người còn lại góp <b>${money(each)}</b>.`,
+      label: 'Nhận tiền mừng',
+    });
+    await this.bc.show(title,
+      `<b>${p.name}</b>: ${card.text} — mỗi người góp
+       <span class="up">${money(each)}</span>.`);
+    for (const seat of othersOf(st, p.id)) {
+      if (st.players[seat].bankrupt) continue;
+      await this.payPlayer(seat, p.id, each);
+    }
+  }
+
+  /** Thuế nhà cửa: tính đầu nhà, đầu khách sạn trên toàn bộ đất của mình. */
+  async cardRepair(p, kind, card, title) {
+    const bill = repairBill(this.state, p.id, card);
+    const parts = [];
+    if (bill.houses) parts.push(`${bill.houses} nhà × ${money(card.perHouse)}`);
+    if (bill.hotels) parts.push(`${bill.hotels} khách sạn × ${money(card.perHotel)}`);
+    await cardModal(kind, card, { amount: -bill.amount, note: parts.join(' · ') });
+    await this.bc.show(title,
+      `<b>${p.name}</b> nộp thuế nhà cửa <span class="down">${money(bill.amount)}</span>
+       — ${parts.join(', ')}.`, { kind: 'bad' });
+    await this.payBank(p.id, bill.amount);
+  }
+
+  /* ================================================================
+     Túi thẻ — thẻ giữ lại dùng sau
+     ================================================================ */
+
+  /**
+   * Cất một lá vào túi. Lá ấy rời khỏi bộ bài cho tới khi có người xài, nên
+   * cả bàn không thể có hai tấm cùng một lá.
+   */
+  async keepCard(p, kind, drawn, title) {
+    const st = this.state;
+    const meta = CARD_KINDS[cardType(drawn.card)];
+    await cardModal(kind, drawn.card, {
+      note: `<b>${meta.sigil} ${meta.name}</b> — cất vào túi, khi nào thấy đúng lúc
+             thì mở <b>Túi thẻ</b> ra dùng.`,
+      label: 'Cất vào túi',
+    });
+    st.takeCard(p.id, kind, drawn.index);
+    this.hud.refresh();
+    this.sync();
+    await this.bc.show(title,
+      `<b>${p.name}</b> cất được <b>${meta.name}</b> vào túi — lá này rời khỏi bộ bài
+       cho tới khi có người xài tới.`);
+  }
+
+  /** Mở túi thẻ của người đang đi; chọn một tấm thì dùng luôn tấm ấy. */
+  async openBag() {
+    const at = await inventoryModal(this.state, this.state.turn);
+    if (at == null) { this.restoreActions(); return; }
+    /* Vé ra tù kéo theo cả nước đi (thả ra rồi lắc luôn), lúc ấy thanh nút đã
+       do `takeRoll` dựng lại — bày đè lên nữa là xoá mất nút "kết thúc lượt". */
+    const rolls = cardType(cardOf(this.state.current.cards[at])) === 'jail-free';
+    await this.useHeldCard(at);
+    if (!rolls) this.restoreActions();
+  }
+
+  /**
+   * Dùng một tấm trong túi.
+   *
+   * Lá bài **trả về bộ trước khi thi hành**: hiệu ứng có thể mở đấu giá, có
+   * thể làm ai đó vỡ nợ, mà giữa chừng ấy không được để lá bài kẹt lại ngoài
+   * bộ. Quyền dùng cũng soát lại ở đây chứ không tin nút bấm suông — bàn cờ
+   * đổi liên tục, nút bày ra lúc nãy có thể đã hết đúng.
+   */
+  async useHeldCard(at) {
+    const st = this.state;
+    const p = st.current;
+    const ref = p.cards[at];
+    const card = cardOf(ref);
+    if (!card) return;
+
+    const check = useReason(st, card, p.id);
+    if (!check.ok) {
+      await this.bc.show('CHƯA DÙNG ĐƯỢC', check.reason, { kind: 'bad', ms: 3000 });
+      return;
+    }
+
+    st.dropCard(p.id, at);
+    audio.sfx('card');
+    this.hud.refresh();
+    this.sync();
+
+    const title = CARD_KINDS[cardType(card)]?.name ?? 'THẺ';
+    switch (cardType(card)) {
+      case 'jail-free':     return this.useJailCard(false);
+      case 'resume-random': return this.resumeRandom(p, card, title);
+      default:              return this.strikeWithPick(p, card, title);
+    }
+  }
+
+  /**
+   * Ba thẻ đụng thẳng vào nhà đất người khác: ép bán nhà, dỡ nhà, cưỡng chiếm
+   * — và thẻ giải toả chỉ định.
+   *
+   * Người dùng thẻ tự chọn mục tiêu; đây mới là chỗ đắt giá, và cũng là chỗ ép
+   * đất đổi chủ mà không cần đối phương gật đầu. Hỏi qua `events.askOne` nên
+   * bản một máy chuyền tay, bản online hiện đúng ở máy người ấy, mà họ đã bỏ
+   * bàn thì có sẵn câu trả lời mặc định.
+   */
+  async strikeWithPick(p, card, title) {
+    const st = this.state;
+    const ids = cardTargets(st, card, p.id);
+    if (ids.length === 0) return;   // bàn vừa đổi thế giữa chừng
+    const type = cardType(card);
+    const levels = demolishLevels(card);
+
+    const text = {
+      'force-sell': {
+        eyebrow: 'PHÁT MÃI NHÀ CỬA',
+        title: 'Ép ai bán nhà?',
+        sub: 'Ô bạn chọn bị <b>dỡ sạch nhà cửa</b>; chủ đất chỉ nhận lại nửa giá xây.',
+        note: 'Chỉ chọn được ô đang có nhà của người khác.',
+        confirm: 'Chốt ô này',
+      },
+      demolish: {
+        eyebrow: 'DỠ NHÀ LẤN LỘ GIỚI',
+        title: `Dỡ ${levels} cấp nhà ở ô nào?`,
+        sub: `Ô bạn chọn bị <b>hạ ${levels} cấp nhà</b>, chủ đất không được đền một đồng nào.`,
+        note: 'Chỉ chọn được ô đang có nhà của người khác.',
+        confirm: 'Chốt ô này',
+      },
+      seize: {
+        eyebrow: 'CƯỠNG CHIẾM ĐỊA GIỚI',
+        title: 'Lấy lô đất nào?',
+        sub: 'Lô bạn chọn <b>sang tên cho bạn</b> ngay, chủ cũ chỉ được đền đúng giá thế chấp.',
+        note: 'Chỉ lô đất trống, chưa thế chấp, và bạn phải đủ tiền mặt trả tiền đền.',
+        confirm: 'Lấy lô này',
+      },
+      resume: {
+        eyebrow: 'GIẢI TOẢ',
+        title: 'Cắm mốc giải toả lô nào?',
+        sub: `Chủ lô nhận tiền đền <b>giá gốc +20%</b>, rồi lô ấy đem
+              <b>đấu giá kín</b> — ai trả cao nhất thì lấy.`,
+        note: 'Chọn được cả đất của mình: lãnh tiền đền rồi tranh mua lại cũng là một nước cờ.',
+        confirm: 'Cắm mốc lô này',
+      },
+    }[type];
+    text.owned = false;
+
+    // Hết giờ / bỏ bàn thì nhắm vào ô rẻ nhất — nhẹ tay nhất trong các lựa chọn
+    const fallback = [...ids].sort((a, b) => BOARD[a].price - BOARD[b].price)[0];
+    const picked = await this.events.askOne({
+      seat: p.id,
+      name: 'ev-pick',
+      data: { ids, text },
+      local: () => pickTileModal(st, p.id, ids, text, this.events.localMs),
+      fallback,
+      note: 'họ vừa lôi ra một thẻ nhắm vào nhà đất người khác',
+    });
+    const tileId = ids.includes(picked) ? picked : fallback;
+    // Đất có thể vừa đổi chủ trong lúc hỏi (người kia phá sản) — soát lại
+    if (!cardTargets(st, card, p.id).includes(tileId)) return;
+
+    if (type === 'force-sell') return this.forceSellHouses(p, tileId, title);
+    if (type === 'demolish') return this.demolishHouse(p, tileId, levels, title);
+    if (type === 'resume') return this.resumeTile(p, tileId, card, title);
+    return this.seizeTile(p, tileId, title);
+  }
+
+  /**
+   * Giải toả bốc thăm: lô đất do bàn cờ tự quay ra.
+   *
+   * Máy đang cầm lái gieo **một lần**, rồi phát cả danh sách ô lẫn ô trúng cho
+   * mọi máy cùng quay — không máy nào tự gieo lại một con số khác, mà ai cũng
+   * thấy vòng quay đi qua đúng những ô ấy.
+   */
+  async resumeRandom(p, card, title) {
+    const st = this.state;
+    const ids = cardTargets(st, card, p.id);
+    if (ids.length === 0) return;
+    const tileId = ids[Math.floor(Math.random() * ids.length)];
+
+    await this.bc.show(title,
+      `<b>${p.name}</b> bốc thăm giữa <b>${ids.length}</b> lô đất trống trên bàn —
+       bàn cờ đang quay.`, { kind: 'trade', ms: 2200 });
+    this.netEmit('spin', { ids, tileId });
+    await this.scene.spinTiles(ids, tileId);
+    this.scene.highlightTile(p.pos, p.token.color);
+
+    await this.resumeTile(p, tileId, card, title);
+  }
+
+  /** Ép bán: nhà trên ô về hết kho ngân hàng, chủ đất nhận nửa giá xây. */
+  async forceSellHouses(p, tileId, title) {
+    const st = this.state;
+    const owner = st.ownerOf(tileId);
+    const refund = forcedSaleRefund(st, tileId);
+    const levels = st.clearHouses(tileId);
+
+    audio.sfx('bankrupt');
+    this.hud.refresh();
+    this.scene.refresh(st);
+    this.sync();
+    await this.bc.show(title,
+      `<b>${p.name}</b> ép <b>${owner.name}</b> phát mãi <b>${levels} cấp nhà</b>
+       ở <b>${tileLabel(tileId)}</b> — chỉ được lại nửa giá xây.`, { kind: 'bad' });
+    await this.receiveFromBank(owner.id, refund);
+  }
+
+  /** Dỡ nhà: mất mấy cấp, không đền bù — nặng tay hơn ép bán đúng ở chỗ đó. */
+  async demolishHouse(p, tileId, levels, title) {
+    const st = this.state;
+    const owner = st.ownerOf(tileId);
+    const before = st.housesOn(tileId);
+    let gone = 0;
+    for (let i = 0; i < levels && st.housesOn(tileId) > 0; i++) {
+      st.demolish(tileId);
+      gone += 1;
+    }
+
+    audio.sfx('shake');
+    this.netEmit('quake', {});
+    this.scene.shake(0.008, 420);
+    this.hud.refresh();
+    this.scene.refresh(st);
+    this.sync();
+    await this.bc.show(title,
+      `<b>${p.name}</b> cho dỡ <b>${before === 5 && gone === 1 ? 'khách sạn' : `${gone} cấp nhà`}</b>
+       của <b>${owner.name}</b> ở <b>${tileLabel(tileId)}</b> —
+       <span class="down">không đền một đồng nào</span>.`, { kind: 'bad' });
+  }
+
+  /**
+   * Giải toả: lô đất bị thu, chủ cũ lãnh tiền đền hậu (giá gốc +20%), rồi lô
+   * ấy đem đấu giá kín cho cả bàn — kể cả chủ cũ, họ cầm tiền đền trong tay
+   * nên có quyền tranh mua lại.
+   *
+   * Dùng lại đúng phiên đấu giá của thẻ Thời Cuộc: một vòng ghi giá kín, cao
+   * nhất lấy đất, hoà thì người đi trước trong vòng lượt thắng.
+   */
+  async resumeTile(p, tileId, card, title) {
+    const st = this.state;
+    const owner = st.ownerOf(tileId);
+    const payout = resumePrice(tileId, card);
+
+    st.owner.delete(tileId);
+    st.mortgaged.delete(tileId);
+    this.hud.refresh();
+    this.scene.refresh(st);
+    this.sync();
+
+    await this.bc.show(title,
+      `<b>${p.name}</b> cắm mốc giải toả <b>${tileLabel(tileId)}</b> —
+       <b>${owner.name}</b> lãnh tiền đền <span class="up">${money(payout)}</span>
+       (giá gốc +20%).`, { kind: 'trade' });
+    await this.receiveFromBank(owner.id, payout);
+
+    await this.events.auction(tileId, {
+      seller: null,
+      reason: `Lô đất vừa giải toả khỏi tay ${owner.name} — Toà Đô Chánh đem bán lại cho ai trả cao nhất.`,
+    });
+  }
+
+  /** Cưỡng chiếm: lô đất sang tên, chủ cũ nhận đúng giá thế chấp. */
+  async seizeTile(p, tileId, title) {
+    const st = this.state;
+    const owner = st.ownerOf(tileId);
+    const price = seizePrice(tileId);
+
+    await this.bc.show(title,
+      `<b>${p.name}</b> cưỡng chiếm <b>${tileLabel(tileId)}</b> của <b>${owner.name}</b>,
+       đền <span class="down">${money(price)}</span> theo giá thế chấp.`, { kind: 'trade' });
+    // Trả tiền đền trước: người dùng thẻ vỡ nợ ngay tại đây thì đất không đi đâu cả
+    if (!(await this.payPlayer(p.id, owner.id, price))) return;
+    if (st.owner.get(tileId) !== owner.id) return;
+
+    st.transfer(tileId, p.id);
+    audio.sfx('trade');
+    this.hud.refresh();
+    this.scene.refresh(st);
+    this.sync();
+    await this.bc.show('SANG TÊN',
+      `<b>${tileLabel(tileId)}</b> nay thuộc về
+       <b style="color:${p.token.css}">${p.name}</b>.`, { kind: 'trade' });
   }
 
   // -------------------------------------------------------------- tiền nong
@@ -1039,6 +1414,27 @@ export class Game {
     this.hud.refresh();
     this.sync();
     this.scene.highlightTile(JAIL_TILE, p.token.color);
+  }
+
+  /**
+   * Xài vé ra tù: được thả ngay, không tốn đồng nào, rồi lắc đi như thường.
+   * Tấm vé trả về bộ bài — người sau còn có cơ hội rút trúng.
+   */
+  async useJailCard(pull = true) {
+    const st = this.state;
+    const p = st.current;
+    // Gọi từ túi thẻ thì lá bài đã rời tay rồi, đừng rút thêm tấm nữa
+    if (pull) {
+      const at = st.jailCardAt(p.id);
+      if (at < 0 || !st.dropCard(p.id, at)) return;
+    }
+    st.releaseFromJail(p);
+    audio.sfx('jail');
+    this.hud.refresh();
+    this.sync();
+    await this.bc.show('DÙNG VÉ RA TÙ',
+      `<b>${p.name}</b> chìa tờ giấy bãi nại ra — cửa Khám Lớn mở, khỏi tốn một đồng.`);
+    await this.takeRoll();
   }
 
   async payOutOfJail() {

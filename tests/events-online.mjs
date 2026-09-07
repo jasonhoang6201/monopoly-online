@@ -106,6 +106,9 @@ const other = drv.page === A ? B : A;
 
 // Nạp sẵn chồng bài đúng một thẻ, mở khoá bằng số vòng, rồi kết thúc lượt
 await drv.page.bringToFront();
+const purseBefore = await drv.page.evaluate(
+  () => window.__monopoly.controller.state.players[window.__monopoly.controller.net.mySeat].money,
+);
 const tile = await drv.page.evaluate(() => {
   const c = window.__monopoly.controller;
   const st = c.state;
@@ -150,7 +153,7 @@ const money = await drv.page.evaluate(() => {
   const c = window.__monopoly.controller;
   return c.state.players[c.net.mySeat].money;
 });
-ok(money === 1200, 'tiền trả đúng bằng giá đã ghi (1500 − 300)', String(money));
+ok(money === purseBefore - 300, `tiền trả đúng bằng giá đã ghi (${purseBefore} − 300)`, String(money));
 
 // Ảnh chụp phải sang tới máy bên kia, không để hai bàn cờ lệch nhau
 await other.bringToFront();
@@ -172,6 +175,53 @@ ok(await until(async () => {
   const turnB = await B.evaluate(() => window.__monopoly.controller.state.turn);
   return turnA === turnB;
 }, 20000), 'sau sự kiện, hai máy vẫn cùng một lượt');
+
+/* ============================================ 3 · ảnh chụp về trễ, tin về trễ */
+
+console.log('\n▸ 3. Ảnh chụp cũ về trễ không kéo ván lùi lại');
+
+/* Cuối một phiên đấu giá, người cầm lái phát liền hai ảnh chụp cách nhau chưa
+   tới một mili giây (chốt sự kiện, rồi trao lượt). Đường truyền không hứa giữ
+   đúng thứ tự, và khi ảnh cũ tới sau thì nó từng ghi đè lượt vừa trao: máy ấy
+   tưởng lượt vẫn của người trước, người tới lượt thật không còn nút nào bấm.
+   `state.rev` chặn đúng chỗ đó. */
+await other.bringToFront();
+const rewind = await other.evaluate(async () => {
+  const { snapshot } = await import('/src/core/serialize.js');
+  const c = window.__monopoly.controller;
+  const st = c.state;
+  const before = { turn: st.turn, rev: st.rev };
+
+  const stale = snapshot(st);
+  stale.rev = st.rev - 1;
+  stale.turn = (st.turn + 1) % st.players.length;
+  c.onSync(stale);
+  const afterStale = { turn: st.turn, rev: st.rev };
+
+  const fresh = snapshot(st);
+  fresh.rev = before.rev + 1;
+  fresh.turn = (before.turn + 1) % st.players.length;
+  c.onSync(fresh);
+
+  return { before, afterStale, afterFresh: { turn: st.turn, rev: st.rev }, want: fresh.turn };
+});
+ok(rewind.afterStale.turn === rewind.before.turn,
+  'ảnh chụp cũ về trễ bị bỏ qua, lượt không lùi lại',
+  `${rewind.before.turn} → ${rewind.afterStale.turn}`);
+ok(rewind.afterFresh.turn === rewind.want, 'ảnh chụp mới hơn vẫn ăn bình thường',
+  `lượt ${rewind.afterFresh.turn}`);
+
+// Tin đồng hồ cũng đi cùng đường ấy — về trễ thì cả bàn đứng ở nhãn cũ
+const clock = await other.evaluate(async () => {
+  const c = window.__monopoly.controller;
+  c.clockSeen = new Map();
+  await c.onEvent('clock', { seat: 0, ms: 60000, label: 'lượt đi', from: 0, n: 20 });
+  const fresh = c.clock?.label;
+  await c.onEvent('clock', { seat: 1, ms: 60000, label: 'đang thao tác', from: 0, n: 19 });
+  return { fresh, after: c.clock?.label, seat: c.clock?.seat };
+});
+ok(clock.fresh === 'lượt đi' && clock.after === 'lượt đi' && clock.seat === 0,
+  'tin đồng hồ về trễ không đè lên tin mới', JSON.stringify(clock));
 
 console.log(errors.length ? `\nLỖI TRANG:\n${errors.join('\n')}` : '\nKhông có lỗi trang.');
 await browser.close();

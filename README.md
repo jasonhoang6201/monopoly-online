@@ -85,7 +85,11 @@ kho nhà của ngân hàng và ba nút tiện ích. Không rê ô nào thì bả
 | **Vào tù** | Đáp xuống ô *Vào Tù* là **hết lượt ngay**, kể cả khi vừa đổ đôi |
 | **Ở tù** | Mỗi lượt **chỉ được cầu đôi một lần** — trượt thì hết lượt, chờ vòng sau. Ra đôi thì được tha nhưng không có lượt lắc thêm |
 | **Ra tù** | Nộp 50$, hoặc lắc ra đôi. Cầu đôi hụt tới **lần thứ 3** thì buộc nộp 50$ rồi đi theo số vừa lắc |
-| **Cơ Hội / Khí Vận** | 16 thẻ mỗi bộ, bóc ngẫu nhiên, hiệu ứng cộng hoặc trừ tiền tương ứng |
+| **Cơ Hội / Khí Vận** | Hơn 20 thẻ mỗi bộ, bóc ngẫu nhiên. Ngoài thẻ cộng/trừ tiền còn có: **tiền mừng** (chia đều thu từ những người chơi khác), **thuế nhà cửa** (tính đầu nhà, đầu khách sạn), và bảy loại thẻ **giữ được trong túi** — xem hai dòng dưới |
+| **Túi thẻ** | Sáu loại thẻ (vé ra tù, phát mãi, dỡ nhà, cưỡng chiếm, giải toả, giải toả bốc thăm) **không nổ ngay lúc bóc** mà cất vào túi, khi nào thấy đúng lúc thì mở nút **Túi thẻ** ra dùng. Bảng túi thẻ ghi rõ thẻ làm gì và *lúc này* dùng được chưa. Thẻ đang trong túi ai thì **rời khỏi bộ bài**, xài xong mới trả về; vỡ nợ cũng trả về |
+| **Vé ra tù** | **Bốn tấm, chia đều hai bộ**. Đang ngồi tù thì chìa ra là được thả miễn phí, rồi lắc đi như thường |
+| **Thẻ nhắm vào nhà đất** | Người dùng thẻ tự chọn mục tiêu, chỉ nhắm được vào **người khác** (riêng giải toả chọn được cả đất mình), và không đụng ô đang thế chấp. Ép bán: dỡ sạch nhà một ô, chủ nhận nửa giá xây · Dỡ nhà: mất **1 cấp** (Khí Vận) hoặc **2 cấp** (Cơ Hội), không đền · Cưỡng chiếm: lô đất trống sang tên, đền bằng giá thế chấp |
+| **Giải toả** | Chủ lô lãnh **giá gốc +20%**, lô đất đem **đấu giá kín**. Hai kiểu: *chỉ định* (tự chọn lô) và *bốc thăm* — bàn cờ sáng chạy lần lượt qua từng lô đất trống, chậm dần rồi dừng ở lô trúng. Cả hai chỉ nhắm được lô **chưa xây nhà** |
 | **Mua đất** | Dừng ở ô trống và còn tiền thì hiện popup hỏi mua. Không mua thì thôi — **không có luật đấu giá** |
 | **Xây nhà** | Phải đủ bộ màu. Cả bàn chỉ có **32 căn nhà**; hết nhà thì người khác không xây được nữa |
 | **Khách sạn** | Đủ 4 nhà mới lên khách sạn, và **trả lại 4 căn nhà** vào kho ngân hàng |

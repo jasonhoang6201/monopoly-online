@@ -59,10 +59,12 @@ export function lobbyModal(room, handle = {}) {
         </div>
         <div class="lobby-count"></div>
         <div class="lobby-seats"></div>
+        <div class="lobby-colors"></div>
         <div class="lobby-rule"></div>
         <p class="lobby-foot"></p>`;
 
       const seatsEl = box.querySelector('.lobby-seats');
+      const colorsEl = box.querySelector('.lobby-colors');
       const ruleEl = box.querySelector('.lobby-rule');
       const countEl = box.querySelector('.lobby-count');
       const footNote = box.querySelector('.lobby-foot');
@@ -84,6 +86,78 @@ export function lobbyModal(room, handle = {}) {
       /** Chữ ký của sổ ghế — chỉ vẽ lại khi có gì đó thật sự đổi. */
       let painted = '';
 
+      /** Chữ ký của bảng màu — vẽ riêng để đổi màu không dựng lại ô gõ tên. */
+      let paintedColors = '';
+      /** Lời nhắc khi bấm trúng màu người khác đang giữ. */
+      let colorWarn = '';
+
+      /**
+       * Bảng màu quân.
+       *
+       * Màu đã có người giữ vẫn hiện ra chứ không bị giấu đi — thấy được ai
+       * lấy màu nào thì mới biết còn gì mà chọn. Bấm vào thì không đổi, chỉ
+       * hiện lời nhắc; ai đã bấm "Sẵn sàng" là chốt màu, muốn đổi phải bấm
+       * "Sửa lại" trước.
+       */
+      const paintColors = () => {
+        const mine = room.mySeat;
+        const seat = room.seats[mine];
+        const sig = JSON.stringify([
+          room.seats.map((s) => [s.token, s.ready, s.name]), mine, colorWarn,
+        ]);
+        if (sig === paintedColors) return;
+        paintedColors = sig;
+        if (!seat) { colorsEl.innerHTML = ''; return; }
+
+        const locked = !!seat.ready;
+        const swatches = TOKENS.map((t, i) => {
+          const held = room.tokenSeat(i);
+          const isMine = held === mine;
+          const other = held >= 0 && !isMine ? room.seats[held] : null;
+          const who = other ? (other.ready ? other.name : 'người khác') : '';
+          const label = other
+            ? `${t.name} — ${who} đang giữ`
+            : isMine ? `${t.name} — màu của bạn` : t.name;
+          return `
+            <button type="button" class="color-swatch
+                      ${isMine ? 'on' : ''} ${other ? 'taken' : ''}"
+                    style="--sw:${t.css}" data-tk="${i}"
+                    aria-label="${esc(label)}" title="${esc(label)}">
+              <i class="color-mark">${isMine ? '✓' : other ? '✕' : ''}</i>
+            </button>`;
+        }).join('');
+
+        const cur = TOKENS[seat.token] ?? TOKENS[0];
+        colorsEl.innerHTML = `
+          <div class="rule-head">
+            <span class="rule-label">MÀU QUÂN</span>
+            <i>${esc(cur.name)}</i>
+          </div>
+          <div class="color-pick ${locked ? 'is-locked' : ''}">${swatches}</div>
+          <p class="color-note ${colorWarn ? 'warn' : ''}">${colorWarn || (locked
+            ? 'Bạn đã sẵn sàng — bấm <b>Sửa lại</b> nếu muốn đổi màu.'
+            : 'Bấm một ô để đổi màu quân của bạn.')}</p>`;
+
+        colorsEl.querySelectorAll('[data-tk]').forEach((b) => {
+          b.addEventListener('click', () => {
+            const i = Number(b.dataset.tk);
+            const held = room.tokenSeat(i);
+            if (locked) {
+              colorWarn = 'Bạn đã bấm <b>Sẵn sàng</b> nên màu đã chốt. Bấm <b>Sửa lại</b> rồi chọn màu khác.';
+            } else if (held >= 0 && held !== mine) {
+              const o = room.seats[held];
+              colorWarn = o.ready
+                ? `<b>${esc(o.name)}</b> đã sẵn sàng với màu <b>${esc(TOKENS[i].name)}</b> — chọn màu khác giùm.`
+                : `Màu <b>${esc(TOKENS[i].name)}</b> đang có người giữ — chọn màu khác.`;
+            } else {
+              colorWarn = '';
+              room.setToken(i);
+            }
+            paintColors();
+          });
+        });
+      };
+
       const paint = () => {
         const mine = room.mySeat;
         const iAmReady = !!room.seats[mine]?.ready;
@@ -95,6 +169,12 @@ export function lobbyModal(room, handle = {}) {
         // khi sổ ghế thật sự khác lần trước.
         if (sig === painted) return;
         painted = sig;
+
+        /* Vẽ lại là dựng mới ô gõ tên, con trỏ nhảy về đầu. Ghi lại chỗ con trỏ
+           trước khi dựng để người đang gõ dở tên mà có ai đó vào phòng hay đổi
+           màu thì vẫn gõ tiếp được đúng chỗ. */
+        const typing = seatsEl.querySelector('input.lobby-name');
+        const caret = typing && document.activeElement === typing ? typing.selectionStart : null;
 
         const iAmHost = room.hostId === room.me.id;
         const full = room.seats.length >= MAX_PLAYERS;
@@ -143,7 +223,10 @@ export function lobbyModal(room, handle = {}) {
           input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') seatsEl.querySelector('.lobby-ready')?.click();
           });
-          if (!iAmReady) setTimeout(() => input.focus(), 40);
+          if (caret !== null) {
+            input.focus();
+            input.setSelectionRange(caret, caret);
+          } else if (!iAmReady) setTimeout(() => input.focus(), 40);
         }
 
         seatsEl.querySelector('.lobby-ready')?.addEventListener('click', () => {
@@ -184,7 +267,8 @@ export function lobbyModal(room, handle = {}) {
         footNote.innerHTML = iAmHost
           ? `Bạn là chủ phòng: khi <b>mọi người đã sẵn sàng</b> thì nút
              <b>Khai cuộc</b> mở ra. Bấm <b>✕</b> để mời ai đó ra khỏi phòng.`
-          : 'Gõ tên rồi bấm <b>Sẵn sàng</b>. Chủ phòng khai cuộc khi cả phòng đã sẵn sàng.';
+          : `Chọn màu quân, gõ tên rồi bấm <b>Sẵn sàng</b>. Chủ phòng khai cuộc khi
+             cả phòng đã sẵn sàng.`;
 
         // Thanh nút dưới cùng
         foot.innerHTML = '';
@@ -208,10 +292,11 @@ export function lobbyModal(room, handle = {}) {
       };
 
       // Sổ ghế đổi (người vào, người ra, ai đó bấm sẵn sàng) → vẽ lại
-      room.on.room = () => paint();
+      room.on.room = () => { paint(); paintColors(); };
       room.on.kicked = () => close('kicked');
       room.on.closed = () => close('closed');
       paint();
+      paintColors();
     },
   });
 }

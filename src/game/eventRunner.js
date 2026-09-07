@@ -264,23 +264,9 @@ export class EventRunner {
 
   /**
    * Hạ một cấp nhà, trả vật liệu về kho ngân hàng.
-   * Khách sạn hạ xuống 4 căn nhà; kho không đủ 4 căn thì sập trắng — nhà đã
-   * cháy thành tro thì không mượn đâu ra được.
+   * Luật nằm ở `GameState.demolish` vì mấy thẻ Cơ Hội cũng dỡ nhà y hệt.
    */
-  collapse(tileId) {
-    const st = this.state;
-    const cur = st.housesOn(tileId);
-    if (cur === 0) return;
-    if (cur === 5) {
-      st.bankHotels += 1;
-      if (st.bankHouses >= 4) { st.houses.set(tileId, 4); st.bankHouses -= 4; }
-      else st.houses.delete(tileId);
-      return;
-    }
-    st.bankHouses += 1;
-    if (cur === 1) st.houses.delete(tileId);
-    else st.houses.set(tileId, cur - 1);
-  }
+  collapse(tileId) { this.state.demolish(tileId); }
 
   /** Hoả hoạn: cháy sạch một ô, trừ khi chủ thuê phu chữa cháy. */
   async fire(card, plan) {

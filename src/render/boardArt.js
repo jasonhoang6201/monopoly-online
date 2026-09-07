@@ -357,6 +357,24 @@ const BADGE_TOP = 0.168;    // mép trên biển tên tính từ mép trên ô, 
 const badgeTop = (y, w) => y + w * BADGE_TOP;
 
 /**
+ * Dải mang sắc nhóm đất và tên ô, đo theo chiều cao ô tính từ **mép trong**
+ * (cạnh quay vào lòng bàn cờ, cũng là đầu ô).
+ *
+ * Bàn cờ vẽ sẵn một lần rồi ván chơi mới phủ nước màu chủ đất lên; nước màu
+ * ấy kéo cả chữ lẫn sắc nhóm về phía nó. `BoardScene` cắt đúng dải này trên
+ * ảnh bàn cờ gốc rồi dán trở lại đè lên nước màu, nên tên ô và màu nhóm giữ
+ * nguyên độ tương phản.
+ *
+ * Ô đất: dải là cái cổng — trong đó có biển tên. Ô nhà ga / tiện ích: cổng
+ * không có, tên và giá nằm ở nửa dưới thân ô.
+ */
+export function nameBand(type) {
+  return type === 'property'
+    ? { top: 0, bottom: HEADER_H }
+    : { top: 0.50, bottom: 0.97 };
+}
+
+/**
  * Đầu ô là một **cái cổng** phủ kín dải trên cùng: mái đình cong đầu đao chạm
  * hồi văn, hai cột chạy sát hai mép ô, chân cột đài sen đỗ trên gạch chỉ chân
  * đầu ô. Sắc nhóm đất nằm ngay trong nét cổng và trong tấm biển tên treo giữa

@@ -76,6 +76,11 @@ export const bankruptSvg = () => line('ai-bankrupt',
 /** Dấu tích — chốt lượt, xong việc. */
 export const doneSvg = () => line('ai-done', '<path d="M4.5 12.5 9.8 17.8 19.5 6.5"/>');
 
+/** Hai lá bài xếp chồng — túi thẻ đang giữ. */
+export const cardSvg = () => line('ai-card',
+  '<rect x="3.2" y="6.4" width="11.4" height="14.4" rx="2" transform="rotate(-9 8.9 13.6)"/>'
+  + '<rect x="9.6" y="4.6" width="11.4" height="14.4" rx="2" transform="rotate(7 15.3 11.8)"/>');
+
 /** Đồng tiền — nộp phạt ra tù. */
 export const coinSvg = () => line('ai-coin',
   '<circle cx="12" cy="12" r="8.6"/><path d="M12 6.9v10.2"/>'

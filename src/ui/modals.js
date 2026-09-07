@@ -174,9 +174,20 @@ export function buyModal(tileId, player) {
    Rút thẻ Cơ Hội / Khí Vận
    ================================================================== */
 
-export function cardModal(kind, card) {
+/**
+ * Bày một thẻ Cơ Hội / Khí Vận.
+ *
+ * Thẻ đời đầu chỉ có một con số nên mặt thẻ in thẳng con số ấy. Nay có thẻ
+ * không đụng tới tiền (vé ra tù, dỡ nhà người ta), nên phần dưới mặt thẻ nhận
+ * hai thứ rời nhau: `amount` là con số lớn (bỏ trống thì không in), `note` là
+ * dòng nói rõ thẻ này rơi vào ai, vào ô nào.
+ *
+ * @param {{amount?:?number, note?:string, label?:string}} [o]
+ */
+export function cardModal(kind, card, o = {}) {
   const meta = DECK_META[kind];
-  const up = card.amount > 0;
+  const amount = o.amount ?? null;
+  const up = amount !== null && amount > 0;
   return openModal({
     eyebrow: 'BÓC THẺ',
     title: meta.title,
@@ -184,9 +195,15 @@ export function cardModal(kind, card) {
         <div class="fate-sigil" style="color:${meta.accent}">${meta.sigil}</div>
         <div class="fate-kind">${meta.title}</div>
         <div class="fate-text">${esc(card.text)}</div>
-        <div class="fate-amount ${up ? 'up' : 'down'}">${up ? '+' : '−'}${money(Math.abs(card.amount))}</div>
+        ${amount === null ? '' : `<div class="fate-amount ${up ? 'up' : 'down'}">${
+          up ? '+' : '−'}${money(Math.abs(amount))}</div>`}
+        ${o.note ? `<div class="fate-note">${o.note}</div>` : ''}
       </div>`,
-    buttons: [{ label: up ? 'Nhận tiền' : 'Đành chịu', value: true, cls: up ? 'btn-jade' : 'btn-danger' }],
+    buttons: [{
+      label: o.label ?? (up ? 'Nhận tiền' : 'Đành chịu'),
+      value: true,
+      cls: up ? 'btn-jade' : 'btn-danger',
+    }],
   });
 }
 

@@ -22,6 +22,7 @@
  * ── Thông điệp ──────────────────────────────────────────────────────────────
  *   hello   khách → chủ    tôi vừa vào, xin một ghế
  *   ready   khách → chủ    tôi đã gõ xong tên và bấm sẵn sàng
+ *   pick    khách → chủ    tôi đổi sang màu quân này
  *   room    chủ → tất cả   sổ ghế mới nhất
  *   full    chủ → một người  phòng đã đầy, không còn ghế
  *   kick    chủ → tất cả   mời một người ra
@@ -154,6 +155,15 @@ export class Room {
   get isFull() { return this.seats.length >= MAX_PLAYERS; }
   seatOf(id) { return this.seats.findIndex((s) => s.id === id); }
 
+  /**
+   * Ghế đang giữ màu quân này, hoặc -1 nếu màu còn trống.
+   *
+   * Mọi máy cùng một sổ ghế nên cùng tính ra một đáp án — nhờ vậy người bấm
+   * trúng màu của người khác được báo ngay trên máy mình, không phải gửi đi
+   * rồi chờ chủ phòng trả lời mới biết là hỏng.
+   */
+  tokenSeat(index) { return this.seats.findIndex((s) => s.token === index); }
+
   /** Ghế này còn người ngồi và còn nối mạng không. */
   isSeatLive(i) {
     const s = this.seats[i];
@@ -207,6 +217,7 @@ export class Room {
 
     tp.on('hello', (m) => this.#onHello(m));
     tp.on('ready', (m) => this.#onReady(m));
+    tp.on('pick', (m) => this.#onPick(m));
     tp.on('room', (m) => this.#applyRoom(m));
     tp.on('full', (m) => {
       if (m.to !== this.me.id) return;
@@ -365,6 +376,47 @@ export class Room {
     const m = { id: this.me.id, name, ready };
     if (this.isHost) this.#onReady(m);
     else this.tp.send('ready', m);
+  }
+
+  /**
+   * Đổi màu quân của mình.
+   *
+   * Màu đã có người giữ thì từ chối ngay tại đây, không gửi đi: hai ghế cùng
+   * một màu thì trên bàn cờ không còn đọc được quân nào của ai, mà nước màu
+   * chủ đất phủ trên ô cũng chỉ vào hai người.
+   *
+   * Bấm "Sẵn sàng" là chốt luôn màu — cùng lúc với chốt tên. Muốn đổi thì bấm
+   * "Sửa lại" trước; nhờ vậy người khác nhìn màu của người đã sẵn sàng mà
+   * chọn thì màu ấy không bị rút đi sau lưng họ.
+   *
+   * @returns {boolean} có gửi đi được không — false nghĩa là màu đã có chủ
+   */
+  setToken(index) {
+    if (this.phase !== 'lobby') return false;
+    const mine = this.mySeat;
+    if (mine < 0 || this.seats[mine].ready) return false;
+    if (!Number.isInteger(index) || index < 0 || index >= MAX_PLAYERS) return false;
+    const held = this.tokenSeat(index);
+    if (held >= 0 && held !== mine) return false;
+    const m = { id: this.me.id, token: index };
+    if (this.isHost) this.#onPick(m);
+    else this.tp.send('pick', m);
+    return true;
+  }
+
+  /** Có người đổi màu quân. Chủ phòng xét lại lần nữa rồi mới ghi sổ. */
+  #onPick(m) {
+    if (!this.isHost || this.phase !== 'lobby') return;
+    const i = this.seatOf(m?.id);
+    const index = Number(m?.token);
+    if (i < 0 || !Number.isInteger(index) || index < 0 || index >= MAX_PLAYERS) return;
+    if (this.seats[i].ready) return;
+    // Hai người bấm cùng một màu gần như cùng lúc: chỉ tin nào tới trước được
+    // ghi, tin sau rơi ở đây và máy người ấy vẫn giữ nguyên màu cũ.
+    const held = this.tokenSeat(index);
+    if (held >= 0 && held !== i) return;
+    this.seats[i].token = index;
+    this.#publishRoom();
   }
 
   /**

@@ -43,6 +43,14 @@ export class Player {
     this.bankrupt = false;
     /** Số lần đổ đôi liên tiếp trong lượt hiện tại. */
     this.doubles = 0;
+    /**
+     * Túi thẻ: những lá giữ lại dùng sau (vé ra tù, lệnh dỡ nhà, cưỡng chiếm…).
+     * Mỗi tấm chỉ ghi nó thuộc bộ nào, lá thứ mấy (`{kind, index}`) — nội dung
+     * thẻ là hằng số, máy nào cũng có sẵn, mà nhờ vậy lúc xài còn trả đúng lá
+     * ấy về đúng bộ.
+     * @type {Array<{kind:string,index:number}>}
+     */
+    this.cards = [];
   }
 }
 
@@ -74,6 +82,16 @@ export class GameState {
     };
     /** Đặt true khi ván đã kết thúc. */
     this.over = false;
+    /**
+     * Số thứ tự ảnh chụp, tăng một nấc mỗi lần người cầm lái phát đi.
+     *
+     * Bản online cần nó vì đường truyền **không giữ đúng thứ tự**: một phiên
+     * đấu giá phát bảy tám ảnh chụp trong vài giây, hai ảnh cuối cách nhau chưa
+     * tới một mili giây, và máy bên kia có lúc nhận ảnh sau trước ảnh trước.
+     * Không có con số này thì ảnh cũ đè lên ảnh mới, ván lùi lại một nước —
+     * xem `Game.onSync`.
+     */
+    this.rev = 0;
     /**
      * Thứ tự đi, ghi bằng số ghế — kết quả của màn lắc giành quyền đi trước.
      * `null` nghĩa là chưa bốc thăm; lúc ấy tạm hiểu là đi theo thứ tự ghế.
@@ -347,6 +365,38 @@ export class GameState {
     return check;
   }
 
+  /**
+   * Hạ một cấp nhà **không đền bù** — thiên tai, cưỡng chế dỡ nhà.
+   *
+   * Vật liệu trả hết về kho ngân hàng. Khách sạn hạ xuống bốn căn nhà; kho
+   * không đủ bốn căn thì mất trắng — nhà đã dỡ rồi thì không mượn đâu ra được.
+   *
+   * Cố ý **không** giữ luật xây đều tay: bộ màu bị dỡ lệch một ô là chuyện
+   * thường sau tai hoạ, và luật xây (`canBuild` lấy theo ô thấp nhất) tự lo
+   * việc san bằng lại khi chủ đất muốn cất lên.
+   */
+  demolish(tileId) {
+    const cur = this.housesOn(tileId);
+    if (cur === 0) return 0;
+    if (cur === 5) {
+      this.bankHotels += 1;
+      if (this.bankHouses >= 4) { this.houses.set(tileId, 4); this.bankHouses -= 4; }
+      else this.houses.delete(tileId);
+      return 1;
+    }
+    this.bankHouses += 1;
+    if (cur === 1) this.houses.delete(tileId);
+    else this.houses.set(tileId, cur - 1);
+    return 1;
+  }
+
+  /** Dỡ sạch nhà cửa trên một ô, trả về số **cấp** đã dỡ (khách sạn tính 5). */
+  clearHouses(tileId) {
+    const levels = this.housesOn(tileId) === 5 ? 5 : this.housesOn(tileId);
+    while (this.housesOn(tileId) > 0) this.demolish(tileId);
+    return levels;
+  }
+
   // ---------------------------------------------------------- thế chấp
 
   canMortgage(playerId, tileId) {
@@ -417,6 +467,37 @@ export class GameState {
     player.jailTurns = 0;
   }
 
+  // ------------------------------------------------------------- túi thẻ
+
+  /** Cất một lá vào túi: lá ấy ra khỏi bộ cho tới khi có người xài. */
+  takeCard(playerId, kind, index) {
+    this.decks[kind].take(index);
+    this.players[playerId].cards.push({ kind, index });
+  }
+
+  /**
+   * Rút một tấm khỏi túi (xài, hoặc trả lại khi vỡ nợ) — lá bài về lại bộ,
+   * chen vào một chỗ ngẫu nhiên trong chồng.
+   *
+   * @param {number} playerId
+   * @param {number} [at] vị trí trong túi, bỏ trống thì lấy tấm cuối
+   * @returns {?{kind:string,index:number}} tấm vừa rời tay
+   */
+  dropCard(playerId, at = -1) {
+    const bag = this.players[playerId].cards;
+    const i = at < 0 ? bag.length - 1 : at;
+    const [ref] = bag.splice(i, 1);
+    if (!ref) return null;
+    this.decks[ref.kind]?.give(ref.index);
+    return ref;
+  }
+
+  /** Vị trí tấm vé ra tù đầu tiên trong túi, `-1` nếu không có tấm nào. */
+  jailCardAt(playerId) {
+    return this.players[playerId].cards
+      .findIndex((ref) => this.decks[ref.kind]?.cards[ref.index]?.type === 'jail-free');
+  }
+
   /** Đã ngồi đủ 3 lượt chưa. */
   jailExpired(player) { return player.jailTurns >= MAX_JAIL_TURNS; }
 
@@ -436,6 +517,8 @@ export class GameState {
       this.owner.delete(tileId);
       this.mortgaged.delete(tileId);
     }
+    // Thẻ còn trong túi người vỡ nợ thì trả về bộ, đừng chôn theo họ
+    while (p.cards.length) this.dropCard(playerId);
     p.money = 0;
     p.bankrupt = true;
     p.inJail = false;
