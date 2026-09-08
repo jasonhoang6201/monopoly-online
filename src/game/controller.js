@@ -55,11 +55,15 @@ export class Game {
     this.net = null;
     /**
      * Mất kết nối bao lâu thì tài sản trả về ngân hàng.
-     * Rộng rãi một chút để sụt wifi hay bấm F5 không làm mất cả cơ nghiệp —
-     * quay lại kịp trong hạn này là về đúng ghế cũ, đất nhà nguyên vẹn.
+     *
+     * Rộng rãi để sụt wifi hay bấm F5 không làm mất cả cơ nghiệp — quay lại kịp
+     * trong hạn này là về đúng ghế cũ, đất nhà nguyên vẹn. Hai phút vì đường về
+     * gồm cả những đoạn không do người chơi quyết: trang nạp lại, Supabase bắt
+     * tay lại (nhịp lùi tăng dần tới 10 giây một lần), rồi mới tới lượt `hello`
+     * được trả lời. Bốn mươi lăm giây thì rớt mạng một cái là mất ván.
      * (Bộ kiểm thử hạ xuống vài giây cho đỡ phải ngồi chờ.)
      */
-    this.awayGraceMs = 45000;
+    this.awayGraceMs = 120000;
     /**
      * Hạn cho một nước đi. Hết giờ mà chưa nhúc nhích thì bị mời khỏi bàn —
      * cùng cách xử như người mất kết nối quá lâu, vì hậu quả y hệt: cả bàn

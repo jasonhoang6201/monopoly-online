@@ -192,6 +192,23 @@ export class Room {
   }
 
   /**
+   * Trọng tài khi **bỏ ghế `skip` ra ngoài** — dùng để trả lời `hello`.
+   *
+   * Người gửi `hello` là người đang xin vào lại, nên chính họ không thể là
+   * người trả lời. Mà mất mạng đột ngột (rút dây, sập wifi) thì presence của
+   * họ nằm lại trên máy chủ hàng chục giây: cả bàn vẫn thấy ghế ấy "còn nối
+   * mạng", và nếu ghế ấy là ghế nhỏ nhất thì `arbiterSeat` vẫn trỏ vào chính
+   * người đang gõ cửa — không máy nào thấy mình có phận sự trả lời, người kia
+   * chờ hết `JOIN_TIMEOUT_MS` rồi bị báo "không tìm thấy phòng".
+   *
+   * Bỏ ghế người gọi ra là hết cảnh ấy, mà vẫn đúng một máy trả lời: mọi máy
+   * cùng sổ ghế, cùng công thức, nên cùng đáp án.
+   */
+  arbiterExcept(skip) {
+    return this.seats.findIndex((s, i) => i !== skip && this.isSeatLive(i));
+  }
+
+  /**
    * Người này có đang ở trong phòng không.
    *
    * Nguồn sự thật là `livePeers`; `helloAt` chỉ bắc cầu qua quãng `hello` đã
@@ -300,9 +317,10 @@ export class Room {
   #onHello(m) {
     if (!m?.id) return;
     const inLobby = this.phase === 'lobby';
-    if (inLobby ? !this.isHost : !this.isArbiter) return;
-
     const i = this.seatOf(m.id);
+    // Trong ván, người trả lời là ghế sống nhỏ nhất **không kể người đang gọi**
+    // — xem `arbiterExcept`.
+    if (inLobby ? !this.isHost : this.arbiterExcept(i) !== this.mySeat) return;
 
     if (i >= 0) {
       // Đã bị mời ra thì không cho lẻn vào lại bằng cách nạp lại trang.
@@ -315,7 +333,10 @@ export class Room {
          mọi tab của máy đó**. Người vào lại giữa ván mà máy ấy vừa có ai gõ tên
          khác thì ghế bị đặt lại theo tên người kia. Tên vào sổ ở đúng một chỗ:
          `#onReady`, lúc bấm "Sẵn sàng" trong phòng chờ. */
-      this.#publishRoom();
+      /* Ép phát: lúc này `isArbiter` của máy mình có thể còn là false, vì ghế
+         của người vừa gọi vẫn đang mang cờ "còn nối mạng" trên máy mình. Quyền
+         trả lời đã xét ở đầu hàm bằng `arbiterExcept`, không xét lại nữa. */
+      this.#publishRoom(true);
       // Vào lại giữa ván thì sổ ghế thôi chưa đủ — họ cần cả ván cờ hiện tại.
       if (!inLobby) this.onNeedSync?.();
       return;
@@ -502,10 +523,11 @@ export class Room {
     if (changed) this.#publishRoom();
   }
 
-  #publishRoom() {
+  /** @param {boolean} [force] chỗ gọi đã tự xét quyền phát — xem `#onHello`. */
+  #publishRoom(force = false) {
     // Phòng chờ do chủ phòng ghi sổ; vào ván rồi thì chỉ còn trọng tài phát sổ,
     // và cũng chỉ để đón người vào lại.
-    if (!(this.phase === 'lobby' ? this.isHost : this.isArbiter)) return;
+    if (!force && !(this.phase === 'lobby' ? this.isHost : this.isArbiter)) return;
     const payload = {
       hostId: this.hostId ?? this.me.id,
       seats: this.seats,
