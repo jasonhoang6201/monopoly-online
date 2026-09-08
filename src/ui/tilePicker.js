@@ -144,6 +144,102 @@ export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
 }
 
 /**
+ * Chọn **nhiều ô** trên bàn cờ, dùng lúc dựng đề nghị giao dịch.
+ *
+ * Khác `pickTileOnBoard` ở chỗ không hỏi xác nhận từng ô: bấm là bật, bấm lại
+ * là tắt, xong hết mới chốt một lần. Đổi ý giữa chừng không tốn gì, nên hộp
+ * xác nhận chen vào mỗi ô chỉ làm chậm tay.
+ *
+ * Chỉ những ô truyền vào `ids` mới sáng và bấm được, nên người chơi không thể
+ * lỡ tay chọn đất của người khác — chỗ này thay cho việc dò tên trong danh sách.
+ *
+ * @param {import('../scenes/BoardScene.js').default} scene
+ * @param {number[]} ids các ô chọn được (đã lọc theo đúng chủ sở hữu)
+ * @param {Iterable<number>} chosen những ô đang có sẵn trong giỏ
+ * @param {{eyebrow:string,title:string,sub:string,note?:string}} text
+ * @returns {Promise<number[]|null>} danh sách mới, hoặc `null` nếu bỏ ngang —
+ *   bỏ ngang thì bên gọi giữ nguyên giỏ cũ, không phải chọn lại từ đầu.
+ */
+export function pickTilesOnBoard(scene, ids, chosen, text) {
+  return new Promise((resolve) => {
+    const sel = new Set([...chosen].filter((id) => ids.includes(id)));
+    const hud = document.getElementById('board-hud');
+    const panel = document.createElement('div');
+    panel.className = 'tile-pick';
+    panel.innerHTML = `
+      <div class="tp-eyebrow">${text.eyebrow}</div>
+      <div class="tp-title">${text.title}</div>
+      <div class="tp-sub">${text.sub}</div>
+      <div class="tp-call">Bấm vào <b>ô đang sáng</b> để thêm hoặc bỏ —
+        có <b>${ids.length}</b> ô chọn được</div>
+      <div class="tp-chosen"></div>
+      ${text.note ? `<div class="tp-note">${text.note}</div>` : ''}
+      <div class="tp-acts">
+        <button type="button" class="btn btn-jade tp-done">Xong</button>
+        <button type="button" class="btn btn-ghost tp-cancel">Huỷ</button>
+      </div>`;
+    hud.appendChild(panel);
+    hud.classList.add('picking');
+
+    const prevClick = scene.onTileClick;
+    const chosenEl = panel.querySelector('.tp-chosen');
+    const doneBtn = panel.querySelector('.tp-done');
+
+    const paint = () => {
+      scene.markTiles(ids, { sel: [...sel] });
+      chosenEl.innerHTML = sel.size === 0
+        ? '<span class="tp-none">Chưa chọn ô nào</span>'
+        : [...sel].map((id) => `<span class="tp-chip"
+             style="border-color:${BOARD[id].groupHex ?? '#C8A048'}">
+             ${esc(tileShortLabel(id))}</span>`).join('');
+      doneBtn.textContent = sel.size ? `Xong · ${sel.size} ô` : 'Xong';
+    };
+
+    let done = false;
+    const finish = (out) => {
+      if (done) return;
+      done = true;
+      window.removeEventListener('keydown', onKey, true);
+      scene.onTileClick = prevClick;
+      scene.clearMarks();
+      hud.classList.remove('picking');
+      panel.classList.add('out');
+      setTimeout(() => panel.remove(), 260);
+      resolve(out);
+    };
+
+    /** Bấm trúng ô ngoài danh sách: nói rõ vì sao không ăn, đừng im lặng. */
+    const refuse = () => {
+      audio.sfx('click');
+      panel.classList.remove('nudge');
+      void panel.offsetWidth;
+      panel.classList.add('nudge');
+    };
+
+    scene.onTileClick = (id) => {
+      if (done) return;
+      if (!ids.includes(id)) { refuse(); return; }
+      if (sel.has(id)) { sel.delete(id); audio.sfx('click'); }
+      else { sel.add(id); audio.sfx('buy'); }
+      paint();
+    };
+
+    /* Hộp thoại giao dịch đang nấp sau bàn cờ nên không nhận phím nữa; phiên
+       chọn này cầm luôn Enter/Esc để bàn phím không rơi vào khoảng trống. */
+    function onKey(e) {
+      if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); finish([...sel]); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(null); }
+    }
+    window.addEventListener('keydown', onKey, true);
+
+    doneBtn.addEventListener('click', () => finish([...sel]));
+    panel.querySelector('.tp-cancel').addEventListener('click', () => finish(null));
+    paint();
+  });
+}
+
+/**
  * Dòng nhắc dán dưới thân mấy hộp thoại có `litTiles` bọc ngoài — nói cho người
  * chơi biết ô đang được nói tới đã sáng sẵn dưới bàn, và ngó bằng cách nào.
  */

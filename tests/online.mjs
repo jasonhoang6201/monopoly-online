@@ -16,6 +16,7 @@
  *   node tests/online.mjs --full   # thêm phần sức chứa, chậm
  */
 import { launchChrome } from './launch.mjs';
+import { pickTradeTiles } from './boardpick.mjs';
 import { playRollOff, orderOf } from './rolloff.mjs';
 
 const SHOT = process.env.SHOT_DIR
@@ -282,8 +283,8 @@ await A.waitForTimeout(700);
 await A.bringToFront();
 await A.locator('#actions button[data-key="t"]').click();
 await A.locator(`.scrim.show .pick[data-id="${seatB}"]`).click();
-await A.locator(`.scrim.show .arow.selectable[data-side="mine"][data-tile="${GIVE}"]`).click();
-await A.locator(`.scrim.show .arow.selectable[data-side="theirs"][data-tile="${GET}"]`).click();
+await pickTradeTiles(A, 'mine', [GIVE]);
+await pickTradeTiles(A, 'theirs', [GET]);
 await A.locator('.scrim.show button.btn', { hasText: 'Gửi đề nghị' }).click();
 
 const review = B.locator('.scrim.show button.btn', { hasText: 'Đồng ý giao dịch' });
@@ -538,8 +539,8 @@ await asker.waitForTimeout(700);
 
 await asker.locator('#actions button[data-key="t"]').click();
 await asker.locator(`.scrim.show .pick[data-id="${tgtSeat}"]`).click();
-await asker.locator(`.scrim.show .arow.selectable[data-side="mine"][data-tile="${T_GIVE}"]`).click();
-await asker.locator(`.scrim.show .arow.selectable[data-side="theirs"][data-tile="${T_GET}"]`).click();
+await pickTradeTiles(asker, 'mine', [T_GIVE]);
+await pickTradeTiles(asker, 'theirs', [T_GET]);
 await asker.locator('.scrim.show button.btn', { hasText: 'Gửi đề nghị' }).click();
 
 await target.bringToFront();

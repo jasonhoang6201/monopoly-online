@@ -1,4 +1,5 @@
 import { launchChrome } from './launch.mjs';
+import { pickTradeTiles } from './boardpick.mjs';
 import { playRollOff } from './rolloff.mjs';
 
 const SHOT = '/private/tmp/claude-501/-Users-jasonhoang-Desktop-monopoly/a29323e2-f3f4-4b2d-9c9c-70118d22612f/scratchpad';
@@ -140,15 +141,11 @@ await page.locator('.pick').first().click();
 await page.waitForTimeout(900);
 
 // Bảy Viễn đưa Quai de l'Arroyo (1) + 300$, xin Rue Catinat (37) + Thuỷ Cục (12, đang thế chấp)
-await page.locator('.arow.selectable[data-side="mine"][data-tile="1"]').click();
-await page.waitForTimeout(250);
+await pickTradeTiles(page, 'mine', [1]);
 await page.locator('#give-money').fill('300');
 await page.locator('#give-money').dispatchEvent('input');
 await page.waitForTimeout(250);
-await page.locator('.arow.selectable[data-side="theirs"][data-tile="37"]').click();
-await page.waitForTimeout(250);
-await page.locator('.arow.selectable[data-side="theirs"][data-tile="12"]').click();
-await page.waitForTimeout(400);
+await pickTradeTiles(page, 'theirs', [37, 12]);
 await page.screenshot({ path: `${SHOT}/36-trade-build.png` });
 log('  tóm tắt:', (await page.locator('#tr-sum').textContent()).replace(/\s+/g, ' ').trim());
 

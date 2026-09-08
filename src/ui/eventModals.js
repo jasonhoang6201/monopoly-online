@@ -158,7 +158,9 @@ export function auctionBidModal(state, playerId, tileId, o = {}) {
       ${tileRow(tileId, `Giá gốc ${money(t.price)} · thế chấp ${money(t.mortgage)}`)}
       <div class="bid-box">
         <label for="bid-input">Giá bạn trả</label>
-        <input id="bid-input" type="number" min="0" max="${max}" step="10" value="0" />
+        <input id="bid-input" type="number" min="0" max="${max}" step="10" value="0"
+               aria-describedby="bid-err" />
+        <div class="field-err" id="bid-err" hidden></div>
         <div class="bid-quick">
           ${[0.5, 0.75, 1].map((f) => {
             const v = Math.min(max, Math.round(t.price * f));
@@ -170,10 +172,32 @@ export function auctionBidModal(state, playerId, tileId, o = {}) {
         người đi trước trong vòng lượt thắng.</div>
       ${PEEK_HINT}`,
     buttons: [{ label: 'Chốt giá', value: 'bid', cls: 'btn-gold' }],
-    onMount: (body, close) => {
+    onMount: (body, close, modal, foot) => {
       const input = body.querySelector('#bid-input');
+      const err = body.querySelector('#bid-err');
+      const okBtn = foot.querySelector('.btn-gold');
+
+      /**
+       * Kiểm ngay lúc gõ chứ không đợi bấm chốt.
+       *
+       * Trước đây số vượt túi bị cắt lặng lẽ về `max`: ô vẫn hiện con số vừa gõ
+       * mà giá gửi đi là con số khác — người chơi tưởng mình trả 1500, thua
+       * phiên đấu giá rồi vẫn không hiểu vì sao. Giờ ô đỏ ngay, nút chốt tắt,
+       * và `bid` giữ nguyên giá hợp lệ gần nhất.
+       */
       const read = () => {
-        bid = Math.max(0, Math.min(max, Math.floor(+input.value || 0)));
+        const raw = input.value.trim();
+        const n = Math.floor(+raw);
+        let msg = '';
+        if (raw !== '' && !Number.isFinite(n)) msg = 'Chỉ ghi bằng số.';
+        else if (n < 0) msg = 'Không ghi giá âm.';
+        else if (n > max) msg = `Bạn chỉ có ${money(max)} — hạ giá xuống.`;
+
+        input.classList.toggle('bad', !!msg);
+        err.hidden = !msg;
+        err.innerHTML = msg;
+        okBtn.disabled = !!msg;
+        if (!msg) bid = Math.max(0, n || 0);
       };
       input.addEventListener('input', read);
       body.querySelectorAll('.bid-q').forEach((b) => {

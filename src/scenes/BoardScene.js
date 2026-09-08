@@ -984,10 +984,13 @@ export default class BoardScene extends Phaser.Scene {
    * biết bấm không ăn.
    *
    * @param {number[]} ids
-   * @param {{focus?:number, color?:number, pick?:boolean}} [o] `focus` là ô vừa
-   *   bấm, đang chờ xác nhận — sáng gắt hơn hẳn phần còn lại cho khỏi lẫn.
-   *   `pick: false` là kiểu chỉ trỏ: hộp thoại đang nói tới mấy ô này chứ không
-   *   mời bấm, nên không đụng tới `markSet` — con trỏ chuột giữ nguyên.
+   * @param {{focus?:number, color?:number, pick?:boolean, sel?:number[]}} [o]
+   *   `focus` là ô vừa bấm, đang chờ xác nhận — sáng gắt hơn hẳn phần còn lại
+   *   cho khỏi lẫn. `sel` là những ô **đã chọn xong** trong một phiên chọn
+   *   nhiều ô (dựng đề nghị giao dịch): tô nước ngọc thay vì nước vàng, nhìn
+   *   một cái là biết ô nào đã nằm trong giỏ. `pick: false` là kiểu chỉ trỏ:
+   *   hộp thoại đang nói tới mấy ô này chứ không mời bấm, nên không đụng tới
+   *   `markSet` — con trỏ chuột giữ nguyên.
    */
   markTiles(ids, o = {}) {
     this.markTween?.remove();
@@ -996,8 +999,11 @@ export default class BoardScene extends Phaser.Scene {
     /* Dựng lại bố cục thì `layout()` gọi lại đúng đối tượng đánh dấu đang có;
        giữ nguyên nó chứ đừng dựng cái mới, để `spotTiles` còn nhận ra vệt sáng
        vẫn là của mình mà thu lại lúc hết giờ. */
-    this.marked = o === this.marked ? o : { ids: [...ids], focus: o.focus, color: o.color, pick };
+    this.marked = o === this.marked
+      ? o
+      : { ids: [...ids], focus: o.focus, color: o.color, pick, sel: o.sel ? [...o.sel] : undefined };
     this.markSet = pick ? new Set(ids) : null;
+    const selSet = new Set(o.sel ?? []);
 
     this.drawMarkVeil(ids, pick ? VEIL_PICK : VEIL_HINT);
 
@@ -1007,11 +1013,13 @@ export default class BoardScene extends Phaser.Scene {
     const color = o.color ?? 0xC8A048;
     const marks = ids.map((id) => {
       const focus = id === o.focus;
-      const r = this.add.rectangle(0, 0, 1, 1, color, focus ? 0.34 : 0.14)
-        .setStrokeStyle(Math.max(2, this.size * 0.005), 0xFFE9B0, focus ? 1 : 0.9);
+      const on = selSet.has(id);
+      const r = this.add.rectangle(0, 0, 1, 1, on ? 0x4E9576 : color, focus || on ? 0.34 : 0.14)
+        .setStrokeStyle(Math.max(2, this.size * 0.005),
+          on ? 0xBFF0D8 : 0xFFE9B0, focus || on ? 1 : 0.9);
       this.coverTile(r, id);
       this.markLayer.add(r);
-      return { r, base: focus ? 1 : 0.9 };
+      return { r, base: focus || on ? 1 : 0.9 };
     });
 
     // Một nhịp chung cho cả tập ô, cùng cách làm với vệt đèn nhà cửa

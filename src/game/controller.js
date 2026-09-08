@@ -1592,7 +1592,7 @@ export class Game {
     if (targetId == null) { this.restoreActions(); return; }
     const B = st.players[targetId];
 
-    const offer = await tradeBuildModal(st, A.id, targetId);
+    const offer = await tradeBuildModal(st, A.id, targetId, this.scene);
     if (!offer) { this.restoreActions(); return; }
 
     // Cả bàn cùng thấy nội dung đề nghị

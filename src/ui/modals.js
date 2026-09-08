@@ -11,7 +11,7 @@ import { TOKENS, MAX_PLAYERS } from '../core/state.js';
 import { DECK_META } from '../data/cards.js';
 import { EVENT_LEVELS, DEFAULT_EVENT_LEVEL } from '../data/events.js';
 import { deedCard, deedGrid, rentLevels, priceItems, tileCardUrl } from './deed.js';
-import { PEEK_HINT } from './tilePicker.js';
+import { PEEK_HINT, pickTilesOnBoard } from './tilePicker.js';
 import { tokenImage } from './hud.js';
 import { buildGlyphs, buildLabel, houseSvg, hotelSvg, bankSvg, keySvg } from '../render/glyphs.js';
 
@@ -460,10 +460,39 @@ function tradableIds(state, playerId) {
 }
 
 /**
- * Bước 2 — dựng đề nghị. Hai bên hiện song song: tiền mặt + ô đất đang sở hữu.
+ * Thẻ một ô đất **đã nằm trong đề nghị** — bấm để bỏ nó ra.
+ *
+ * Bảng chỉ bày phần đã chọn chứ không bày cả gia sản: chọn thì chọn ngoài bàn
+ * cờ, nơi người chơi thấy ô nằm cạnh nào và cạnh ô nào. Nhờ vậy bảng luôn ngắn
+ * — hai bên đọc nội dung đề nghị chỉ trong một tầm mắt.
+ */
+function tradeCardHtml(state, id, side) {
+  const mort = state.isMortgaged(id);
+  return `<button type="button" class="tcard selected${mort ? ' mortgaged' : ''}"
+      data-side="${side}" data-tile="${id}" title="Bấm để bỏ ô này khỏi đề nghị">
+      <span class="tcard-band" style="background:${chipColor(id)}"></span>
+      <span class="tcard-name">${esc(tileShortLabel(id))}</span>
+      <span class="tcard-price">${money(BOARD[id].price)}</span>
+      ${mort ? '<span class="tcard-tag">THẾ CHẤP</span>' : ''}
+      <span class="tcard-tick" aria-hidden="true">✕</span>
+    </button>`;
+}
+
+/**
+ * Bước 2 — dựng đề nghị. Hai bên hiện song song: tiền mặt + ô đất đã chọn.
+ *
+ * Đất chọn ngoài bàn cờ chứ không chọn trong bảng: bấm "Chọn đất trên bàn cờ"
+ * thì hộp thoại nấp đi, bàn cờ chỉ sáng đúng đất của bên ấy, bấm ô là bật/tắt,
+ * xong thì hộp thoại trở lại kèm phần vừa chọn. Bảng chỉ bày phần đã chọn nên
+ * không dài ra theo số đất đang giữ; đọc tên trong danh sách cũng không nói
+ * được ô nằm đâu trên bàn, mà đó mới là thứ quyết định có đổi hay không.
+ *
+ * Làm lần lượt từng vế cũng được: chọn đất mình, điền tiền, rồi sang vế kia.
+ *
+ * @param {import('../scenes/BoardScene.js').default} scene
  * @returns {Promise<null|{from,to,giveMoney,getMoney,give:number[],get:number[]}>}
  */
-export function tradeBuildModal(state, fromId, toId) {
+export function tradeBuildModal(state, fromId, toId, scene) {
   const A = state.players[fromId];
   const B = state.players[toId];
   const give = new Set();
@@ -473,19 +502,28 @@ export function tradeBuildModal(state, fromId, toId) {
   return openModal({
     eyebrow: 'ĐỀ NGHỊ GIAO DỊCH',
     title: `${esc(A.name)} ⇄ ${esc(B.name)}`,
-    sub: 'Bấm vào ô đất để thêm hoặc bỏ khỏi đề nghị. Ô đang có nhà phải bán nhà trước mới trao đổi được.',
+    sub: `Bấm <b>Chọn đất trên bàn cờ</b> ở từng bên rồi chỉ thẳng ô trên bàn.
+          Ô đang có nhà phải bán nhà trước mới trao đổi được.`,
     wide: true,
     body: '<div id="tr-body"></div>',
     buttons: [
       { label: 'Gửi đề nghị', value: 'submit', cls: 'btn-primary' },
       { label: 'Huỷ', value: null, cls: 'btn-ghost' },
     ],
-    onMount: (bodyEl, close, modal, foot) => {
+    onMount: (bodyEl, close, modal, foot, stash) => {
       const host = bodyEl.querySelector('#tr-body');
       const submitBtn = foot.querySelector('.btn-primary');
 
-      const sideHtml = (p, cls, sel, cash, inputId) => {
-        const ids = tradableIds(state, p.id);
+      /** Mọi thứ cần biết về một vế, tra bằng `mine`/`theirs`. */
+      const SIDES = {
+        mine:   { p: A, sel: give, ids: tradableIds(state, fromId), input: 'give-money' },
+        theirs: { p: B, sel: get,  ids: tradableIds(state, toId),   input: 'get-money' },
+      };
+      /** Tiền mặt vượt túi thì không gửi được — giữ riêng cờ báo lỗi từng vế. */
+      const badCash = { mine: false, theirs: false };
+
+      const sideHtml = (cls) => {
+        const { p, ids, input } = SIDES[cls];
         const blocked = state.propertiesOf(p.id).filter((id) => state.housesOn(id) > 0);
         return `<div class="trade-side ${cls}">
             <div class="trade-side-head">
@@ -493,71 +531,116 @@ export function tradeBuildModal(state, fromId, toId) {
               <span class="who">${esc(p.name)}</span>
               <span class="cash">${money(p.money)}</span>
             </div>
-            <div class="money-field">
+            <div class="money-field" data-side="${cls}">
               <label>Tiền mặt</label>
-              <input type="number" min="0" max="${p.money}" step="10" value="${cash}" id="${inputId}" />
+              <input type="number" min="0" max="${p.money}" step="10" value="0"
+                     id="${input}" aria-describedby="${input}-err" />
             </div>
-            ${ids.length === 0 && blocked.length === 0
-              ? '<div class="empty-note">Chưa có ô đất nào.</div>'
-              : ids.map((id) => `
-                  <div class="arow selectable ${sel.has(id) ? 'selected' : ''} ${state.isMortgaged(id) ? 'mortgaged' : ''}"
-                       data-side="${cls}" data-tile="${id}">
-                    <span class="arow-thumb" style="background-image:url('${tileCardUrl(id, 30)}')"></span>
-                    <span class="arow-main">
-                      <span class="arow-name">${esc(tileShortLabel(id))}
-                        ${state.isMortgaged(id) ? '<span class="arow-tag">THẾ CHẤP</span>' : ''}</span>
-                      <span class="arow-meta">Giá gốc ${money(BOARD[id].price)}</span>
-                    </span>
-                    <span class="arow-side">${sel.has(id) ? '✔' : ''}</span>
-                  </div>`).join('')}
-            ${blocked.length ? `<div class="empty-note" style="padding:8px">
-                ${blocked.length} ô đang có nhà — không trao đổi được.</div>` : ''}
+            <div class="field-err" id="${input}-err" hidden></div>
+            <button type="button" class="btn btn-gold side-pick" data-side="${cls}"
+                    ${ids.length ? '' : 'disabled'}>Chọn đất trên bàn cờ</button>
+            <div class="tcards" data-side="${cls}"></div>
+            <div class="side-note" data-side="${cls}"></div>
+            ${blocked.length ? `<div class="empty-note" style="padding:8px 0 0">
+                ${blocked.length} ô đang có nhà — bán nhà trước mới trao đổi được.</div>` : ''}
           </div>`;
       };
 
-      const render = () => {
-        host.innerHTML = `
-          <div class="trade-grid">
-            ${sideHtml(A, 'mine', give, giveMoney, 'give-money')}
-            <div class="trade-swap">⇄</div>
-            ${sideHtml(B, 'theirs', get, getMoney, 'get-money')}
-          </div>
-          <div class="trade-summary" id="tr-sum"></div>`;
+      host.innerHTML = `
+        <div class="trade-grid">
+          ${sideHtml('mine')}
+          <div class="trade-swap">⇄</div>
+          ${sideHtml('theirs')}
+        </div>
+        <div class="trade-summary" id="tr-sum"></div>`;
 
-        host.querySelectorAll('.arow.selectable').forEach((row) => {
-          row.addEventListener('click', () => {
-            const id = +row.dataset.tile;
-            const set = row.dataset.side === 'mine' ? give : get;
-            set.has(id) ? set.delete(id) : set.add(id);
-            render();
+      /** Vẽ lại phần đất đã chọn của một vế — ô tiền nằm ngoài nên không bị đụng. */
+      const paint = (cls) => {
+        const { p, sel, ids } = SIDES[cls];
+        host.querySelector(`.tcards[data-side="${cls}"]`).innerHTML =
+          [...sel].map((id) => tradeCardHtml(state, id, cls)).join('');
+        host.querySelector(`.side-note[data-side="${cls}"]`).innerHTML = ids.length === 0
+          ? `<span class="none">${esc(p.name)} không có ô đất nào trao đổi được.</span>`
+          : sel.size === 0
+            ? '<span class="none">Chưa chọn ô đất nào.</span>'
+            : `Đang chọn <b>${sel.size}</b>/${ids.length} ô — bấm thẻ để bỏ ra.`;
+        host.querySelector(`.side-pick[data-side="${cls}"]`).textContent = sel.size
+          ? `Sửa đất đã chọn · ${sel.size} ô`
+          : 'Chọn đất trên bàn cờ';
+        // Thẻ mới dựng mỗi lần vẽ nên gắn lại sự kiện ở đây
+        host.querySelectorAll(`.tcard[data-side="${cls}"]`).forEach((card) => {
+          card.addEventListener('click', () => {
+            sel.delete(+card.dataset.tile);
+            paint(cls);
+            summary();
           });
         });
-
-        const gm = host.querySelector('#give-money');
-        const tm = host.querySelector('#get-money');
-        gm.addEventListener('input', () => {
-          giveMoney = Math.max(0, Math.min(A.money, Math.floor(+gm.value || 0)));
-          summary();
-        });
-        tm.addEventListener('input', () => {
-          getMoney = Math.max(0, Math.min(B.money, Math.floor(+tm.value || 0)));
-          summary();
-        });
-
-        summary();
       };
 
       const summary = () => {
         const el = host.querySelector('#tr-sum');
         const empty = give.size === 0 && get.size === 0 && giveMoney === 0 && getMoney === 0;
-        submitBtn.disabled = empty;
-        el.innerHTML = empty
-          ? '<span class="none">Hãy chọn ít nhất một thứ để trao đổi.</span>'
-          : `<b style="color:${A.token.css}">${esc(A.name)}</b> đưa: ${describe(state, give, giveMoney)}
-             <br><b style="color:${B.token.css}">${esc(B.name)}</b> đưa: ${describe(state, get, getMoney)}`;
+        const bad = badCash.mine || badCash.theirs;
+        submitBtn.disabled = empty || bad;
+        el.classList.toggle('bad', bad);
+        el.innerHTML = bad
+          ? '<span class="none">Sửa lại số tiền quá túi thì mới gửi được.</span>'
+          : empty
+            ? '<span class="none">Hãy chọn ít nhất một thứ để trao đổi.</span>'
+            : `<b style="color:${A.token.css}">${esc(A.name)}</b> đưa: ${describe(state, give, giveMoney)}
+               <br><b style="color:${B.token.css}">${esc(B.name)}</b> đưa: ${describe(state, get, getMoney)}`;
       };
 
-      render();
+      /**
+       * Kiểm tiền ngay lúc gõ. Trước đây con số vượt túi bị cắt lặng lẽ: ô vẫn
+       * hiện 1500 mà đề nghị gửi đi chỉ 200 — người gõ không hề biết.
+       */
+      const checkCash = (cls) => {
+        const { p, input } = SIDES[cls];
+        const el = host.querySelector(`#${input}`);
+        const err = host.querySelector(`#${input}-err`);
+        const raw = el.value.trim();
+        const n = Math.floor(+raw);
+        let msg = '';
+        if (raw !== '' && !Number.isFinite(n)) msg = 'Chỉ nhập số.';
+        else if (n < 0) msg = 'Không nhập số âm.';
+        else if (n > p.money) msg = `${esc(p.name)} chỉ có ${money(p.money)}.`;
+        badCash[cls] = !!msg;
+        el.closest('.money-field').classList.toggle('bad', !!msg);
+        err.hidden = !msg;
+        err.innerHTML = msg;
+        const val = msg ? 0 : Math.max(0, n || 0);
+        if (cls === 'mine') giveMoney = val; else getMoney = val;
+        summary();
+      };
+
+      /* Chọn trên bàn cờ: cất hộp thoại đi, chỉ sáng đất của đúng vế đang chọn
+         nên không thể lỡ tay bốc đất của bên kia. */
+      host.querySelectorAll('.side-pick').forEach((b) => {
+        b.addEventListener('click', async () => {
+          const cls = b.dataset.side;
+          const { p, sel, ids } = SIDES[cls];
+          stash(true);
+          const out = await pickTilesOnBoard(scene, ids, sel, {
+            eyebrow: 'CHỌN ĐẤT ĐỂ ĐỔI',
+            title: `Đất của ${esc(p.name)}`,
+            sub: `Chỉ đất của <b>${esc(p.name)}</b> đang sáng. Chọn xong bấm
+                  <b>Xong</b> để về bảng đề nghị.`,
+            note: 'Ô đang có nhà không sáng — phải bán hết nhà mới trao đổi được.',
+          });
+          stash(false);
+          if (out) { sel.clear(); for (const id of out) sel.add(id); }
+          paint(cls);
+          summary();
+        });
+      });
+
+      for (const cls of ['mine', 'theirs']) {
+        host.querySelector(`#${SIDES[cls].input}`)
+          .addEventListener('input', () => checkCash(cls));
+        paint(cls);
+      }
+      summary();
 
       submitBtn.addEventListener('click', () => {
         close({

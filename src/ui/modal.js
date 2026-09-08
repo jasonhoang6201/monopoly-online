@@ -14,7 +14,7 @@ let peeking = false;
 let peekPill = null;
 
 /** Có modal nào đang mở mà cho phép ngó bàn cờ không? */
-const peekableOpen = () => root()?.querySelector('.scrim:not(.hide):not(.no-peek)');
+const peekableOpen = () => root()?.querySelector('.scrim:not(.hide):not(.no-peek):not(.stashed)');
 
 const isTyping = (el) => el instanceof HTMLInputElement
   || el instanceof HTMLTextAreaElement
@@ -93,7 +93,9 @@ window.addEventListener('blur', () => setPeek(false));
  * @param {boolean}[o.peekable] false = không cho tạm ẩn để ngó bàn cờ
  * @param {any}    [o.escValue] giá trị khi đóng bằng Esc (mặc định: nút cuối cùng)
  * @param {boolean}[o.enter]    false = không cho Enter bấm nút đầu tiên
- * @param {Function}[o.onMount] (bodyEl, close, modalEl) — gắn sự kiện động
+ * @param {Function}[o.onMount] (bodyEl, close, modalEl, footEl, stash) — gắn sự
+ *   kiện động. `stash(true/false)` cất hộp thoại đi rồi gọi nó về, dùng khi
+ *   người chơi cần thao tác thẳng trên bàn cờ.
  * @returns {Promise<any>} giá trị của nút được bấm
  */
 export function openModal(o) {
@@ -201,8 +203,10 @@ export function openModal(o) {
 
   function onKey(e) {
     if (settled || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
-    // Chỉ modal trên cùng mới nhận phím (bỏ qua modal đang chạy hiệu ứng đóng)
-    const open = root().querySelectorAll('.scrim:not(.hide)');
+    /* Chỉ modal trên cùng mới nhận phím — bỏ qua modal đang chạy hiệu ứng đóng,
+       và cả modal đang nấp sau bàn cờ (`stash`): lúc ấy phím thuộc về phiên
+       chọn ô, Esc mà rơi vào đây thì huỷ luôn cả đề nghị đang dựng dở. */
+    const open = root().querySelectorAll('.scrim:not(.hide):not(.stashed)');
     if (open[open.length - 1] !== scrim) return;
 
     if (e.key === 'Escape') {
@@ -242,12 +246,20 @@ export function openModal(o) {
   // Cho flashModal (và các chỗ khác) đóng đúng cách, không rò listener
   scrim._close = close;
 
+  /* Tạm cất hộp thoại đi để người chơi thao tác thẳng trên bàn cờ (chọn đất
+     lúc dựng đề nghị giao dịch). Khác `setPeek`: peek chỉ làm mờ và cú bấm kế
+     tiếp kéo hộp về, còn ở đây hộp phải biến mất hẳn cho tới lúc gọi lại. */
+  const stash = (on) => {
+    scrim.classList.toggle('stashed', !!on);
+    if (on) setPeek(false);
+  };
+
   root().appendChild(scrim);
   // Ép trình duyệt tính layout trước khi bật transition
   void scrim.offsetHeight;
   requestAnimationFrame(() => scrim.classList.add('show'));
 
-  if (o.onMount) o.onMount(body, close, modal, foot);
+  if (o.onMount) o.onMount(body, close, modal, foot, stash);
 
   return promise;
 }
