@@ -132,11 +132,12 @@ function wireChrome() {
   window.addEventListener('pointerdown', kick, { capture: true });
   window.addEventListener('keydown', kick, { capture: true });
 
-  // Phím tắt: F toàn màn hình · M tắt nhạc
+  // Phím tắt: F toàn màn hình · M tắt nhạc · G bảng meme
   window.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement) return;
     const k = e.key.toLowerCase();
     if (k === 'f') fsBtn.click();
     else if (k === 'm') $('music-toggle').click();
+    else if (k === 'g') $('meme-btn').click();
   });
 }

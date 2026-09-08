@@ -51,16 +51,11 @@ const POS_TINT = 0xA87C28;        // quân đang đứng: màu dự phòng khi k
 const VEIL_PICK = 0.68;
 const VEIL_HINT = 0.52;
 
-/* Nháy sáng một ô (`spotTiles`): máy quay kéo lại gần ô ấy rồi lùi về chỗ cũ.
-   Cắt phụt sang khung hình đã phóng to thì mắt mất một nhịp mới định vị lại
-   được ô đang xem nằm đâu trên bàn; kéo vào từ từ thì đường đi của khung hình
-   nói luôn ô ấy ở đâu.
-   Lớp nhoè chỉ có trong lúc khung hình còn chạy, đậm nhất ở giữa quãng kéo và
-   tắt hẳn lúc dừng: nhoè suốt cả nhịp giữ thì chính ô cần đọc lại là chỗ mờ
-   nhất. */
-const SPOT_ZOOM = 1.5;    // kéo gần nhất bấy nhiêu lần
-const SPOT_MOVE = 420;    // một chiều kéo vào (hoặc lùi ra)
-const SPOT_BLUR = 0.7;    // độ nhoè lúc khung hình chạy nhanh nhất
+/* Hạn sống của một vệt chỉ trỏ (`pick: false`) khi người gọi không nói rõ.
+   Mọi vệt chỉ trỏ đều phải có hạn: nó chỉ đi kèm một hộp thoại hay một nước cờ
+   vừa xảy ra, mà cả hai đều có thể bị nước sau chen ngang — không đặt hạn thì
+   màn tối nằm lại trên bàn cho tới hết ván. */
+const MARK_HINT_MS = 12000;
 
 /** Tông giấy trung bình của mặt ô — mốc đo độ nổi của màu chủ đất. */
 const PAPER_TINT = 0xE4D2AC;
@@ -191,6 +186,7 @@ export default class BoardScene extends Phaser.Scene {
     this.markLayer = this.add.container(0, 0).setDepth(5.5);
     this.marked = null;
     this.markSet = null;
+    this.markGuard = null;
     this.overlay = this.add.container(0, 0).setDepth(2);
     /* Vệt đèn báo ô đã có nhà — nằm trên nước màu chủ đất, dưới quân cờ */
     this.glowLayer = this.add.container(0, 0).setDepth(3);
@@ -239,8 +235,6 @@ export default class BoardScene extends Phaser.Scene {
    * thì vẽ lại mặt bàn ở độ phân giải cao hơn cho khỏi rỗ.
    */
   relayout() {
-    // Khung vẽ đổi cỡ thì mọi toạ độ vừa tính đều lệch — trả máy quay về trước
-    this.stopSpotCam();
     this.layout();
     const need = Math.min(3200, Math.ceil((this.size * 1.06) / 128) * 128);
     if (need > this.boardPx) {
@@ -469,6 +463,27 @@ export default class BoardScene extends Phaser.Scene {
   tokenTarget(playerIndex, pos) {
     const spot = tokenSpot(pos, playerIndex, TEX);
     return this.toScreen(spot.x, spot.y);
+  }
+
+  /**
+   * Chỗ đứng của quân cờ trên màn hình, đổi sẵn sang điểm ảnh CSS.
+   *
+   * Scene tính bằng điểm ảnh khung vẽ (đã nhân DPR), còn lớp phủ HTML đặt theo
+   * điểm ảnh CSS — bong bóng meme (`ui/memes.js`) neo theo quân nên phải hỏi
+   * qua đây, đừng đọc thẳng `spr.x`. `top` là đỉnh đầu quân: gốc của sprite đặt
+   * ở (0.5, 0.86) nên `spr.y` là chỗ chân đứng, không phải giữa thân.
+   *
+   * @returns {?{x:number,y:number,top:number,board:number}}
+   */
+  tokenScreenPos(seat) {
+    const spr = this.tokens?.[seat];
+    if (!spr || !spr.visible) return null;
+    return {
+      x: spr.x / DPR,
+      y: spr.y / DPR,
+      top: (spr.y - spr.displayHeight * spr.originY) / DPR,
+      board: this.size / DPR,
+    };
   }
 
   /** Quân nhảy từng ô một tới đích. */
@@ -984,16 +999,21 @@ export default class BoardScene extends Phaser.Scene {
    * biết bấm không ăn.
    *
    * @param {number[]} ids
-   * @param {{focus?:number, color?:number, pick?:boolean, sel?:number[]}} [o]
+   * @param {{focus?:number, color?:number, pick?:boolean, sel?:number[],
+   *   ms?:number, until?:number}} [o]
    *   `focus` là ô vừa bấm, đang chờ xác nhận — sáng gắt hơn hẳn phần còn lại
    *   cho khỏi lẫn. `sel` là những ô **đã chọn xong** trong một phiên chọn
    *   nhiều ô (dựng đề nghị giao dịch): tô nước ngọc thay vì nước vàng, nhìn
    *   một cái là biết ô nào đã nằm trong giỏ. `pick: false` là kiểu chỉ trỏ:
    *   hộp thoại đang nói tới mấy ô này chứ không mời bấm, nên không đụng tới
-   *   `markSet` — con trỏ chuột giữ nguyên.
+   *   `markSet` — con trỏ chuột giữ nguyên. Kiểu chỉ trỏ luôn có hạn: `ms` là
+   *   hạn sống (mặc định `MARK_HINT_MS`), `until` là mốc tắt đã tính sẵn của
+   *   một vệt đang được dựng lại.
    */
   markTiles(ids, o = {}) {
     this.markTween?.remove();
+    this.markGuard?.remove();
+    this.markGuard = null;
     this.markLayer.removeAll(true);
     const pick = o.pick !== false;
     /* Dựng lại bố cục thì `layout()` gọi lại đúng đối tượng đánh dấu đang có;
@@ -1001,9 +1021,11 @@ export default class BoardScene extends Phaser.Scene {
        vẫn là của mình mà thu lại lúc hết giờ. */
     this.marked = o === this.marked
       ? o
-      : { ids: [...ids], focus: o.focus, color: o.color, pick, sel: o.sel ? [...o.sel] : undefined };
+      : { ids: [...ids], focus: o.focus, color: o.color, pick, until: o.until,
+          sel: o.sel ? [...o.sel] : undefined };
     this.markSet = pick ? new Set(ids) : null;
     const selSet = new Set(o.sel ?? []);
+    if (!pick) this.armMarkGuard(this.marked, o.ms);
 
     this.drawMarkVeil(ids, pick ? VEIL_PICK : VEIL_HINT);
 
@@ -1032,6 +1054,25 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   /**
+   * Hẹn giờ tắt cho một vệt chỉ trỏ.
+   *
+   * Mốc tắt (`until`) là thời điểm tuyệt đối chứ không phải quãng còn lại, vì
+   * `layout()` dựng lại vệt sáng sau mỗi lần khung vẽ đổi cỡ: đếm lại từ đầu ở
+   * mỗi lần dựng thì kéo cửa sổ vài cái là vệt sáng không bao giờ hết hạn.
+   *
+   * @param {object} mark chính `this.marked` — hết giờ mà nó vẫn là vệt đang
+   *   hiện thì mới gỡ; đã có vệt khác đè lên thì chuyện của vệt ấy.
+   * @param {number} [ms] hạn sống, mặc định `MARK_HINT_MS`
+   */
+  armMarkGuard(mark, ms) {
+    if (mark.until == null) mark.until = this.time.now + (ms ?? MARK_HINT_MS);
+    this.markGuard = this.time.delayedCall(Math.max(0, mark.until - this.time.now), () => {
+      this.markGuard = null;
+      if (this.marked === mark) this.clearMarks();
+    });
+  }
+
+  /**
    * Nháy sáng mấy ô mà một nước cờ vừa đụng tới, rồi tự thu lại.
    *
    * Xây nhà, dỡ nhà, trưng thu, đấu giá kín, thẻ Thời Cuộc — nước nào cũng đổi
@@ -1042,8 +1083,8 @@ export default class BoardScene extends Phaser.Scene {
    * bảng xem nhanh vẫn như thường.
    *
    * @param {number[]} ids
-   * @param {number} [ms] cả nhịp kéo vào, giữ, lùi ra tính chung bấy nhiêu
-   * @returns {Promise<void>} xong lúc màn đã thu lại và máy quay về chỗ cũ
+   * @param {number} [ms] giữ màn tối bấy nhiêu mili giây
+   * @returns {Promise<void>} xong lúc màn đã thu lại
    */
   spotTiles(ids, ms = 2000) {
     const list = [...new Set(ids ?? [])].filter((id) => id != null);
@@ -1054,85 +1095,23 @@ export default class BoardScene extends Phaser.Scene {
 
     // Chồng lên một vệt chỉ trỏ có sẵn (hộp thoại đang mở) thì trả lại vệt ấy
     const prev = this.marked;
-    this.markTiles(list, { pick: false });
+    const dur = Math.max(700, ms);
+    this.markTiles(list, { pick: false, ms: dur });
     const mine = this.marked;
 
-    const hold = Math.max(500, ms - SPOT_MOVE * 2);
-    this.spotCamera(list, hold);
-
     return new Promise((resolve) => {
-      this.time.delayedCall(SPOT_MOVE * 2 + hold, () => {
+      this.time.delayedCall(dur, () => {
         // Đã có vệt sáng khác đè lên trong lúc chờ: chuyện của nó, đừng đụng vào
         if (this.marked === mine) {
-          if (prev) this.markTiles(prev.ids, prev);
+          /* Chỉ trả lại vệt cũ khi nó còn hạn. Hai lần `spotTiles` đè nhau thì
+             vệt cũ đã hết giờ từ lúc nào — dựng nó lên lại là ghim một màn tối
+             không còn ai gỡ. */
+          if (prev && prev.until > this.time.now) this.markTiles(prev.ids, prev);
           else this.clearMarks();
         }
         resolve();
       });
     });
-  }
-
-  /**
-   * Kéo máy quay lại gần mấy ô đang sáng, giữ một nhịp, rồi lùi về chỗ cũ.
-   *
-   * Độ phóng tính từ khung bao của chính mấy ô ấy, nên một ô lẻ thì kéo tới sát
-   * mức trần, còn một tập ô rải khắp bàn thì gần như không kéo — và lúc ấy bỏ
-   * hẳn hoạt cảnh, vì kéo vào mà vẫn phải thấy cả bàn thì chỉ tổ rung khung
-   * hình.
-   *
-   * @param {number[]} ids
-   * @param {number} hold giữ nguyên khung đã phóng bấy nhiêu mili giây
-   */
-  spotCamera(ids, hold) {
-    this.stopSpotCam();
-    const cam = this.cameras.main;
-    const W = this.scale.width, H = this.scale.height;
-
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const id of ids) {
-      for (const q of this.tileQuad(id)) {
-        x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y);
-        x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y);
-      }
-    }
-    // Chừa quanh ô một khoảng bằng chính nó, để còn thấy ô ấy nằm cạnh những gì
-    const zoom = Math.min(SPOT_ZOOM,
-      (Math.min(W, H) * 0.62) / Math.max(x1 - x0, y1 - y0, 1));
-    if (zoom < 1.05) return;
-
-    // Ô nằm ngay giữa khung, kể cả ô sát mép bàn: phần thò ra ngoài khung vẽ
-    // cũng cùng một tông với nền (`backgroundColor` ở `main.js`), không lộ mép
-    const tx = (x0 + x1) / 2, ty = (y0 + y1) / 2;
-    // Nhoè là hiệu ứng hậu kỳ trên khung hình — chỉ WebGL mới có, canvas thì bỏ
-    const blur = this.renderer.type === Phaser.WEBGL && cam.postFX
-      ? cam.postFX.addBlur(1, 2, 2, 0)
-      : null;
-
-    const st = { t: 0 };
-    this.spotCam = { cam, blur };
-    this.spotTween = this.tweens.add({
-      targets: st, t: 1,
-      duration: SPOT_MOVE, hold, yoyo: true, ease: 'Sine.easeInOut',
-      onUpdate: () => {
-        cam.setZoom(1 + (zoom - 1) * st.t);
-        cam.centerOn(W / 2 + (tx - W / 2) * st.t, H / 2 + (ty - H / 2) * st.t);
-        // Đậm nhất giữa quãng kéo, về 0 ở hai đầu — lúc đứng yên là lúc nét
-        if (blur) blur.strength = SPOT_BLUR * Math.sin(Math.PI * st.t);
-      },
-      onComplete: () => this.stopSpotCam(),
-    });
-  }
-
-  /** Trả máy quay về khung đầy đủ, bỏ lớp nhoè. Dựng lại bố cục cũng đi qua đây. */
-  stopSpotCam() {
-    this.spotTween?.remove();
-    this.spotTween = null;
-    const s = this.spotCam;
-    if (!s) return;
-    this.spotCam = null;
-    if (s.blur) s.cam.postFX.remove(s.blur);
-    s.cam.setZoom(1);
-    s.cam.centerOn(this.scale.width / 2, this.scale.height / 2);
   }
 
   /**
@@ -1175,9 +1154,8 @@ export default class BoardScene extends Phaser.Scene {
     const mask = hole.createGeometryMask();
     mask.invertAlpha = true;
 
-    /* Rộng gấp ba khung vẽ về mọi phía: `spotCamera` kéo máy quay ra tới sát
-       ô nằm mép bàn, lúc ấy tầm nhìn thò ra ngoài khung vẽ — màn tối chỉ vừa
-       đúng khung thì mép màn hình hở ra một dải chưa bị phủ. */
+    /* Rộng gấp ba khung vẽ về mọi phía: `shake()` rung máy quay, màn tối chỉ
+       vừa đúng khung thì mỗi nhịp rung lại hở ra một dải chưa bị phủ ở mép. */
     const veil = this.add.rectangle(-W, -H, W * 3, H * 3, 0x000000, alpha)
       .setOrigin(0, 0).setDepth(5.4).setAlpha(0);
     veil.setMask(mask);
@@ -1199,6 +1177,8 @@ export default class BoardScene extends Phaser.Scene {
   clearMarks() {
     this.markTween?.remove();
     this.markTween = null;
+    this.markGuard?.remove();
+    this.markGuard = null;
     this.markLayer.removeAll(true);
     this.marked = null;
     this.markSet = null;

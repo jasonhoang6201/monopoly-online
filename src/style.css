@@ -144,7 +144,8 @@ html, body {
   padding-top: 10px;
   border-top: 1px solid rgba(200, 160, 72, .2);
 }
-.side-tools { display: flex; align-items: center; gap: 7px; }
+/* position: relative để bảng chọn meme neo lên trên hàng nút này */
+.side-tools { position: relative; display: flex; align-items: center; gap: 7px; }
 
 .icon-btn {
   pointer-events: auto;
@@ -2378,3 +2379,120 @@ html, body {
 .color-note b { color: var(--gold-light); }
 .color-note.warn { color: #FFC9BE; opacity: 1; }
 .color-note.warn b { color: #FFC9BE; }
+
+
+/* ------------------------------------------------------------
+   Meme (ui/memes.js): nút ở hàng tiện ích chân cột mở bảng chọn,
+   chọn xong ảnh nổi lên thành bong bóng vuông trên đầu quân cờ.
+   ------------------------------------------------------------ */
+#meme-btn[hidden] { display: none; }
+/* Bấm lúc hết lượt: lắc một cái cho biết nút vẫn ăn, chỉ là chưa gửi được */
+#meme-btn.deny { animation: meme-deny .34s var(--ease-soft); }
+@keyframes meme-deny {
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+#meme-pop {
+  position: absolute; right: -2px; bottom: 40px;
+  width: 214px;
+  padding: 9px;
+  border-radius: 12px;
+  background:
+    linear-gradient(165deg, rgba(239, 226, 198, .05), transparent 46%),
+    linear-gradient(180deg, rgba(36, 17, 12, .97), rgba(18, 9, 6, .98));
+  border: 1px solid var(--gold-deep);
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 225, 170, .14);
+  z-index: 6;
+  animation: meme-pop-in .18s var(--ease-out-back) both;
+}
+#meme-pop[hidden] { display: none; }
+@keyframes meme-pop-in {
+  from { opacity: 0; transform: translateY(6px) scale(.94); }
+  to   { opacity: 1; transform: none; }
+}
+
+.meme-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+.meme-pick {
+  display: block;
+  padding: 4px;
+  background: rgba(74, 36, 26, .5);
+  border: 1px solid rgba(200, 160, 72, .3);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: transform .16s var(--ease-out-back), border-color .16s, background .16s, opacity .16s;
+}
+.meme-pick img {
+  display: block; width: 100%; aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: 6px;
+  background: rgba(10, 6, 3, .35);
+}
+.meme-pick:hover { transform: translateY(-2px); border-color: var(--gold-light); background: rgba(74, 36, 26, .9); }
+.meme-pick:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
+.meme-pick:disabled { opacity: .34; cursor: not-allowed; transform: none; }
+
+.meme-quota {
+  margin-top: 7px; text-align: center;
+  font-size: 9.5px; letter-spacing: .06em;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+.meme-quota.out { color: #FF8A7A; }
+
+/* Lớp bong bóng phủ cả màn hình — quân cờ đứng trên vành bàn nên bong bóng
+   của quân ở hàng trên cùng trồi lên khỏi ô vuông bàn cờ. */
+#meme-layer {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.meme-bub {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  padding: 6px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(242, 231, 206, .97), rgba(226, 208, 170, .97));
+  border: 2px solid var(--mc, var(--gold));
+  box-shadow: var(--shadow-lg);
+  opacity: 1;
+  transition: opacity .24s var(--ease-soft);
+}
+.meme-bub img {
+  display: block; width: 100%; aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: 7px;
+  background: rgba(23, 17, 12, .07);
+}
+/* Đuôi bong bóng chỉ xuống quân cờ — hình vuông xoay 45°, tô hai cạnh ngoài */
+.meme-bub::after {
+  content: ""; position: absolute;
+  left: 50%; bottom: -7px;
+  width: 12px; height: 12px;
+  transform: translateX(-50%) rotate(45deg);
+  background: rgba(226, 208, 170, .97);
+  border-right: 2px solid var(--mc, var(--gold));
+  border-bottom: 2px solid var(--mc, var(--gold));
+}
+/* Quân đứng sát cạnh trên: bong bóng lật xuống dưới, đuôi chỉ ngược lên */
+.meme-bub.below { transform: translate(-50%, 0); }
+.meme-bub.below::after {
+  bottom: auto; top: -7px;
+  background: rgba(242, 231, 206, .97);
+  border: 0;
+  border-left: 2px solid var(--mc, var(--gold));
+  border-top: 2px solid var(--mc, var(--gold));
+}
+.meme-bub.out { opacity: 0; }
+
+.meme-bub.pop { animation: meme-bub-in .34s var(--ease-out-back) both; }
+.meme-bub.below.pop { animation-name: meme-bub-in-below; }
+@keyframes meme-bub-in {
+  from { opacity: 0; transform: translate(-50%, -84%) scale(.62); }
+  to   { opacity: 1; transform: translate(-50%, -100%) scale(1); }
+}
+@keyframes meme-bub-in-below {
+  from { opacity: 0; transform: translate(-50%, -16%) scale(.62); }
+  to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}

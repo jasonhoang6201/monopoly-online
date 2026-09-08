@@ -37,6 +37,7 @@ import {
 import { pickTileOnBoard, litTiles } from '../ui/tilePicker.js';
 import { EVENT_BY_ID } from '../data/events.js';
 import { audio } from '../audio/audio.js';
+import { MemeDeck } from '../ui/memes.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -88,6 +89,14 @@ export class Game {
     this.clockN = Date.now();
     /** Ghế phát → số thứ tự tin đồng hồ mới nhất đã nhận của họ. */
     this.clockSeen = new Map();
+    /**
+     * Meme thả lên bàn cờ. Không đi qua `state` và cũng không sinh ảnh chụp:
+     * đây là chuyện của lúc này, người vào lại giữa ván không cần thấy lại.
+     */
+    this.memes = new MemeDeck(this.scene, {
+      seatOf: () => this.memeSeat(),
+      send: (id) => this.netEmit('meme', { seat: this.memeSeat(), id }),
+    });
   }
 
   // ---------------------------------------------------------------- khởi đầu
@@ -104,6 +113,7 @@ export class Game {
     this.scene.onTileClick = (id) => this.showTile(id);
     this.scene.setPlayers(this.state.players);
     this.scene.refresh(this.state);
+    this.memes.setState(this.state);
     this.bc.clear();
 
     await this.bc.show('KHAI CUỘC',
@@ -129,6 +139,7 @@ export class Game {
     this.scene.onTileClick = (id) => this.showTile(id);
     this.scene.setPlayers(this.state.players);
     this.scene.refresh(this.state);
+    this.memes.setState(this.state);
     this.bc.clear();
 
     /* Mọi dòng thông báo của người đang cầm lái được phát cho cả bàn cùng đọc,
@@ -296,6 +307,17 @@ export class Game {
   get mySeat() { return this.net ? this.net.mySeat : -1; }
 
   /**
+   * Meme thả ra thì bong bóng hiện trên đầu ai.
+   *
+   * Bản online là ghế của chính mình — thả được cả lúc đang ngồi xem người khác
+   * đi. Bản một máy thì cả bàn dùng chung một bàn phím, nên chỉ có một câu trả
+   * lời hợp lý: người đang tới lượt.
+   */
+  memeSeat() {
+    return this.net ? this.net.mySeat : (this.state?.turn ?? -1);
+  }
+
+  /**
    * Phát ảnh chụp trạng thái cho cả phòng.
    * Chỉ người đang cầm lái chạy tới được các chỗ gọi hàm này, nên không cần
    * kiểm tra lại quyền ở đây.
@@ -358,6 +380,10 @@ export class Game {
   async onEvent(name, data) {
     // Đồng hồ không phải hoạt cảnh — vào trước, khỏi xếp hàng sau tiếng xí ngầu
     if (name === 'clock') { if (!this.staleClock(data)) this.applyClock(data); return; }
+    /* Meme cũng vậy, mà lý do khác: người gửi thả lúc nào là muốn thấy nó hiện
+       lúc ấy. Xếp sau một cú lăn xí ngầu ba giây thì bong bóng nổi lên lạc hẳn
+       khỏi chuyện đang xảy ra trên bàn. */
+    if (name === 'meme') { this.memes.receive(data.seat, data.id); return; }
     const sc = this.scene;
     if (name === 'dice') {
       await sc.rollDiceAnim(data.a, data.b);
