@@ -212,6 +212,8 @@ export class EventRunner {
     }[plan.mod.type];
     await this.g.bc.show(card.title, `${what} ${rounds}.`,
       { kind: card.kind === 'good' ? null : 'bad', ms: 4200 });
+    // Luật chỉ đổi ở một khu (mở đường) thì chỉ đúng khu ấy sáng lên
+    if (plan.mod.group) await this.g.spot(GROUP_TILES[plan.mod.group]);
   }
 
   /* ================================================================
@@ -225,6 +227,9 @@ export class EventRunner {
     this.g.netEmit('quake', {});
     this.g.scene.shake(0.012, 700);
     await wait(700);
+    /* Sáng trước khi hỏi, chứ không đợi lúc báo kết quả: mấy hộp "chống đỡ"
+       mở tới nửa phút, cả bàn ngồi chờ mà không biết đang chờ vì ô nào. */
+    await this.g.spot(plan.tiles.map((l) => l.id));
 
     // Gom theo chủ đất: một người có ba ô trong khu thì chỉ hỏi một lần
     const bySeat = new Map();
@@ -261,6 +266,7 @@ export class EventRunner {
       await this.g.bc.show('NHÀ SẬP',
         `<b>${p.name}</b> mất một tầng nhà ở ${lots.map((l) => tileShortLabel(l.id)).join(', ')} — không đền bù.`,
         { kind: 'bad', ms: 4200 });
+      await this.g.spot(lots.map((l) => l.id), 1600);
     }
   }
 
@@ -275,6 +281,8 @@ export class EventRunner {
     const st = this.state;
     const p = st.players[plan.seat];
     const keep = plan.houses === 5 ? 2 : Math.floor(plan.houses / 2);
+
+    await this.g.spot([plan.tileId]);
 
     const answer = await this.askOne({
       seat: plan.seat,
@@ -348,6 +356,7 @@ export class EventRunner {
       `${tiles.map((id) => `<b>${tileShortLabel(id)}</b>`).join(', ')} ngưng thu tiền thuê
        trong <b>${Math.ceil(plan.turns / Math.max(1, st.alive().length))} vòng</b>.`,
       { kind: 'bad', ms: 4600 });
+    await this.g.spot(tiles, 2600);
   }
 
   /** Trưng thu: đất của người giàu nhất về tay nhà nước rồi đem bán lại. */
@@ -365,6 +374,7 @@ export class EventRunner {
     await this.g.bc.show('TRƯNG THU',
       `<b>${tileLabel(plan.tileId)}</b> bị trưng thu khỏi tay <b>${p.name}</b>,
        đền bù <span class="up">${money(plan.payout)}</span>.`, { kind: 'bad', ms: 4200 });
+    await this.g.spot([plan.tileId]);
     await this.g.receiveFromBank(plan.seat, plan.payout);
 
     await this.auction(plan.tileId, {
@@ -439,6 +449,7 @@ export class EventRunner {
          giao <b>${tileShortLabel(m.id)}</b> cho
          <b style="color:${st.players[m.to].token.css}">${st.players[m.to].name}</b>`).join('<br>'),
       { kind: 'trade', ms: 6000 });
+    await this.g.spot(moves.map((m) => m.id), 2600);
   }
 
   /* ================================================================
@@ -461,6 +472,9 @@ export class EventRunner {
     await this.g.bc.show('MỞ PHIÊN ĐẤU GIÁ',
       `<b>${tileLabel(tileId)}</b> — mọi người ghi giá kín, cao nhất thì lấy đất.`,
       { kind: 'trade', ms: 3000 });
+    /* Ghi giá kín là lúc ai cũng phải biết mình đang trả giá cho lô nào — hộp
+       ghi giá chỉ hiện tên lô, mà giá trị của nó nằm ở chỗ nó đứng trên bàn. */
+    await this.g.spot([tileId], 2200);
 
     const answers = await this.askMany(bidders.map((seat) => ({
       seat,

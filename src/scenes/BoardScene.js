@@ -43,6 +43,25 @@ const DIE_PAD = 1.75;
 const HOVER_TINT = 0xC9A24A;      // rê chuột: ánh vàng ấm
 const POS_TINT = 0xA87C28;        // quân đang đứng: màu dự phòng khi không rõ người chơi
 
+/* Lúc bắt chọn ô: cả khung vẽ tối đi bằng nấy, chỉ mấy ô chọn được là khoét
+   thủng ra. Sáng lên vài ô giữa một bàn cờ vốn đã lắm màu thì khó dò; tối phần
+   còn lại đi thì chỗ sáng là chỗ duy nhất còn đọc được.
+   Kiểu chỉ trỏ (`pick: false`) tối nhẹ tay hơn — hộp thoại vẫn đang che nửa
+   bàn, tối quá thì phần bàn ngó qua kẽ hộp cũng không nhìn ra gì. */
+const VEIL_PICK = 0.68;
+const VEIL_HINT = 0.52;
+
+/* Nháy sáng một ô (`spotTiles`): máy quay kéo lại gần ô ấy rồi lùi về chỗ cũ.
+   Cắt phụt sang khung hình đã phóng to thì mắt mất một nhịp mới định vị lại
+   được ô đang xem nằm đâu trên bàn; kéo vào từ từ thì đường đi của khung hình
+   nói luôn ô ấy ở đâu.
+   Lớp nhoè chỉ có trong lúc khung hình còn chạy, đậm nhất ở giữa quãng kéo và
+   tắt hẳn lúc dừng: nhoè suốt cả nhịp giữ thì chính ô cần đọc lại là chỗ mờ
+   nhất. */
+const SPOT_ZOOM = 1.5;    // kéo gần nhất bấy nhiêu lần
+const SPOT_MOVE = 420;    // một chiều kéo vào (hoặc lùi ra)
+const SPOT_BLUR = 0.7;    // độ nhoè lúc khung hình chạy nhanh nhất
+
 /** Tông giấy trung bình của mặt ô — mốc đo độ nổi của màu chủ đất. */
 const PAPER_TINT = 0xE4D2AC;
 
@@ -163,9 +182,13 @@ export default class BoardScene extends Phaser.Scene {
     this.spinGfx = this.add.rectangle(0, 0, 1, 1, 0xC8A048, 1)
       .setDepth(1.6).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
     /* Các ô đang được phép chọn trong lúc một thẻ bắt chỉ mục tiêu ngay trên
-       bàn cờ (xem `ui/tilePicker.js`). Lớp riêng vì vệt ô quân đang đứng vẫn
-       phải sáng suốt lúc ấy — hai vệt không được giẫm lên nhau. */
-    this.markLayer = this.add.container(0, 0).setDepth(1.4);
+       bàn cờ (xem `ui/tilePicker.js`). Nằm trên cả nước màu chủ đất lẫn vệt
+       đèn nhà cửa (depth 2 và 3), vì lúc ấy hai thứ kia đã bị màn tối phủ mờ —
+       vệt sáng phải là lớp trên cùng của mặt bàn thì mới đọc ra ngay. Vẫn dưới
+       quân cờ (depth 6) để quân không bị vệt sáng nuốt mất.
+       `markVeil` là màn tối khoét thủng đúng mấy ô ấy. */
+    this.markVeil = null;
+    this.markLayer = this.add.container(0, 0).setDepth(5.5);
     this.marked = null;
     this.markSet = null;
     this.overlay = this.add.container(0, 0).setDepth(2);
@@ -216,6 +239,8 @@ export default class BoardScene extends Phaser.Scene {
    * thì vẽ lại mặt bàn ở độ phân giải cao hơn cho khỏi rỗ.
    */
   relayout() {
+    // Khung vẽ đổi cỡ thì mọi toạ độ vừa tính đều lệch — trả máy quay về trước
+    this.stopSpotCam();
     this.layout();
     const need = Math.min(3200, Math.ceil((this.size * 1.06) / 128) * 128);
     if (need > this.boardPx) {
@@ -374,6 +399,28 @@ export default class BoardScene extends Phaser.Scene {
     rect.setPosition(sc.x, sc.y);
     rect.setSize(w * this.scaleF, h * this.scaleF);
     rect.setRotation(isCorner(id) ? 0 : tileAngle(id));
+  }
+
+  /**
+   * Bốn góc của ô, tính sẵn ra toạ độ màn hình.
+   *
+   * `coverTile` xoay được cả hình chữ nhật nên không cần tới toạ độ góc, nhưng
+   * hình vẽ mặt nạ (`Graphics.fillPoints`) thì phải nhận từng điểm một.
+   *
+   * @param {number} id
+   * @param {number} [pad] nới thêm mỗi cạnh bấy nhiêu điểm ảnh — dùng để lỗ
+   *   khoét trên màn tối trùm hết đường viền ô, không để lại vệt tối ở mép.
+   */
+  tileQuad(id, pad = 0) {
+    const c = tileCenter(id, TEX);
+    const { w, h } = tileSize(id, TEX);
+    const sc = this.toScreen(c.x, c.y);
+    const a = isCorner(id) ? 0 : tileAngle(id);
+    const hw = (w * this.scaleF) / 2 + pad;
+    const hh = (h * this.scaleF) / 2 + pad;
+    const cos = Math.cos(a), sin = Math.sin(a);
+    return [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]]
+      .map(([x, y]) => ({ x: sc.x + x * cos - y * sin, y: sc.y + x * sin + y * cos }));
   }
 
   // ----------------------------------------------------------- quân cờ
@@ -946,17 +993,22 @@ export default class BoardScene extends Phaser.Scene {
     this.markTween?.remove();
     this.markLayer.removeAll(true);
     const pick = o.pick !== false;
-    this.marked = { ids: [...ids], focus: o.focus, color: o.color, pick };
+    /* Dựng lại bố cục thì `layout()` gọi lại đúng đối tượng đánh dấu đang có;
+       giữ nguyên nó chứ đừng dựng cái mới, để `spotTiles` còn nhận ra vệt sáng
+       vẫn là của mình mà thu lại lúc hết giờ. */
+    this.marked = o === this.marked ? o : { ids: [...ids], focus: o.focus, color: o.color, pick };
     this.markSet = pick ? new Set(ids) : null;
 
-    /* Tô đè bằng nước vàng **thường**, không phải blend cộng: mặt ô đã sáng màu
-       giấy, cộng thêm sáng nữa thì gần như không thấy gì. Viền vàng nhạt kẻ
-       quanh ô là thứ đọc ra ngay cả trên ô góc lẫn ô sẫm màu. */
+    this.drawMarkVeil(ids, pick ? VEIL_PICK : VEIL_HINT);
+
+    /* Trên nền đã tối, nước vàng phủ mặt ô chỉ cần mỏng — đủ để ô chọn được ngả
+       ấm hơn ô thường, không đủ để lấp mất nước màu chủ đất hay tên đất. Ô đang
+       chờ xác nhận (`focus`) dày tay hơn cho khỏi lẫn với phần còn lại. */
     const color = o.color ?? 0xC8A048;
     const marks = ids.map((id) => {
       const focus = id === o.focus;
-      const r = this.add.rectangle(0, 0, 1, 1, color, focus ? 0.52 : 0.30)
-        .setStrokeStyle(Math.max(2, this.size * 0.004), 0xFFE9B0, focus ? 1 : 0.85);
+      const r = this.add.rectangle(0, 0, 1, 1, color, focus ? 0.34 : 0.14)
+        .setStrokeStyle(Math.max(2, this.size * 0.005), 0xFFE9B0, focus ? 1 : 0.9);
       this.coverTile(r, id);
       this.markLayer.add(r);
       return { r, base: focus ? 1 : 0.9 };
@@ -971,13 +1023,195 @@ export default class BoardScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * Nháy sáng mấy ô mà một nước cờ vừa đụng tới, rồi tự thu lại.
+   *
+   * Xây nhà, dỡ nhà, trưng thu, đấu giá kín, thẻ Thời Cuộc — nước nào cũng đổi
+   * một ô nào đó, nhưng người không cầm lái chỉ đọc được dòng thông báo rồi
+   * phải tự dò tên ô ấy quanh bàn. Tối phần còn lại đi vài giây thì khỏi dò.
+   *
+   * Kiểu chỉ trỏ (`pick: false`): không đụng `markSet` nên con trỏ chuột và
+   * bảng xem nhanh vẫn như thường.
+   *
+   * @param {number[]} ids
+   * @param {number} [ms] cả nhịp kéo vào, giữ, lùi ra tính chung bấy nhiêu
+   * @returns {Promise<void>} xong lúc màn đã thu lại và máy quay về chỗ cũ
+   */
+  spotTiles(ids, ms = 2000) {
+    const list = [...new Set(ids ?? [])].filter((id) => id != null);
+    if (list.length === 0) return Promise.resolve();
+    /* Đang mời người ta bấm chọn ô thì không chen ngang: đổi vệt sáng giữa
+       chừng là đổi luôn tập ô bấm được trong mắt họ. */
+    if (this.marked?.pick) return Promise.resolve();
+
+    // Chồng lên một vệt chỉ trỏ có sẵn (hộp thoại đang mở) thì trả lại vệt ấy
+    const prev = this.marked;
+    this.markTiles(list, { pick: false });
+    const mine = this.marked;
+
+    const hold = Math.max(500, ms - SPOT_MOVE * 2);
+    this.spotCamera(list, hold);
+
+    return new Promise((resolve) => {
+      this.time.delayedCall(SPOT_MOVE * 2 + hold, () => {
+        // Đã có vệt sáng khác đè lên trong lúc chờ: chuyện của nó, đừng đụng vào
+        if (this.marked === mine) {
+          if (prev) this.markTiles(prev.ids, prev);
+          else this.clearMarks();
+        }
+        resolve();
+      });
+    });
+  }
+
+  /**
+   * Kéo máy quay lại gần mấy ô đang sáng, giữ một nhịp, rồi lùi về chỗ cũ.
+   *
+   * Độ phóng tính từ khung bao của chính mấy ô ấy, nên một ô lẻ thì kéo tới sát
+   * mức trần, còn một tập ô rải khắp bàn thì gần như không kéo — và lúc ấy bỏ
+   * hẳn hoạt cảnh, vì kéo vào mà vẫn phải thấy cả bàn thì chỉ tổ rung khung
+   * hình.
+   *
+   * @param {number[]} ids
+   * @param {number} hold giữ nguyên khung đã phóng bấy nhiêu mili giây
+   */
+  spotCamera(ids, hold) {
+    this.stopSpotCam();
+    const cam = this.cameras.main;
+    const W = this.scale.width, H = this.scale.height;
+
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const id of ids) {
+      for (const q of this.tileQuad(id)) {
+        x0 = Math.min(x0, q.x); y0 = Math.min(y0, q.y);
+        x1 = Math.max(x1, q.x); y1 = Math.max(y1, q.y);
+      }
+    }
+    // Chừa quanh ô một khoảng bằng chính nó, để còn thấy ô ấy nằm cạnh những gì
+    const zoom = Math.min(SPOT_ZOOM,
+      (Math.min(W, H) * 0.62) / Math.max(x1 - x0, y1 - y0, 1));
+    if (zoom < 1.05) return;
+
+    // Ô nằm ngay giữa khung, kể cả ô sát mép bàn: phần thò ra ngoài khung vẽ
+    // cũng cùng một tông với nền (`backgroundColor` ở `main.js`), không lộ mép
+    const tx = (x0 + x1) / 2, ty = (y0 + y1) / 2;
+    // Nhoè là hiệu ứng hậu kỳ trên khung hình — chỉ WebGL mới có, canvas thì bỏ
+    const blur = this.renderer.type === Phaser.WEBGL && cam.postFX
+      ? cam.postFX.addBlur(1, 2, 2, 0)
+      : null;
+
+    const st = { t: 0 };
+    this.spotCam = { cam, blur };
+    this.spotTween = this.tweens.add({
+      targets: st, t: 1,
+      duration: SPOT_MOVE, hold, yoyo: true, ease: 'Sine.easeInOut',
+      onUpdate: () => {
+        cam.setZoom(1 + (zoom - 1) * st.t);
+        cam.centerOn(W / 2 + (tx - W / 2) * st.t, H / 2 + (ty - H / 2) * st.t);
+        // Đậm nhất giữa quãng kéo, về 0 ở hai đầu — lúc đứng yên là lúc nét
+        if (blur) blur.strength = SPOT_BLUR * Math.sin(Math.PI * st.t);
+      },
+      onComplete: () => this.stopSpotCam(),
+    });
+  }
+
+  /** Trả máy quay về khung đầy đủ, bỏ lớp nhoè. Dựng lại bố cục cũng đi qua đây. */
+  stopSpotCam() {
+    this.spotTween?.remove();
+    this.spotTween = null;
+    const s = this.spotCam;
+    if (!s) return;
+    this.spotCam = null;
+    if (s.blur) s.cam.postFX.remove(s.blur);
+    s.cam.setZoom(1);
+    s.cam.centerOn(this.scale.width / 2, this.scale.height / 2);
+  }
+
+  /**
+   * Màn tối phủ kín khung vẽ, khoét thủng đúng mấy ô đang chọn được.
+   *
+   * Cách khoét: một `Graphics` vẽ đúng bốn góc của từng ô, dùng làm mặt nạ hình
+   * học cho tấm màn với `invertAlpha` — màn chỉ hiện ở chỗ **ngoài** hình vẽ.
+   * Mặt nạ kiểu này chạy bằng stencil buffer nên chỉ có ở WebGL; renderer canvas
+   * rơi xuống nhánh dự phòng: tô tối từng ô không chọn được, bỏ qua phần bàn
+   * ngoài 40 ô.
+   *
+   * Màn nằm ở depth 5.4: trên nước màu chủ đất (2) và vệt đèn nhà cửa (3) —
+   * hai thứ nhiều màu nhất, không phủ thì tối cũng bằng thừa — nhưng dưới quân
+   * cờ (6), để người chơi vẫn thấy quân mình đang đứng đâu trong lúc chọn.
+   *
+   * @param {number[]} ids ô chọn được
+   * @param {number} alpha độ đậm của màn
+   */
+  drawMarkVeil(ids, alpha) {
+    this.clearMarkVeil();
+    const W = this.scale.width, H = this.scale.height;
+    // Nới lỗ khoét ra ngoài đúng nét viền ô, không thì mép ô dính một vệt tối
+    const pad = Math.max(1, this.size * 0.0016);
+    const set = new Set(ids);
+
+    if (this.renderer.type === Phaser.CANVAS) {
+      const g = this.add.graphics().setDepth(5.4).setAlpha(0);
+      g.fillStyle(0x000000, alpha);
+      for (const t of BOARD) {
+        if (!set.has(t.id)) g.fillPoints(this.tileQuad(t.id, pad), true);
+      }
+      this.markVeil = { veil: g, hole: null };
+      this.tweens.add({ targets: g, alpha: 1, duration: 200, ease: 'Sine.easeOut' });
+      return;
+    }
+
+    const hole = this.make.graphics({ x: 0, y: 0 }, false);
+    hole.fillStyle(0xffffff, 1);
+    for (const id of ids) hole.fillPoints(this.tileQuad(id, pad), true);
+    const mask = hole.createGeometryMask();
+    mask.invertAlpha = true;
+
+    /* Rộng gấp ba khung vẽ về mọi phía: `spotCamera` kéo máy quay ra tới sát
+       ô nằm mép bàn, lúc ấy tầm nhìn thò ra ngoài khung vẽ — màn tối chỉ vừa
+       đúng khung thì mép màn hình hở ra một dải chưa bị phủ. */
+    const veil = this.add.rectangle(-W, -H, W * 3, H * 3, 0x000000, alpha)
+      .setOrigin(0, 0).setDepth(5.4).setAlpha(0);
+    veil.setMask(mask);
+    this.markVeil = { veil, hole };
+    this.tweens.add({ targets: veil, alpha: 1, duration: 200, ease: 'Sine.easeOut' });
+  }
+
+  /** Gỡ màn tối ngay lập tức — dựng lại bố cục cũng đi qua đây. */
+  clearMarkVeil() {
+    const v = this.markVeil;
+    if (!v) return;
+    this.markVeil = null;
+    this.tweens.killTweensOf(v.veil);
+    v.veil.clearMask(true);
+    v.veil.destroy();
+    v.hole?.destroy();
+  }
+
   clearMarks() {
     this.markTween?.remove();
     this.markTween = null;
     this.markLayer.removeAll(true);
     this.marked = null;
     this.markSet = null;
+    this.fadeOutMarkVeil();
     if (this.hoverTile != null) this.input.setDefaultCursor('pointer');
+  }
+
+  /** Chọn xong thì màn tối lui dần chứ không tắt phụt — mắt còn kịp bám ô vừa chốt. */
+  fadeOutMarkVeil() {
+    const v = this.markVeil;
+    if (!v) return;
+    this.markVeil = null;
+    this.tweens.killTweensOf(v.veil);
+    this.tweens.add({
+      targets: v.veil, alpha: 0, duration: 220, ease: 'Sine.easeIn',
+      onComplete: () => {
+        v.veil.clearMask(true);
+        v.veil.destroy();
+        v.hole?.destroy();
+      },
+    });
   }
 
   /**

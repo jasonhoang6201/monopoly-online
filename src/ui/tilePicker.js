@@ -171,8 +171,11 @@ export async function litTiles(scene, ids, run) {
   const list = [...new Set(ids ?? [])].filter((id) => id != null);
   if (!scene?.markTiles || list.length === 0) return run();
 
-  // Đang có phiên chọn ô dở dang thì trả lại đúng vệt sáng cũ, đừng xoá trắng
-  const prev = scene.marked;
+  /* Đang có phiên chọn ô dở dang thì trả lại đúng vệt sáng cũ, đừng xoá trắng.
+     Chỉ giữ lại phiên bắt chọn (`pick`) thôi: mấy vệt chỉ trỏ khác đều có hạn
+     — của `spotTiles` thì đang đếm ngược, của một `litTiles` lồng ngoài thì
+     chính nó sẽ tự dựng lại — trả lại thì hoá ra ghim luôn một vệt lẽ ra đã tắt. */
+  const prev = scene.marked?.pick ? scene.marked : null;
   scene.markTiles(list, { pick: false });
   try {
     return await run();

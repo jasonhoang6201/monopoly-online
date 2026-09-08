@@ -315,6 +315,25 @@ export class Game {
   }
 
   /**
+   * Nháy sáng ô mà nước vừa rồi đụng tới — trên **mọi máy**, không riêng máy
+   * cầm lái.
+   *
+   * Dòng thông báo có ghi tên ô, nhưng ai chưa thuộc mặt bàn thì đọc xong vẫn
+   * phải dò quanh 40 ô. Tối cả bàn đi vài giây, chừa đúng ô ấy, thì đọc tới
+   * đâu thấy tới đó. Chờ tắt hẳn rồi mới đi tiếp, để nước kế tiếp không đè lên
+   * vệt sáng còn đang sáng.
+   *
+   * @param {number[]} ids
+   * @param {number} [ms]
+   */
+  spot(ids, ms = 2000) {
+    const list = [...new Set(ids ?? [])].filter((id) => id != null);
+    if (list.length === 0) return Promise.resolve();
+    this.netEmit('spot', { ids: list, ms });
+    return this.scene.spotTiles(list, ms);
+  }
+
+  /**
    * Nhận ảnh chụp từ người đang cầm lái — ảnh chụp **mới nhất** là lời cuối.
    *
    * "Mới nhất" phải xét theo `rev` chứ không theo lúc tin tới nơi: đường truyền
@@ -358,6 +377,8 @@ export class Game {
     } else if (name === 'quake') {
       audio.sfx('shake');
       sc.shake(0.012, 700);
+    } else if (name === 'spot') {
+      await sc.spotTiles(data.ids, data.ms);
     } else if (name === 'eventcard') {
       /* Thẻ Thời Cuộc là chuyện của cả bàn, nên máy nào cũng phải thấy mặt thẻ.
          Máy ngồi xem không có gì để bấm — hộp tự đóng sau mấy giây. */
@@ -1230,6 +1251,7 @@ export class Game {
     await this.bc.show(title,
       `<b>${p.name}</b> ép <b>${owner.name}</b> phát mãi <b>${levels} cấp nhà</b>
        ở <b>${tileLabel(tileId)}</b> — chỉ được lại nửa giá xây.`, { kind: 'bad' });
+    await this.spot([tileId]);
     await this.receiveFromBank(owner.id, refund);
   }
 
@@ -1254,6 +1276,7 @@ export class Game {
       `<b>${p.name}</b> cho dỡ <b>${before === 5 && gone === 1 ? 'khách sạn' : `${gone} cấp nhà`}</b>
        của <b>${owner.name}</b> ở <b>${tileLabel(tileId)}</b> —
        <span class="down">không đền một đồng nào</span>.`, { kind: 'bad' });
+    await this.spot([tileId]);
   }
 
   /**
@@ -1279,6 +1302,7 @@ export class Game {
       `<b>${p.name}</b> cắm mốc giải toả <b>${tileLabel(tileId)}</b> —
        <b>${owner.name}</b> lãnh tiền đền <span class="up">${money(payout)}</span>
        (giá gốc +20%).`, { kind: 'trade' });
+    await this.spot([tileId]);
     await this.receiveFromBank(owner.id, payout);
 
     await this.events.auction(tileId, {
@@ -1296,6 +1320,7 @@ export class Game {
     await this.bc.show(title,
       `<b>${p.name}</b> cưỡng chiếm <b>${tileLabel(tileId)}</b> của <b>${owner.name}</b>,
        đền <span class="down">${money(price)}</span> theo giá thế chấp.`, { kind: 'trade' });
+    await this.spot([tileId]);
     // Trả tiền đền trước: người dùng thẻ vỡ nợ ngay tại đây thì đất không đi đâu cả
     if (!(await this.payPlayer(p.id, owner.id, price))) return;
     if (st.owner.get(tileId) !== owner.id) return;
@@ -1522,6 +1547,9 @@ export class Game {
       if (!res?.ok) return;
       const p = this.state.players[playerId];
       const label = tileLabel(id);
+      // Người đang quản lý tài sản có hộp thoại che bàn; cái nháy này là cho
+      // mấy máy còn lại, họ chỉ thấy dòng thông báo chứ không thấy nút nào bấm
+      this.spot([id]);
       if (act === 'build') {
         audio.sfx('build');
         this.hud.flashMoney(playerId, false);
@@ -1669,6 +1697,7 @@ export class Game {
       `<b style="color:${A.token.css}">${A.name}</b> nhận: ${describe(st, offer.get, offer.getMoney)}
        <br><b style="color:${B.token.css}">${B.name}</b> nhận: ${describe(st, offer.give, offer.giveMoney)}`,
       { kind: 'trade', ms: 6000 });
+    await this.spot([...offer.give, ...offer.get], 2600);
 
     // Chủ mới của đất đang thế chấp được mời chuộc lại (phí = thế chấp + 10%)
     await this.offerRedeem(B.id, offer.give.filter((id) => st.isMortgaged(id)));
@@ -1722,6 +1751,7 @@ export class Game {
       { text: `−${money(total)}`, color: '#FF8A7A' });
     await this.bc.show('CHUỘC TÀI SẢN',
       `<b>${p.name}</b> trả ngân hàng <span class="down">${money(total)}</span> để chuộc ${ids.length} ô (đã gồm lãi 10%).`);
+    await this.spot(ids);
   }
 
   // --------------------------------------------------------------- phá sản
