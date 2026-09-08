@@ -1036,12 +1036,15 @@ export default class BoardScene extends Phaser.Scene {
     const marks = ids.map((id) => {
       const focus = id === o.focus;
       const on = selSet.has(id);
+      const base = focus || on ? 1 : 0.9;
       const r = this.add.rectangle(0, 0, 1, 1, on ? 0x4E9576 : color, focus || on ? 0.34 : 0.14)
         .setStrokeStyle(Math.max(2, this.size * 0.005),
-          on ? 0xBFF0D8 : 0xFFE9B0, focus || on ? 1 : 0.9);
+          on ? 0xBFF0D8 : 0xFFE9B0, base)
+        // Đặt đúng độ sáng của nhịp ngay lúc dựng, không chờ `onUpdate` khung sau
+        .setAlpha(this.markPulse(base));
       this.coverTile(r, id);
       this.markLayer.add(r);
-      return { r, base: focus || on ? 1 : 0.9 };
+      return { r, base };
     });
 
     // Một nhịp chung cho cả tập ô, cùng cách làm với vệt đèn nhà cửa
@@ -1049,8 +1052,23 @@ export default class BoardScene extends Phaser.Scene {
     this.markTween = this.tweens.add({
       targets: beat, t: 1,
       duration: 880, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
-      onUpdate: () => { for (const m of marks) m.r.setAlpha(m.base * (0.72 + beat.t * 0.28)); },
+      onUpdate: () => { for (const m of marks) m.r.setAlpha(this.markPulse(m.base)); },
     });
+  }
+
+  /**
+   * Độ sáng của nhịp thở, tính theo đồng hồ cảnh chứ không theo tuổi của tween.
+   *
+   * Lúc dựng đề nghị giao dịch, mỗi cú bấm chọn một ô gọi lại `markTiles`, tức là
+   * tween nhịp thở bị bỏ đi rồi dựng mới từ đầu. Đọc pha từ tween thì mỗi lần
+   * như vậy cả tập ô nhảy về đáy nhịp — đúng cái nháy người chơi thấy. Pha theo
+   * `time.now` thì không phụ thuộc tween nào đang chạy, nối liền qua mọi lần dựng lại.
+   *
+   * @param {number} base độ sáng đỉnh của ô đó
+   */
+  markPulse(base) {
+    const t = 0.5 - 0.5 * Math.cos((this.time.now / 880) * Math.PI);
+    return base * (0.72 + t * 0.28);
   }
 
   /**
@@ -1131,6 +1149,12 @@ export default class BoardScene extends Phaser.Scene {
    * @param {number} alpha độ đậm của màn
    */
   drawMarkVeil(ids, alpha) {
+    /* Cùng tập ô, cùng độ đậm, cùng bố cục thì giữ nguyên màn đang có. Bấm bật/tắt
+       một ô lúc dựng đề nghị giao dịch gọi lại `markTiles` sau mỗi cú bấm, mà lỗ
+       khoét thì không đổi — dựng lại nghĩa là xoá màn cũ rồi cho màn mới mờ dần vào
+       trong 200ms, mắt đọc ra thành cái nháy. */
+    const key = `${alpha}|${this.size}|${this.originX}|${this.originY}|${[...ids].sort((a, b) => a - b).join(',')}`;
+    if (this.markVeil?.key === key) return;
     this.clearMarkVeil();
     const W = this.scale.width, H = this.scale.height;
     // Nới lỗ khoét ra ngoài đúng nét viền ô, không thì mép ô dính một vệt tối
@@ -1143,7 +1167,7 @@ export default class BoardScene extends Phaser.Scene {
       for (const t of BOARD) {
         if (!set.has(t.id)) g.fillPoints(this.tileQuad(t.id, pad), true);
       }
-      this.markVeil = { veil: g, hole: null };
+      this.markVeil = { veil: g, hole: null, key };
       this.tweens.add({ targets: g, alpha: 1, duration: 200, ease: 'Sine.easeOut' });
       return;
     }
@@ -1159,7 +1183,7 @@ export default class BoardScene extends Phaser.Scene {
     const veil = this.add.rectangle(-W, -H, W * 3, H * 3, 0x000000, alpha)
       .setOrigin(0, 0).setDepth(5.4).setAlpha(0);
     veil.setMask(mask);
-    this.markVeil = { veil, hole };
+    this.markVeil = { veil, hole, key };
     this.tweens.add({ targets: veil, alpha: 1, duration: 200, ease: 'Sine.easeOut' });
   }
 
