@@ -4,3 +4,8 @@ test-result/
 .env.local
 .env
 .DS_Store
+
+# Ảnh gốc trước khi nén (2048–3584 px, gif chưa cắt): chỉ dùng lúc dựng lại
+# tệp trong assets/, không có mã nào đọc tới. Giữ ngoài repo — bản đang dùng
+# đã nằm sẵn trong assets/ rồi.
+assets/raw/

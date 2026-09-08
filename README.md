@@ -220,8 +220,9 @@ Ngoại lệ thứ hai — bốn hoạ tiết trang trí là **ảnh vẽ tay**,
 | `phoenix.png` | **Phụng** ở ô Cơ Hội |
 | `cloud.png` | **Mây cuộn** ở mép trên hai ô Khí Vận / Cơ Hội — rồng bay trong mây, phụng múa trong mây |
 
-Bản gốc (mực đen trên nền trắng, 2048–3584 px) nằm trong `assets/raw/` — trong đó `gate.png` là
-bản chỉ có mái, `gate-2.png` là bản cổng đủ bộ đang dùng. Bản đang dùng đã được xử lý sẵn: xoá
+Bản gốc (mực đen trên nền trắng, 2048–3584 px) **không nằm trong repo** — 28 MB ảnh chỉ dùng
+một lần lúc dựng lại tệp trong `assets/`, giữ ngoài cây mã nguồn (`assets/raw/` đã vào
+`.gitignore`). Trong đó `gate.png` là bản chỉ có mái, `gate-2.png` là bản cổng đủ bộ đang dùng. Bản đang dùng đã được xử lý sẵn: xoá
 bóng đổ bệt sẵn trong ảnh và dấu chìm nằm lọt trong mảng mực, **tách nền trắng thành kênh
 alpha** theo độ sáng nên mép nét vẫn mượt, đổi mực về đen tuyền, cắt sát viền rồi thu nhỏ —
 bốn tệp cộng lại chưa tới 400 KB.
@@ -367,4 +368,3 @@ node tests/online.mjs --full     # thêm phần đổ đầy phòng 6 người, 
 | `tests/events.mjs` | Thẻ Thời Cuộc: thanh áp lực chỉ chạy khi bàn đã bão hoà, ngưỡng hạ dần, hệ số tiền thuê / giá xây / lương, ô mất giấy tờ, cấn nợ tự động, ảnh chụp mang đủ phần mới (kể cả ảnh chụp cũ thiếu trường), và **cả tám thẻ Kỳ 2 chạy thật từ đầu tới cuối** |
 | `tests/events-online.mjs` | Nấc luật đồng bộ trong phòng chờ, thẻ hiện ở mọi máy, và một **phiên đấu giá kín hai máy** chạy trọn: ai trả cao thì lấy đất, tiền trừ đúng, sổ chủ đất khớp nhau |
 | `tests/ui-v2.mjs` | Độ nét theo DPR, bàn cờ chiếm hết khoảng trống và dựng lại khi đổi cỡ cửa sổ, bảng tài sản người chơi, chi tiết ô khi bấm vào bàn cờ, thẻ đất trong danh sách |
-| `tests/visual.mjs` | Chụp ảnh & quay video: vệt đèn báo đất có nhà ở cả bốn cạnh bàn cờ, ngăn nhà trượt ra khi rê chuột (hàng ngang & cột dọc), bảng quản lý tài sản dạng thẻ hai cột, **đất đang thế chấp và thao tác chuộc lại**. Kết quả ra thư mục `test-result/` |
