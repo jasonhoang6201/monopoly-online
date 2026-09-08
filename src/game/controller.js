@@ -34,7 +34,7 @@ import {
 import {
   eventCardModal, bracePromptModal, firePromptModal, auctionBidModal,
 } from '../ui/eventModals.js';
-import { pickTileOnBoard } from '../ui/tilePicker.js';
+import { pickTileOnBoard, litTiles } from '../ui/tilePicker.js';
 import { EVENT_BY_ID } from '../data/events.js';
 import { audio } from '../audio/audio.js';
 
@@ -389,7 +389,8 @@ export class Game {
        cũng phải là của mình, dù giao dịch do người kia dựng. */
     if (name === 'redeem') {
       audio.sfx('turn');
-      return redeemPromptModal(this.state, this.net.mySeat, data.ids, this.tradeMs);
+      return litTiles(this.scene, data.ids,
+        () => redeemPromptModal(this.state, this.net.mySeat, data.ids, this.tradeMs));
     }
 
     /* Bốn câu hỏi của thẻ Thời Cuộc. Hộp nào cũng đếm ngược và có sẵn câu trả
@@ -398,11 +399,13 @@ export class Game {
     const ms = this.events.askMs;
     if (name === 'ev-brace') {
       audio.sfx('turn');
-      return bracePromptModal(this.state, this.net.mySeat, data.lots, ms);
+      return litTiles(this.scene, data.lots.map((l) => l.id),
+        () => bracePromptModal(this.state, this.net.mySeat, data.lots, ms));
     }
     if (name === 'ev-fire') {
       audio.sfx('turn');
-      return firePromptModal(this.state, this.net.mySeat, data.plan, ms);
+      return litTiles(this.scene, [data.plan.tileId],
+        () => firePromptModal(this.state, this.net.mySeat, data.plan, ms));
     }
     if (name === 'ev-pick') {
       audio.sfx('turn');
@@ -410,8 +413,9 @@ export class Game {
     }
     if (name === 'ev-bid') {
       audio.sfx('turn');
-      return auctionBidModal(this.state, this.net.mySeat, data.tileId,
-        { reason: data.reason, ms });
+      return litTiles(this.scene, [data.tileId],
+        () => auctionBidModal(this.state, this.net.mySeat, data.tileId,
+          { reason: data.reason, ms }));
     }
     return null;
   }
@@ -1697,7 +1701,7 @@ export class Game {
         await handoff(p.name, p.token.css,
           `${p.name} vừa nhận đất đang thế chấp — chuyền máy cho họ quyết định.`);
       }
-      choice = await redeemPromptModal(st, playerId, ids);
+      choice = await litTiles(this.scene, ids, () => redeemPromptModal(st, playerId, ids));
     }
 
     const total = ids.reduce((s, id) => s + BOARD[id].redeem, 0);

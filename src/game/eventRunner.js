@@ -19,6 +19,7 @@ import { handoff } from '../ui/modal.js';
 import {
   eventCardModal, bracePromptModal, firePromptModal, auctionBidModal,
 } from '../ui/eventModals.js';
+import { litTiles } from '../ui/tilePicker.js';
 import { audio } from '../audio/audio.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -237,7 +238,8 @@ export class EventRunner {
       seat,
       name: 'ev-brace',
       data: { lots },
-      local: () => bracePromptModal(st, seat, lots, this.localMs),
+      local: () => litTiles(this.g.scene, lots.map((l) => l.id),
+        () => bracePromptModal(st, seat, lots, this.localMs)),
       fallback: null,
       note: 'nhà cửa của họ vừa bị động đất',
     })));
@@ -278,7 +280,8 @@ export class EventRunner {
       seat: plan.seat,
       name: 'ev-fire',
       data: { plan },
-      local: () => firePromptModal(st, plan.seat, plan, this.localMs),
+      local: () => litTiles(this.g.scene, [plan.tileId],
+        () => firePromptModal(st, plan.seat, plan, this.localMs)),
       fallback: null,
       note: 'dãy phố của họ đang cháy',
     });
@@ -463,7 +466,8 @@ export class EventRunner {
       seat,
       name: 'ev-bid',
       data: { tileId, reason: o.reason },
-      local: () => auctionBidModal(st, seat, tileId, { reason: o.reason, ms: this.localMs }),
+      local: () => litTiles(this.g.scene, [tileId],
+        () => auctionBidModal(st, seat, tileId, { reason: o.reason, ms: this.localMs })),
       fallback: 0,
       note: 'đang có phiên đấu giá',
     })));

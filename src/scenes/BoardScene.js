@@ -937,14 +937,17 @@ export default class BoardScene extends Phaser.Scene {
    * biết bấm không ăn.
    *
    * @param {number[]} ids
-   * @param {{focus?:number, color?:number}} [o] `focus` là ô vừa bấm, đang chờ
-   *   xác nhận — sáng gắt hơn hẳn phần còn lại cho khỏi lẫn.
+   * @param {{focus?:number, color?:number, pick?:boolean}} [o] `focus` là ô vừa
+   *   bấm, đang chờ xác nhận — sáng gắt hơn hẳn phần còn lại cho khỏi lẫn.
+   *   `pick: false` là kiểu chỉ trỏ: hộp thoại đang nói tới mấy ô này chứ không
+   *   mời bấm, nên không đụng tới `markSet` — con trỏ chuột giữ nguyên.
    */
   markTiles(ids, o = {}) {
     this.markTween?.remove();
     this.markLayer.removeAll(true);
-    this.marked = { ids: [...ids], focus: o.focus, color: o.color };
-    this.markSet = new Set(ids);
+    const pick = o.pick !== false;
+    this.marked = { ids: [...ids], focus: o.focus, color: o.color, pick };
+    this.markSet = pick ? new Set(ids) : null;
 
     /* Tô đè bằng nước vàng **thường**, không phải blend cộng: mặt ô đã sáng màu
        giấy, cộng thêm sáng nữa thì gần như không thấy gì. Viền vàng nhạt kẻ

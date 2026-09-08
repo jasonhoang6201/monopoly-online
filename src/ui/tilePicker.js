@@ -142,3 +142,42 @@ export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
     }
   });
 }
+
+/**
+ * Dòng nhắc dán dưới thân mấy hộp thoại có `litTiles` bọc ngoài — nói cho người
+ * chơi biết ô đang được nói tới đã sáng sẵn dưới bàn, và ngó bằng cách nào.
+ */
+export const PEEK_HINT = `<div class="peek-hint">Ô đang nói tới
+  <b>đã sáng trên bàn cờ</b> — giữ <b>Space</b> hoặc bấm 👁 để ngó qua.</div>`;
+
+/**
+ * Sáng mấy ô mà một hộp thoại đang nói tới, tắt lúc hộp đóng.
+ *
+ * Động đất, hoả hoạn, đấu giá, chuộc đất không bắt chọn ô — lá thẻ đã định sẵn
+ * ô nào. Nhưng đọc mỗi cái tên trong hộp thoại thì người chơi vẫn phải dò xem ô
+ * ấy nằm cạnh nào của bàn. Đánh dấu sẵn thì giữ **Space** (hoặc bấm con mắt)
+ * là hộp tạm ẩn, ô đang sáng hiện ra ngay dưới đó.
+ *
+ * Đánh dấu kiểu `pick: false`: không đổi con trỏ chuột, bấm vào ô vẫn ra bảng
+ * xem nhanh như thường — đây là chỉ trỏ, không phải lời mời bấm.
+ *
+ * @template T
+ * @param {import('../scenes/BoardScene.js').default} scene
+ * @param {number[]} ids
+ * @param {() => Promise<T>} run mở hộp thoại rồi chờ câu trả lời
+ * @returns {Promise<T>}
+ */
+export async function litTiles(scene, ids, run) {
+  const list = [...new Set(ids ?? [])].filter((id) => id != null);
+  if (!scene?.markTiles || list.length === 0) return run();
+
+  // Đang có phiên chọn ô dở dang thì trả lại đúng vệt sáng cũ, đừng xoá trắng
+  const prev = scene.marked;
+  scene.markTiles(list, { pick: false });
+  try {
+    return await run();
+  } finally {
+    if (prev) scene.markTiles(prev.ids, prev);
+    else scene.clearMarks();
+  }
+}

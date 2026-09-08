@@ -1891,6 +1891,23 @@ html, body {
 }
 .trade-summary .none { opacity: .55; font-style: italic; }
 
+/* Dòng nhắc dưới hộp thoại có ô đang sáng sẵn dưới bàn cờ (xem `litTiles`) */
+.peek-hint {
+  margin-top: 10px;
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--sans); font-size: 11.5px; line-height: 1.5;
+  color: var(--paper); opacity: .62;
+}
+.peek-hint::before {
+  content: '';
+  flex: none; width: 9px; height: 9px; border-radius: 2px;
+  background: rgba(200, 160, 72, .55);
+  border: 1px solid rgba(255, 233, 176, .9);
+  animation: peek-beat 1.76s var(--ease-soft) infinite;
+}
+.peek-hint b { color: var(--gold-light); opacity: .9; }
+@keyframes peek-beat { 0%, 100% { opacity: .5 } 50% { opacity: 1 } }
+
 /* Player picker */
 .pick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
 .pick {

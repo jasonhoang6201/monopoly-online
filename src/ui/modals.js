@@ -11,6 +11,7 @@ import { TOKENS, MAX_PLAYERS } from '../core/state.js';
 import { DECK_META } from '../data/cards.js';
 import { EVENT_LEVELS, DEFAULT_EVENT_LEVEL } from '../data/events.js';
 import { deedCard, deedGrid, rentLevels, priceItems, tileCardUrl } from './deed.js';
+import { PEEK_HINT } from './tilePicker.js';
 import { tokenImage } from './hud.js';
 import { buildGlyphs, buildLabel, houseSvg, hotelSvg, bankSvg, keySvg } from '../render/glyphs.js';
 
@@ -706,7 +707,8 @@ export function redeemPromptModal(state, playerId, tileIds, ms = 0) {
           <span class="arow-main"><span class="arow-name">${esc(tileShortLabel(id))}</span>
             <span class="arow-meta">Thế chấp ${money(BOARD[id].mortgage)} → chuộc ${money(BOARD[id].redeem)}</span></span>
         </div>`).join('')}
-      <div class="trade-summary">Tổng phí chuộc tất cả: <b>${money(total)}</b></div>`,
+      <div class="trade-summary">Tổng phí chuộc tất cả: <b>${money(total)}</b></div>
+      ${PEEK_HINT}`,
     buttons: [
       { label: `Chuộc hết ${money(total)}`, value: 'all', cls: 'btn-gold', disabled: p.money < total },
       { label: 'Để sau', value: null, cls: 'btn-ghost' },

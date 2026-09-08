@@ -10,6 +10,7 @@ import { openModal } from './modal.js';
 import { attachTimer } from './modals.js';
 import { BOARD, money, tileShortLabel } from '../data/board.js';
 import { tileCardUrl } from './deed.js';
+import { PEEK_HINT } from './tilePicker.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -87,7 +88,8 @@ export function bracePromptModal(state, playerId, lots, ms = 0) {
     body: `${lots.map((l) => tileRow(l.id,
       `Đang có ${l.houses === 5 ? 'khách sạn' : `${l.houses} nhà`} · chống đỡ ${money(l.brace)}`))
       .join('')}
-      <div class="trade-summary">Chống đỡ tất cả: <b>${money(total)}</b></div>`,
+      <div class="trade-summary">Chống đỡ tất cả: <b>${money(total)}</b></div>
+      ${PEEK_HINT}`,
     dismissible: false,
     buttons: [
       { label: `Chống đỡ ${money(total)}`, value: 'brace', cls: 'btn-gold', disabled: p.money < total },
@@ -115,7 +117,8 @@ export function firePromptModal(state, playerId, plan, ms = 0) {
     body: `${tileRow(plan.tileId,
       `Đang có ${plan.houses === 5 ? 'khách sạn' : `${plan.houses} nhà`} · chữa cháy ${money(plan.save)}`)}
       <div class="trade-summary">Không chữa thì mất trắng
-        <b>${plan.houses === 5 ? 'khách sạn' : `${plan.houses} căn`}</b>.</div>`,
+        <b>${plan.houses === 5 ? 'khách sạn' : `${plan.houses} căn`}</b>.</div>
+      ${PEEK_HINT}`,
     dismissible: false,
     buttons: [
       { label: `Chữa cháy ${money(plan.save)}`, value: 'save', cls: 'btn-gold', disabled: p.money < plan.save },
@@ -164,7 +167,8 @@ export function auctionBidModal(state, playerId, tileId, o = {}) {
         </div>
       </div>
       <div class="trade-summary">Đấu giá kín — mọi người ghi cùng lúc, hoà nhau thì
-        người đi trước trong vòng lượt thắng.</div>`,
+        người đi trước trong vòng lượt thắng.</div>
+      ${PEEK_HINT}`,
     buttons: [{ label: 'Chốt giá', value: 'bid', cls: 'btn-gold' }],
     onMount: (body, close) => {
       const input = body.querySelector('#bid-input');
