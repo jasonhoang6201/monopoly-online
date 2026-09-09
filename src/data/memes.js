@@ -9,7 +9,17 @@
  *
  * Ảnh gốc đã nén lại bằng gifsicle về cạnh dài tối đa 200px — bong bóng trên
  * bàn rộng nhiều nhất 150px, giữ ảnh 498px chỉ tốn băng thông chứ không nét
- * thêm. Thêm meme mới thì nén trước rồi mới chép vào đây.
+ * thêm. Thêm meme mới thì nén trước rồi mới chép vào đây:
+ *
+ *   gifsicle --colors=255 goc.gif -o tmp.gif            # bỏ bảng màu cục bộ
+ *   gifsicle -U --resize-fit 200x200 --colors 64 \
+ *            --lossy=80 -O3 tmp.gif -o meme.gif
+ *
+ * Bước `--colors=255` chạy trước vì gif có bảng màu cục bộ thì gifsicle không
+ * tháo tối ưu được (`GIF too complex to unoptimize`), resize thẳng sẽ ra khung
+ * dính vệt của khung trước. Gif nào trên 30 khung thì giữ khung chẵn và nhân
+ * đôi delay (`-d…` cùng danh sách `#0 #2 #4 …`): ở 150px mắt không thấy khác,
+ * tệp nhẹ đi gần một nửa.
  *
  * `id` là thứ bay qua đường truyền (xem `netEmit('meme')` trong controller),
  * nên đổi tên id là hai máy chạy hai bản khác nhau sẽ không hiểu nhau nữa —
@@ -27,6 +37,12 @@ import jailUrl from '../../assets/meme/worry-jail.gif';
 import pleUrl from '../../assets/meme/worry-ple.gif';
 import richUrl from '../../assets/meme/worry-rich.jpg';
 import stabUrl from '../../assets/meme/worry-stab.gif';
+import brokeUrl from '../../assets/meme/broke.gif';
+import yellUrl from '../../assets/meme/meo-aa.gif';
+import screamUrl from '../../assets/meme/meo-aaa.gif';
+import danceUrl from '../../assets/meme/meo-dance.gif';
+import stareUrl from '../../assets/meme/meo-surprise.gif';
+import deliveryUrl from '../../assets/meme/meo-delivery.gif';
 
 export const MEMES = [
   { id: 'angry', label: 'Cay cú', url: angryUrl },
@@ -41,6 +57,12 @@ export const MEMES = [
   { id: 'find', label: 'Đi tìm', url: findUrl },
   { id: 'pinch', label: 'Nhéo má', url: pinchUrl },
   { id: 'cute', label: 'Dễ thương', url: chiikawaUrl },
+  { id: 'broke', label: 'Cháy túi', url: brokeUrl },
+  { id: 'yell', label: 'Gào lên', url: yellUrl },
+  { id: 'scream', label: 'La làng', url: screamUrl },
+  { id: 'dance', label: 'Quẩy', url: danceUrl },
+  { id: 'stare', label: 'Trố mắt', url: stareUrl },
+  { id: 'delivery', label: 'Giao hàng', url: deliveryUrl },
 ];
 
 export const MEME_BY_ID = Object.fromEntries(MEMES.map((m) => [m.id, m]));
