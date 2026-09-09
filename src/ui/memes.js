@@ -57,7 +57,7 @@ export class MemeDeck {
   /**
    * Ván đã dựng xong → mở nút và nạp sẵn ảnh.
    *
-   * Nạp sẵn vì bong bóng chỉ đứng 3,6 giây: gif nào cũng phải tải xong trước
+   * Nạp sẵn vì bong bóng chỉ đứng 3,6 giây: ảnh nào cũng phải tải xong trước
    * lúc bấm, chứ tải lúc bấm thì bên nhận chỉ kịp thấy khung trắng.
    */
   setState(state) {

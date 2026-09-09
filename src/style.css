@@ -2395,7 +2395,10 @@ html, body {
 
 #meme-pop {
   position: absolute; right: -2px; bottom: 40px;
-  width: 214px;
+  /* Cột điều khiển đặt `overflow: hidden`, nên bảng không được rộng hơn phần
+     trong của cột — `--rail` trừ hai lần đệm 12px, cộng lại 2px lấn ra ngoài. */
+  --meme-w: min(268px, calc(var(--rail) - 22px));
+  width: var(--meme-w);
   padding: 9px;
   border-radius: 12px;
   background:
@@ -2412,7 +2415,35 @@ html, body {
   to   { opacity: 1; transform: none; }
 }
 
-.meme-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
+/* Ba cột, cao đúng ba hàng rồi cuộn. Chặn ở 3 hàng chứ không thả cho bảng dài
+   ra vì bảng neo đáy vào hàng nút: thêm meme là nó mọc ngược lên che HUD.
+   `--meme-cell` là cạnh một ô — bằng bề rộng trong trừ hai khe, chia ba; chiều
+   cao lấy dư 16px để hàng thứ tư hở một dải, cho biết còn cuộn được nữa. */
+.meme-grid {
+  --meme-gap: 7px;
+  /* Cạnh một ô: bề rộng bảng trừ 18px đệm, 2px viền và hai khe, chia ba. Tính
+     tay vì `max-height` dưới đây không dùng được `%` — phần trăm của chiều cao
+     đo theo chiều cao khối cha, không phải chiều rộng. */
+  --meme-cell: calc((var(--meme-w) - 20px - var(--meme-gap) * 2) / 3);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--meme-gap);
+  max-height: calc(var(--meme-cell) * 3 + var(--meme-gap) * 2 + 16px);
+  /* Chừa chỗ cho cú nhấc 2px lúc rê chuột ở hàng đầu, kẻo overflow cắt mất */
+  padding-top: 2px;
+  overflow-y: auto;
+  /* Cuộn hết bảng thì dừng, không đẩy tiếp ra trang phía sau */
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(200, 160, 72, .55) transparent;
+}
+.meme-grid::-webkit-scrollbar { width: 6px; }
+.meme-grid::-webkit-scrollbar-track { background: transparent; }
+.meme-grid::-webkit-scrollbar-thumb {
+  background: rgba(200, 160, 72, .5);
+  border-radius: 3px;
+}
+.meme-grid::-webkit-scrollbar-thumb:hover { background: rgba(200, 160, 72, .8); }
 .meme-pick {
   display: block;
   padding: 4px;
