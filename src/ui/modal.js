@@ -92,6 +92,8 @@ window.addEventListener('blur', () => setPeek(false));
  * @param {boolean}[o.scrimClose] true = hộp thoại chỉ để xem, bấm ra nền là đóng
  * @param {boolean}[o.peekable] false = không cho tạm ẩn để ngó bàn cờ
  * @param {any}    [o.escValue] giá trị khi đóng bằng Esc (mặc định: nút cuối cùng)
+ * @param {any}    [o.timeoutValue] giá trị khi hết giờ lượt tự đóng hộp
+ *   (mặc định: như `escValue`) — xem `dismissTopModal`
  * @param {boolean}[o.enter]    false = không cho Enter bấm nút đầu tiên
  * @param {Function}[o.onMount] (bodyEl, close, modalEl, footEl, stash) — gắn sự
  *   kiện động. `stash(true/false)` cất hộp thoại đi rồi gọi nó về, dùng khi
@@ -245,6 +247,11 @@ export function openModal(o) {
 
   // Cho flashModal (và các chỗ khác) đóng đúng cách, không rò listener
   scrim._close = close;
+  /* Hết giờ lượt thì `dismissTopModal` đóng hộp này bằng đâu. Mặc định là giá
+     trị của Esc; hộp nào cần phân biệt "người chơi bấm thôi" với "hết giờ" thì
+     khai `timeoutValue` riêng (hộp thiếu tiền: hết giờ là xoay tiền hộ). */
+  scrim._autoValue = 'timeoutValue' in o ? o.timeoutValue : escValue;
+  scrim._dismissible = o.dismissible !== false;
 
   /* Tạm cất hộp thoại đi để người chơi thao tác thẳng trên bàn cờ (chọn đất
      lúc dựng đề nghị giao dịch). Khác `setPeek`: peek chỉ làm mờ và cú bấm kế
@@ -262,6 +269,25 @@ export function openModal(o) {
   if (o.onMount) o.onMount(body, close, modal, foot, stash);
 
   return promise;
+}
+
+/**
+ * Đóng hộp thoại trên cùng bằng lựa chọn mặc định (nút cuối / `escValue`) —
+ * y như người chơi bấm Esc.
+ *
+ * Dùng khi đồng hồ lượt cạn: người ngồi im không bị mời khỏi bàn nữa, thay vào
+ * đó máy của họ tự trả lời "thôi" hộ, để cả bàn khỏi đứng chờ. Bỏ qua hộp đang
+ * `stash` (người chơi đang chọn ô thẳng trên bàn cờ — phiên chọn ấy có hạn
+ * riêng) và hộp không cho đóng bằng Esc.
+ *
+ * @returns {boolean} có đóng được hộp nào không.
+ */
+export function dismissTopModal() {
+  const open = root()?.querySelectorAll('.scrim:not(.hide):not(.stashed)');
+  const scrim = open?.[open.length - 1];
+  if (!scrim || scrim._dismissible === false) return false;
+  scrim._close?.(scrim._autoValue);
+  return true;
 }
 
 /** Modal chỉ để thông báo, tự đóng sau `ms`. */

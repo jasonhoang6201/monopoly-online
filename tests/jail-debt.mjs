@@ -111,6 +111,29 @@ await page.waitForTimeout(3200);
 await playRollOff(page);
 
 
+/* ============= 0. ĐẠP TRÚNG Ô BẮT ĐẦU → LƯƠNG ×1.5 ============= */
+log('=== 0. DỪNG ĐÚNG Ô BẮT ĐẦU ===');
+await idle();
+await page.evaluate(() => {
+  const c = window.__monopoly.controller;
+  c.state.turn = 0;
+  c.state.players[0].pos = 37;
+  c.state.players[0].money = 1000;
+  c.hud.refresh();
+  c.beginTurn();
+});
+await page.waitForTimeout(500);
+await forceDice(1, 2);                       // 3 ô: 37 → 0, dừng đúng ô Bắt Đầu
+await action(/Lắc xí ngầu/);
+await page.waitForTimeout(2500);
+await drain(8000);
+await idle();
+const s0 = await st();
+log(`  p0: pos=${s0.p[0].pos} tiền=${s0.p[0].m}$ (1000 + lương)`);
+check(s0.p[0].pos === 0, 'dừng đúng ô Bắt Đầu');
+check(s0.p[0].m === 1300, 'đạp trúng ô Bắt Đầu thì lãnh 300$ chứ không phải 200$');
+await page.screenshot({ path: `${SHOT}/49-go-landing.png` });
+
 /* ================== 1. ĐÁP XUỐNG Ô "VÀO TÙ" → HẾT LƯỢT ================== */
 log('=== 1. ĐỔ ĐÔI RỒI ĐÁP XUỐNG Ô VÀO TÙ ===');
 await idle();
@@ -209,6 +232,33 @@ await drain(10000);
 s = await st();
 log(`  Chú Hoả bankrupt=${s.p[2].bk}`);
 check(s.p[2].bk === true, 'người chơi bị tuyên vỡ nợ ngay');
+
+/* ====== 4. CON NỢ VỠ NỢ → NGÂN HÀNG TRẢ THAY CHO CHỦ ĐẤT ====== */
+log('\n=== 4. VỠ NỢ GIỮA LÚC PHẢI TRẢ TIỀN THUÊ ===');
+await page.evaluate(() => {
+  const c = window.__monopoly.controller;
+  const s = c.state;
+  // Cô Ba Trà (1) sạch túi, không còn gì thế chấp: chắc chắn vỡ nợ
+  for (const id of [...s.owner.keys()]) if (s.owner.get(id) === 1) s.owner.delete(id);
+  s.players[1].money = 20;
+  s.players[0].money = 1000;
+  s.players[1].bankrupt = false;
+  c.hud.refresh(); c.scene.refresh(s);
+  c.payPlayer(1, 0, 400);          // trả tiền thuê cho Bảy Viễn
+});
+await page.waitForTimeout(1500);
+btns = await page.locator('.scrim.show button.btn').allTextContents();
+log(`  hộp thoại lúc vỡ nợ: ${JSON.stringify(btns)}`);
+await page.locator('.scrim.show button.btn-danger').click();
+await page.waitForTimeout(6000);
+log(`  bảng thông báo: ${(await page.locator('#broadcast').innerText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 120)}`);
+await drain(12000);
+await idle();
+s = await st();
+log(`  Cô Ba bankrupt=${s.p[1].bk} · Bảy Viễn ${1000}$ → ${s.p[0].m}$`);
+check(s.p[1].bk === true, 'không xoay nổi thì vẫn vỡ nợ như cũ');
+check(s.p[0].m === 1400, 'chủ đất vẫn nhận đủ 400$ — ngân hàng trả thay con nợ');
+await page.screenshot({ path: `${SHOT}/54-bank-covers-rent.png` });
 
 log(`\n=== KẾT QUẢ: ${fails.length === 0 ? 'ĐẠT' : 'HỎNG ' + fails.length} ===`);
 for (const f of fails) log('  ✘ ' + f);

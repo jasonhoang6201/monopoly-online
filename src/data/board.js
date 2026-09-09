@@ -7,6 +7,11 @@ import raw from '../../assets/board-info.json';
 
 export const START_MONEY = 750;
 export const GO_SALARY = 200;
+/**
+ * Đạp trúng ô Bắt Đầu (dừng đúng ô 0) thì lương nhân hệ số này. Đi ngang qua
+ * vẫn lãnh nguyên `GO_SALARY` — chỉ dừng đúng ô mới được thưởng thêm.
+ */
+export const GO_LANDING_MULT = 1.5;
 export const JAIL_FINE = 50;
 export const JAIL_TILE = 10;
 export const GOTO_JAIL_TILE = 30;

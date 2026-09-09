@@ -442,12 +442,12 @@ await A.screenshot({ path: `${SHOT}/on-10-evicted.png` });
 
 /* ================================================ 11 · đồng hồ lượt hết giờ */
 
-/* Phải là **ván ba người** riêng, không dùng lại ván cũ: gạch một người trong
-   ván hai người là hạ màn ngay, mà điều đáng kiểm nhất lại là "gạch xong ván có
-   chạy tiếp không". Đóng tab cũ trước — mỗi tab giữ một ngữ cảnh WebGL và Chrome
-   chỉ cho một số lượng nhất định. */
+/* Phải là **ván ba người** riêng, không dùng lại ván cũ: ván hai người mà một
+   người ngồi im thì chẳng còn ai để kiểm "lượt có sang người kế không". Đóng
+   tab cũ trước — mỗi tab giữ một ngữ cảnh WebGL và Chrome chỉ cho một số lượng
+   nhất định. */
 
-console.log('\n▸ 11. Hết giờ thì bị mời khỏi bàn');
+console.log('\n▸ 11. Hết giờ thì được lắc hộ, không bị đuổi');
 await A.close();
 
 const H = watch(await ctx.newPage(), 'H');
@@ -488,36 +488,105 @@ const num2 = Number(await P2.locator('#turn-clock .tc-num').innerText());
 ok(num1 > 0 && num2 < num1, 'kim chạy thật ở máy ngồi xem', `${num1}s → ${num2}s`);
 await P2.screenshot({ path: `${SHOT}/on-11-turn-clock.png` });
 
-/* Rút hạn xuống vài giây rồi lên dây lại. Chỉ đổi ở máy người đang đi là đủ:
-   hạn đi kèm trong tin lên dây, các máy khác cứ thế mà đếm. */
+/* Rút hạn xuống vài giây rồi lên dây lại. Người ra tay khi hết giờ là **máy của
+   chính người đang đi** (chỉ máy cầm lái mới được gieo xí ngầu), nên hạn phải
+   đổi ở đúng máy ấy, và tab ấy phải nổi lên: tab ẩn bị Chrome bóp nhịp hẹn giờ. */
 await H.bringToFront();
+const moneyOf = (page, seat) => page.evaluate(
+  (s) => window.__monopoly.controller.state.players[s].money, seat);
+const lotsOf = (page, seat) => page.evaluate(
+  (s) => window.__monopoly.controller.state.propertiesOf(s).length, seat);
 await H.evaluate(() => {
   const c = window.__monopoly.controller;
   c.turnMs = 6000;
+  /* Rút cả hạn hộp thoại: lắc hộ xong rất có thể đáp xuống đất trống, mà hộp
+     "tậu đất" cũng phải tự đóng thì lượt mới đi tiếp được. */
+  c.busyMs = 6000;
+  c.stallGraceMs = 4000;
   c.clock = null;              // ép lên dây lại, khỏi bị chặn vì "vẫn việc cũ"
   c.beginTurn();
 });
-/* Người ra tay là ghế sống nhỏ nhất **không phải** kẻ hết giờ, ở đây là P2 —
-   nên tab ấy phải nổi lên trước: tab ẩn bị Chrome bóp nhịp hẹn giờ. */
-await P2.bringToFront();
-ok(await until(async () => P2.evaluate(
-  (s) => window.__monopoly.controller.state.players[s].bankrupt, turn0), 40000),
-  'ngồi im hết giờ thì bị gạch khỏi bàn');
+// Không bấm gì cả — đúng cái tình huống muốn kiểm
+ok(await until(async () => (await H.locator('#broadcast').innerText()).includes('HẾT GIỜ'), 30000),
+  'cả bàn đọc được lý do lượt tự trôi');
+ok(await until(async () => (await turnNow(H)) !== turn0, 90000),
+  'ngồi im hết giờ thì được lắc hộ, lượt trôi sang người kế');
+ok(!(await H.evaluate(
+  (s) => window.__monopoly.controller.state.players[s].bankrupt, turn0)),
+  'một lượt bỏ trôi thì vẫn ngồi nguyên trong ván, không bị đuổi');
+ok((await lotsOf(H, turn0)) === (await lotsOf(P2, turn0)),
+  'tài sản của họ vẫn nguyên trên mọi máy');
+ok(await until(async () => (await turnNow(P2)) !== turn0, 20000),
+  'mấy máy còn lại cũng thấy lượt đã sang người kế');
+
+/* Bấm một cái nút bất kỳ là xoá chuỗi "để hết giờ" — người còn ngồi đó thì
+   không có cớ gì cho họ rời ván. */
+const streakAfterClick = await H.evaluate(() => {
+  const c = window.__monopoly.controller;
+  c.stallStreak = 2;
+  document.querySelector('#actions button, .scrim.show button.btn')
+    ?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+  return c.stallStreak;
+});
+ok(streakAfterClick === 0, 'bấm một nút là chuỗi hết giờ về 0');
+
+/* Lượt thứ ba liền không đi thì mới coi là bỏ ván. Gài sẵn hai lượt trước cho
+   chủ ván rồi trả lượt về tay họ. Việc trả lượt phải do **máy đang cầm lái**
+   làm: ép ở máy khác thì máy kia vẫn tưởng mình đang đi và cứ thế phát đồng hồ
+   của nó đè lên. Chờ ba lượt trôi thật thì không được — tab ẩn bị Chrome bóp
+   nhịp hẹn giờ, ván ba người sẽ bò mất mấy phút. */
+await H.evaluate(() => { window.__monopoly.controller.stallStreak = 2; });
+const seatNow = await Promise.all([H, P2, P3].map(
+  (page) => page.evaluate(() => window.__monopoly.controller.net.mySeat)));
+const curTurn = await turnNow(H);
+const driver = [H, P2, P3][seatNow.indexOf(curTurn)];
+await driver.bringToFront();
+await driver.evaluate((seat) => {
+  const c = window.__monopoly.controller;
+  c.state.turn = seat;
+  c.sync();
+  c.beginTurn();
+}, turn0);
+await H.bringToFront();
 ok(await until(async () => H.evaluate(
+  (s) => window.__monopoly.controller.state.players[s].bankrupt, turn0), 60000),
+  'để hết giờ lượt thứ ba liền thì mới bị coi là bỏ ván');
+ok((await H.locator('#broadcast').innerText()).includes('BỎ VÁN'),
+  'cả bàn đọc được lý do rời ván');
+ok(await until(async () => P2.evaluate(
   (s) => window.__monopoly.controller.state.players[s].bankrupt, turn0), 20000),
-  'chính máy người ấy cũng nhận được tin mình bị gạch');
+  'mấy máy còn lại cũng nhận được tin ấy');
 ok(!(await P2.evaluate(() => window.__monopoly.controller.state.over)),
   'còn hai người nên ván vẫn chạy tiếp');
-ok(await until(async () => (await turnNow(P2)) !== turn0, 20000),
-  'lượt đi tiếp sang người kế');
+// Trả hạn về như cũ ở mọi máy, kẻo mục sau vừa mở hộp thoại đã bị tự đóng
+for (const page of [H, P2, P3]) {
+  await page.evaluate(() => {
+    const c = window.__monopoly.controller;
+    c.turnMs = 60000;
+    c.busyMs = 120000;
+    c.stallGraceMs = 15000;
+    c.stallStreak = 0;
+  });
+}
 await P2.screenshot({ path: `${SHOT}/on-12-timed-out.png` });
 
-/* ============================= 12 · hết giờ trả lời giao dịch cũng bị mời ra */
+/* =========================== 12 · hết giờ trả lời giao dịch = coi như từ chối */
 
 console.log('\n▸ 12. Để hết giờ trả lời giao dịch');
-const asker = (await turnNow(P2)) === (await P2.evaluate(() => window.__monopoly.controller.net.mySeat))
-  ? P2 : P3;
-const target = asker === P2 ? P3 : P2;
+/* Ai đang tới lượt thì người ấy gửi đề nghị — cả ba đều còn trong ván, nên phải
+   dò chứ không đoán. Bên nhận lấy người kế tiếp còn sống. */
+const seatOf = (page) => page.evaluate(() => window.__monopoly.controller.net.mySeat);
+const pages = [H, P2, P3];
+const seats = await Promise.all(pages.map(seatOf));
+// Ghế vừa bỏ ván còn phải trao lượt lại đã — hỏi sớm thì bắt trúng lúc giao thời
+await until(async () => (await turnNow(P2)) !== turn0, 30000);
+const turnSeat = await turnNow(P2);
+const asker = pages[seats.indexOf(turnSeat)];
+/* Bên nhận phải là người **còn trong ván**: ghế vừa bỏ ván ở mục trên không
+   còn hiện trong bảng chọn đối tác nữa. */
+const aliveSeats = await P2.evaluate(
+  () => window.__monopoly.controller.state.players.map((p) => !p.bankrupt));
+const target = pages.find((page, i) => page !== asker && aliveSeats[seats[i]]);
 const askSeat = await asker.evaluate(() => window.__monopoly.controller.net.mySeat);
 const tgtSeat = await target.evaluate(() => window.__monopoly.controller.net.mySeat);
 const T_GIVE = 16;
@@ -552,12 +621,19 @@ await target.screenshot({ path: `${SHOT}/on-13-trade-timer.png` });
 ok(await until(async () => (await target.locator('.scrim.show button.btn')
   .filter({ hasText: 'Đồng ý giao dịch' }).count()) === 0, 25000),
   'hết giờ thì hộp thoại tự đóng, bên gửi không phải chờ mãi');
+await asker.bringToFront();
+ok(await until(async () => (await asker.locator('#broadcast').innerText()).includes('HẾT GIỜ')
+  || (await asker.locator('#broadcast').innerText()).includes('TỪ CHỐI'), 20000),
+  'bên gửi đọc được lý do: không trả lời kịp thì coi như từ chối');
+ok(!(await asker.evaluate(
+  (s) => window.__monopoly.controller.state.players[s].bankrupt, tgtSeat)),
+  'bên nhận không bị mời khỏi bàn vì lỡ một lời đáp');
 ok(await until(async () => asker.evaluate(
-  (s) => window.__monopoly.controller.state.players[s].bankrupt, tgtSeat), 30000),
-  'để hết giờ trả lời cũng bị mời khỏi bàn');
-ok((await asker.locator('#broadcast').innerText()).includes('HẾT GIỜ')
-  || await until(async () => (await asker.locator('#broadcast').innerText()).includes('HẠ MÀN'), 15000),
-  'cả bàn đọc được lý do');
+  ({ give, get, a, b }) => {
+    const st = window.__monopoly.controller.state;
+    return st.owner.get(give) === a && st.owner.get(get) === b;
+  }, { give: T_GIVE, get: T_GET, a: askSeat, b: tgtSeat }), 15000),
+  'đất ai nấy giữ — giao dịch không tự chốt vì không ai bấm');
 
 /* ======================================= 13 · sức chứa (chậm, sau cờ --full) */
 

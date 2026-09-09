@@ -672,8 +672,8 @@ export function describe(state, ids, cash) {
  * @param {GameState} state
  * @param {object} offer
  * @param {number} [ms] bản online: hạn trả lời. Quá hạn thì hộp thoại tự đóng
- *   và trả về `'timeout'` — khác hẳn `false` (từ chối đàng hoàng), vì bên hỏi
- *   phải phân biệt được hai chuyện: một bên là quyết định, bên kia là bỏ bàn.
+ *   và trả về `'timeout'` — bên hỏi xử như từ chối, giữ riêng giá trị này chỉ
+ *   để báo đúng lý do cho cả bàn.
  */
 export function tradeReviewModal(state, offer, ms = 0) {
   const A = state.players[offer.from];
@@ -715,7 +715,7 @@ export function tradeReviewModal(state, offer, ms = 0) {
     onMount: (body, close) => {
       if (!ms) return;
       ticker = attachTimer(body, ms, close, 'timeout',
-        'để trả lời — quá hạn coi như bỏ bàn và mất chỗ.');
+        'để trả lời — quá hạn coi như từ chối.');
     },
   });
   // Bấm nút hay hết giờ đều đi qua đây, nên dọn nhịp hẹn giờ ở đúng một chỗ

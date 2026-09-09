@@ -6,6 +6,7 @@ import {
   BOARD, GROUPS, GROUP_TILES, STATION_RENT, UTILITY_MULT,
   START_MONEY, TOTAL_HOUSES, TOTAL_HOTELS, JAIL_TILE, MAX_JAIL_TURNS,
   GO_SALARY,
+  GO_LANDING_MULT,
 } from '../data/board.js';
 import { CHANCE, CHEST, Deck } from '../data/cards.js';
 import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
@@ -183,8 +184,13 @@ export class GameState {
     return Math.ceil(BOARD[tileId].house_cost * this.modMult('build'));
   }
 
-  /** Lương lãnh khi qua ô Bắt Đầu, đã tính mất mùa. */
-  salary() { return Math.round(GO_SALARY * this.modMult('salary')); }
+  /**
+   * Lương lãnh khi qua ô Bắt Đầu, đã tính mất mùa.
+   * @param {boolean} [landed] dừng đúng ô 0 chứ không chỉ đi ngang — ×1.5.
+   */
+  salary(landed = false) {
+    return Math.round(GO_SALARY * this.modMult('salary') * (landed ? GO_LANDING_MULT : 1));
+  }
 
   /** Đếm ngược mọi hiệu ứng một lượt, bỏ những cái đã hết hạn. */
   tickMods() {

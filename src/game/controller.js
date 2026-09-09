@@ -4,13 +4,13 @@
  * và giao diện (HTML).
  */
 import {
-  BOARD, money, tileLabel, GO_SALARY, JAIL_FINE, JAIL_TILE, GOTO_JAIL_TILE,
+  BOARD, money, tileLabel, GO_LANDING_MULT, JAIL_FINE, JAIL_TILE, GOTO_JAIL_TILE,
   START_MONEY,
   MAX_JAIL_TURNS,
 } from '../data/board.js';
 import { GameState, rollDice, orderFromRolls } from '../core/state.js';
 import {
-  addPressure, eventDue, eventsOn, pressureRatio, threshold, eraOpen, PRESSURE,
+  addPressure, eventDue, eventsOn, pressureRatio, threshold, eraOpen, autoRaise, PRESSURE,
 } from '../core/events.js';
 import {
   cardType, isKeepable, demolishLevels, usableCard, useReason, cardTargets,
@@ -25,7 +25,7 @@ import { QuickView } from '../ui/quickview.js';
 import {
   diceSvg, tradeSvg, estateSvg, bankruptSvg, doneSvg, coinSvg, cardSvg,
 } from '../ui/actionIcons.js';
-import { openModal, handoff } from '../ui/modal.js';
+import { openModal, handoff, dismissTopModal } from '../ui/modal.js';
 import {
   setupModal, buyModal, cardModal, manageModal, tradePickModal,
   tradeBuildModal, tradeReviewModal, redeemPromptModal, bankruptModal,
@@ -65,19 +65,41 @@ export class Game {
      */
     this.awayGraceMs = 120000;
     /**
-     * Hạn cho một nước đi. Hết giờ mà chưa nhúc nhích thì bị mời khỏi bàn —
-     * cùng cách xử như người mất kết nối quá lâu, vì hậu quả y hệt: cả bàn
-     * ngồi chờ một người không chơi nữa.
+     * Hạn cho một nước đi. Hết giờ mà chưa nhúc nhích thì máy của chính người
+     * ấy lắc hộ (xem `checkClock`) — cả bàn khỏi ngồi chờ, mà họ cũng không
+     * mất gì ngoài quyền chọn nước đi lượt ấy.
      */
     this.turnMs = 60000;
     /** Hạn để trả lời một đề nghị giao dịch. */
     this.tradeMs = 45000;
     /**
      * Hạn nới cho người đang mở dở một hộp thoại. Rộng hơn hạn lượt vì họ đang
-     * thao tác thật (chọn đất để đổi, tính xây nhà), nhưng vẫn phải có đáy:
-     * mở hộp thoại rồi bỏ đi cũng treo bàn hệt như ngồi im.
+     * thao tác thật (chọn đất để đổi, tính xây nhà), nhưng vẫn phải có đáy: mở
+     * hộp thoại rồi bỏ đi cũng treo bàn hệt như ngồi im, nên quá hạn thì hộp tự
+     * đóng ở lựa chọn "thôi".
      */
     this.busyMs = 120000;
+    /**
+     * Nới thêm bấy nhiêu sau mỗi lần hết giờ tự đóng hộp thoại hộ. Đủ để hộp
+     * kế tiếp hiện ra và người vừa quay lại bàn kịp bấm, mà không đủ để một
+     * chuỗi hộp thoại kéo ván đứng thêm mấy phút.
+     */
+    this.stallGraceMs = 15000;
+    /**
+     * Bao nhiêu **lượt** để đồng hồ cạn liên tiếp thì coi như đã bỏ ván.
+     *
+     * Đi hộ mãi cũng không xong: người bỏ đi giữa chừng vẫn giữ đất, cả bàn
+     * chơi với một cái ghế trống không bao giờ bán, không bao giờ đổi. Ba lần
+     * là đủ rộng cho người bận tay — mà chỉ cần họ bấm **một nút bất kỳ** là
+     * chuỗi này về 0, xem `watchActivity`.
+     */
+    this.maxStalls = 3;
+    /** Đã cạn đồng hồ liên tiếp mấy **lượt** mà chưa thấy người ấy đụng vào bàn. */
+    this.stallStreak = 0;
+    /** Lượt này đã bị tính vào chuỗi trên chưa — một lượt chỉ tính một lần. */
+    this.stalledThisTurn = false;
+    /** Ghế của lượt đang đếm, để biết lúc nào sang lượt mới mà mở sổ lại. */
+    this.stallSeat = -1;
     /**
      * Đồng hồ đang chạy cho ai, tới lúc nào.
      * @type {?{seat:number,until:number,total:number,label:string}}
@@ -101,6 +123,7 @@ export class Game {
       seatOf: () => this.memeSeat(),
       send: (id) => this.netEmit('meme', { seat: this.memeSeat(), id }),
     });
+    this.watchActivity();
   }
 
   // ---------------------------------------------------------------- khởi đầu
@@ -523,6 +546,19 @@ export class Game {
     this.netEmit('clock', { seat, ms, label, from: this.mySeat, n: ++this.clockN });
   }
 
+  /**
+   * Lên dây lại đồng hồ cho lượt đang chạy, kể cả khi nhãn không đổi.
+   *
+   * `armClock` cố tình bỏ qua lời gọi trùng để người ngồi im không được tha mỗi
+   * lần sổ ghế nhúc nhích; ở đây thì ngược lại, ta *muốn* vặn lại kim.
+   */
+  extendClock(ms) {
+    if (!this.net || !this.state) return;
+    const seat = this.state.turn;
+    this.clock = null;
+    this.armClock(seat, ms, 'đang thao tác');
+  }
+
   /** Cất đồng hồ đi trên mọi máy — hết ván, hoặc không còn ai phải chờ. */
   clearClock() {
     if (!this.net || !this.clock) return;
@@ -563,34 +599,104 @@ export class Game {
   }
 
   /**
-   * Hết giờ mà người ấy vẫn chưa quyết → mời khỏi bàn.
+   * Hết giờ mà người ấy vẫn chưa quyết → **đi hộ nước mặc định**, không đuổi.
    *
-   * Người ra tay là **ghế sống nhỏ nhất không phải kẻ hết giờ**, chứ không phải
-   * trọng tài như mọi việc chung khác. Vì trọng tài thường chính là ghế nhỏ
-   * nhất, mà kẻ đang treo bàn rất có thể là họ — trông vào máy ấy thì chẳng bao
-   * giờ có ai bấm cả.
+   * Ngồi im một lượt là chuyện thường (nghe điện thoại, mất tập trung), mất cả
+   * cơ nghiệp vì thế thì quá nặng — nên hết giờ chỉ lắc hộ, còn hộp thoại đang
+   * mở thì đóng bằng lựa chọn "thôi". Ván vẫn trôi, tài sản vẫn nguyên. Chỉ khi
+   * chuỗi ấy dài tới `maxStalls` lần liền mới coi là bỏ ván — xem `stallBankrupt`.
+   *
+   * Ra tay là **máy của chính người hết giờ**, chứ không phải một trọng tài:
+   * luật chỉ chạy dưới tay người cầm lái, hai máy cùng lắc là hai kết quả xí
+   * ngầu khác nhau. Máy ấy tắt hẳn thì đây không cứu được, nhưng lúc đó ghế
+   * thành "vắng mặt" và `checkAbsent` cùng `skipAbandonedTurn` lo nốt.
    */
   checkClock() {
     const c = this.clock;
     if (!this.net || !this.state || this.state.over || !c) return;
     /* Đường truyền mình đang đứt: đếm ngược ở đây đã chạy suốt lúc mất tin, mà
        bàn kia có thể đã gia hạn từ đời nào. Cùng lý do với `checkAbsent`. */
-    if (this.net.linkLost || this.busy) return;
-    /* Đồng hồ giao dịch không xử ở đây: người gửi đề nghị đang đứng chờ ngay
-       đó, họ nhận được lời "hết giờ" rồi tự gạch tên — xem `trade()`. Để cả
-       hai đường cùng ra tay là hai lần tịch thu cho một lỗi. */
+    if (this.net.linkLost) return;
+    /* Đồng hồ giao dịch không xử ở đây: bên nhận có hộp thoại tự đóng khi hết
+       giờ, và bên gửi đọc lời "hết giờ" ấy như một lời từ chối — xem `trade()`. */
     if (c.seat !== this.state.turn) return;
+    if (c.seat !== this.net.mySeat) return;
     if (Date.now() < c.until) return;
-    if (this.judgeSeat(c.seat) !== this.net.mySeat) return;
 
     const p = this.state.players[c.seat];
     if (!p || p.bankrupt) return;
-    this.guard(() => this.evictPlayer(c.seat, 'stall'));
+    /* Đang mở hộp thoại (mua đất, quản lý tài sản, dựng đề nghị): đóng nó bằng
+       lựa chọn "thôi" rồi để mạch đang chạy đi tiếp — chen một nước lắc vào
+       giữa `guard` là chạy hai nước cùng lúc. Hộp xếp chồng thì mỗi nhịp canh
+       đóng một cái, và nới thêm một nhịp để cái kế tiếp kịp hiện ra, người vừa
+       quay lại bàn cũng còn cửa bấm tay.
+
+       Không tính vào chuỗi bỏ ván: mấy hộp này thường nối nhau trong cùng một
+       lượt, đếm cả thì người mở nhầm bảng quản lý rồi đi pha ấm trà đã đủ ba
+       lần. Chuỗi chỉ đếm những lần đứng ngay ở thanh nút mà không đi. */
+    if (this.busy) {
+      if (dismissTopModal()) this.extendClock(this.stallGraceMs);
+      return;
+    }
+    /* Một lượt chỉ tính một lần, dù đồng hồ cạn mấy nhịp trong đó: đổ đôi được
+       lắc tiếp, lắc xong còn phải bấm kết thúc — ba nhịp ấy vẫn là một lượt
+       người ta không ngồi máy, không phải ba lần bỏ quyết định. */
+    if (!this.stalledThisTurn) {
+      this.stalledThisTurn = true;
+      this.stallStreak += 1;
+    }
+    /* Đủ ba lượt liên tiếp không quyết: giờ mới cho rời ván. Đi hộ tiếp thì cả
+       bàn kẹt với một ghế trống giữ đất mà không bao giờ bán hay đổi. */
+    if (this.stallStreak >= this.maxStalls) {
+      this.guard(() => this.stallBankrupt(p));
+      return;
+    }
+    this.guard(() => this.autoMove(p));
   }
 
-  /** Ghế còn nối mạng nhỏ nhất, bỏ qua `skip` — xem `checkClock`. */
-  judgeSeat(skip) {
-    return this.net.seats.findIndex((s, i) => i !== skip && this.net.isSeatLive(i));
+  /**
+   * Bấm nút hay gõ phím là dấu hiệu người ấy còn ngồi đó — xoá chuỗi hết giờ.
+   *
+   * Bắt ở tầng `document` chứ không rắc vào từng nút: nút trong hộp thoại (mua
+   * đất, bán nhà, xét duyệt giao dịch) không đi qua `guard` nào cả, mà đó lại
+   * đúng là lúc người chơi dễ bị đồng hồ cạn oan nhất. Chỉ tính cú bấm rơi vào
+   * một cái nút thật, để rê chuột ngắm bàn cờ không thành cớ treo ván.
+   */
+  watchActivity() {
+    const seen = (e) => {
+      if (!this.stallStreak) return;
+      if (e.type === 'pointerdown'
+        && !(e.target instanceof Element && e.target.closest('button'))) return;
+      this.stallStreak = 0;
+    };
+    document.addEventListener('pointerdown', seen, true);
+    document.addEventListener('keydown', seen, true);
+  }
+
+  /** Ba lượt liên tiếp để đồng hồ cạn — coi như bỏ ván, tài sản về ngân hàng. */
+  async stallBankrupt(p) {
+    this.stallStreak = 0;
+    await this.bc.show('BỎ VÁN',
+      `<b>${p.name}</b> để hết giờ ${this.maxStalls} lượt liền mà không đi —
+       coi như bỏ cuộc, tài sản trả về <b>ngân hàng</b>.`, { kind: 'bad', ms: 4200 });
+    await this.doBankrupt(p.id);
+    if (this.checkGameOver()) { this.sync(); return; }
+    if (this.state.turn === p.id) await this.endTurn();
+  }
+
+  /**
+   * Nước đi mặc định khi hết giờ: lắc, hoặc kết thúc lượt nếu đã lắc rồi.
+   *
+   * Trong tù thì cũng lắc cầu đôi chứ không nộp tiền hộ — tiêu tiền của người
+   * khác là quyết định của họ, còn lắc thì không mất gì.
+   */
+  async autoMove(p) {
+    await this.bc.show('HẾT GIỜ',
+      `<b>${p.name}</b> chưa đi — lắc hộ một lượt cho ván khỏi đứng.`, { ms: 2000 });
+    if (this.state.turn !== p.id || p.bankrupt) return;
+    if (p.inJail) return this.rollInJail();
+    if (this.lastRolled) return this.endTurn();
+    return this.takeRoll();
   }
 
   /** Sổ ghế đổi (ai đó rớt mạng hay vào lại) — cập nhật danh sách bên cột trái. */
@@ -628,13 +734,12 @@ export class Game {
   /**
    * Người rời bàn: tài sản trả hết về ngân hàng, ai cũng mua lại được.
    *
-   * Hai đường dẫn tới đây — mất kết nối quá lâu, và ngồi im hết giờ. Hậu quả
-   * với cả bàn giống hệt nhau nên xử như nhau, chỉ khác lời báo.
+   * Chỉ còn đúng một đường dẫn tới đây: mất kết nối quá hạn ân. Ngồi im hết giờ
+   * thì không bị đuổi nữa — máy của chính họ lắc hộ, xem `checkClock`.
    *
    * @param {number} seat
-   * @param {'away'|'stall'} [why]
    */
-  async evictPlayer(seat, why = 'away') {
+  async evictPlayer(seat) {
     const st = this.state;
     const p = st.players[seat];
     if (!p || p.bankrupt) return;
@@ -649,12 +754,9 @@ export class Game {
 
     // Người ra tay có thể đang không tới lượt, nhưng lời báo này cả bàn phải nghe.
     this.announcing = true;
-    await this.bc.show(why === 'stall' ? 'HẾT GIỜ' : 'RỜI BÀN',
-      why === 'stall'
-        ? `<b>${p.name}</b> hết giờ mà chưa đi — ${props} ô đất cùng toàn bộ nhà cửa
-           trả về <b>ngân hàng</b>, ghế bỏ trống.`
-        : `<b>${p.name}</b> mất kết nối quá lâu — ${props} ô đất cùng toàn bộ nhà cửa
-           trả về <b>ngân hàng</b>, ai cũng mua lại được.`,
+    await this.bc.show('RỜI BÀN',
+      `<b>${p.name}</b> mất kết nối quá lâu — ${props} ô đất cùng toàn bộ nhà cửa
+       trả về <b>ngân hàng</b>, ai cũng mua lại được.`,
       { kind: 'bad', ms: 5000 });
     this.announcing = false;
 
@@ -699,6 +801,14 @@ export class Game {
        tới `beginTurn` (sổ ghế đổi, nối lại mạng) trong lúc cả bàn còn đang lắc. */
     if (this.net && !st.order) { this.beginRollOff(); return; }
     const p = st.current;
+
+    /* Sang lượt khác thì mở sổ lại cho chuỗi "để hết giờ" — đếm ở đây chứ không
+       ở nhánh của người cầm lái, vì `beginTurn` chạy trên mọi máy và lượt của
+       người khác cũng là một lượt trôi qua. */
+    if (this.stallSeat !== st.turn) {
+      this.stallSeat = st.turn;
+      this.stalledThisTurn = false;
+    }
 
     /* Tới lượt mình thì reo một tiếng chuông: chơi online người ta hay ngó sang
        cửa sổ khác trong lúc chờ, phải có cái kéo họ về. `beginTurn` chạy lại
@@ -908,15 +1018,17 @@ export class Game {
     if (passedGo) {
       /* Lương có thể đang bị thẻ "mất mùa" cắt còn một nửa — hỏi luật chứ đừng
          lấy thẳng hằng số. Và mỗi vòng qua đây là một nấc của thanh Thời Cuộc. */
-      const pay = st.salary();
+      const landed = p.pos === 0;      // dừng đúng ô 0, không chỉ đi ngang
+      const pay = st.salary(landed);
+      const cut = st.modMult('salary') !== 1;
       st.laps += 1;
       addPressure(st, PRESSURE.lap);
-      await this.bc.show('QUA Ô BẮT ĐẦU',
-        pay === GO_SALARY
-          ? `<b>${p.name}</b> lãnh lương <span class="up">${money(pay)}</span> từ ngân hàng.`
-          : `<b>${p.name}</b> lãnh lương <span class="up">${money(pay)}</span> —
-             mất mùa nên chỉ còn bấy nhiêu.`,
-        { ms: 2400 });
+      const note = landed
+        ? ` — đạp trúng ô Bắt Đầu nên lương ×${GO_LANDING_MULT}${cut ? ', đã trừ mất mùa' : ''}`
+        : (cut ? ' — mất mùa nên chỉ còn bấy nhiêu' : '');
+      await this.bc.show(landed ? 'ĐẠP Ô BẮT ĐẦU' : 'QUA Ô BẮT ĐẦU',
+        `<b>${p.name}</b> lãnh lương <span class="up">${money(pay)}</span>${note}.`,
+        { ms: landed ? 2800 : 2400 });
       await this.receiveFromBank(idx, pay);
     }
 
@@ -1400,7 +1512,17 @@ export class Game {
   /** Người chơi trả tiền cho người chơi khác. */
   async payPlayer(fromId, toId, amount) {
     if (!(await this.ensureFunds(fromId, amount))) {
-      // Người trả đã phá sản: tài sản về ngân hàng, chủ nợ không nhận được gì.
+      /* Con nợ vỡ nợ giữa chừng: đất đai của họ về ngân hàng, nhưng chủ đất thì
+         không việc gì phải chịu mất khoản tiền thuê ấy — ngân hàng trả thay
+         nguyên số. Nếu không, ai xui đón đúng người sắp phá sản là mất trắng
+         một lượt thu, mà lỗi chẳng phải của họ. */
+      const to = this.state.players[toId];
+      if (!to.bankrupt) {
+        await this.bc.show('NGÂN HÀNG TRẢ THAY',
+          `<b>${this.state.players[fromId].name}</b> vỡ nợ — ngân hàng trả thay
+           <span class="up">${money(amount)}</span> cho <b>${to.name}</b>.`, { ms: 3200 });
+        await this.receiveFromBank(toId, amount);
+      }
       return false;
     }
     const from = this.state.players[fromId];
@@ -1460,7 +1582,27 @@ export class Game {
           { label: 'Tuyên bố phá sản', value: 'bankrupt', cls: 'btn-danger' },
         ],
         escValue: 'manage', // Esc không được vô tình đẩy người chơi vào cửa phá sản
+        /* Hết giờ thì không mở tiếp bảng quản lý cho một cái ghế trống — xoay
+           tiền hộ luôn, kẻo mỗi nhịp canh lại đóng/mở một hộp mà nợ vẫn đó. */
+        timeoutValue: 'auto',
       });
+
+      if (choice === 'auto') {
+        /* Cùng một cách cấn nợ với thẻ Thời Cuộc (`core/events.js`): thế chấp ô
+           rẻ nhất trước, giữ nhà tới cùng vì nhà bán ra chỉ được nửa giá xây. */
+        const { ok: raised, mortgaged, sold } = autoRaise(st, playerId, amount);
+        this.hud.refresh();
+        this.scene.refresh(st);
+        this.sync();
+        if (raised) {
+          const gone = [...mortgaged, ...sold].map((id) => tileLabel(id));
+          await this.bc.show('HẾT GIỜ',
+            `<b>${p.name}</b> chưa xoay tiền — cấn nợ hộ cho đủ
+             <span class="down">${money(amount)}</span>: ${gone.join(' · ')}.`,
+            { kind: 'bad', ms: 3600 });
+        }
+        continue;   // không đủ thì vòng sau rơi vào cửa vỡ nợ như thường
+      }
 
       if (choice === 'bankrupt') {
         const sure = await bankruptModal(st, playerId, false);
@@ -1641,21 +1783,21 @@ export class Game {
         `Đang chờ <b>${B.name}</b> xem xét đề nghị…`, { kind: 'trade', ms: 3000 });
       /* Đồng hồ chuyển sang B — giờ cả bàn chờ họ, không chờ A nữa. Hạn của B
          nới thêm vài giây so với con số hộp thoại đếm cho họ xem, để người bấm
-         đúng giây cuối vẫn kịp về đích trước lúc bị gạch tên. */
+         đúng giây cuối vẫn kịp về đích trước lúc hộp tự đóng. */
       this.armClock(targetId, this.tradeMs + 5000, 'trả lời giao dịch');
       accepted = await this.net.ask(targetId, 'trade-review', { offer },
         { fallback: false, timeout: this.tradeMs + 8000 });
       // Trả lời rồi (hay hết giờ rồi) thì đồng hồ về lại người đang đi
       this.armClock(A.id, this.busyMs, 'đang thao tác');
 
-      /* Bên kia để hết giờ → mời khỏi bàn, y như người ngồi im hết lượt.
-         Việc này để **người hỏi** làm chứ không để trọng tài: mình đang đứng
-         chờ ngay đây và là người duy nhất nhận được lời "hết giờ" của họ, nên
-         không sợ hai máy cùng gạch một tên. */
+      /* Bên kia để hết giờ → coi như họ từ chối, y như người ngồi im hết lượt
+         thì được lắc hộ. `ask` trả về chuỗi `'timeout'` (truthy!) nên phải hạ
+         xuống `false` ngay tại đây, kẻo giao dịch chốt luôn vì không ai bấm. */
       if (accepted === 'timeout') {
-        await this.evictPlayer(targetId, 'stall');
-        this.restoreActions();
-        return;
+        accepted = false;
+        await this.bc.show('HẾT GIỜ',
+          `<b>${B.name}</b> không trả lời kịp — đề nghị coi như bị từ chối.`,
+          { kind: 'bad', ms: 3200 });
       }
     } else {
       await handoff(B.name, B.token.css, `${A.name} gửi một đề nghị giao dịch. Chuyền máy cho ${B.name} xem xét.`);
