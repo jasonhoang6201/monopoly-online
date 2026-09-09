@@ -17,8 +17,11 @@
 import { MEMES, MEME_BY_ID } from '../data/memes.js';
 import { audio } from '../audio/audio.js';
 
-export const MEME_QUOTA = 5;
-export const MEME_WINDOW_MS = 60000;
+export const MEME_QUOTA = 6;
+/* Cửa sổ ngắn hơn bong bóng nhiều (3,6s × 6 = 21,6s ≈ một cửa sổ), nên hạn mức
+   chỉ chặn được đúng cái cần chặn: bấm dồn liên hồi. Thả thong thả thì gần như
+   không bao giờ chạm hạn. */
+export const MEME_WINDOW_MS = 20000;
 
 /** Bong bóng đứng trên bàn bao lâu trước khi mờ đi. */
 const SHOW_MS = 3600;
