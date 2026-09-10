@@ -39,6 +39,9 @@ export function snapshot(st) {
        nó đang nằm trong tay người khác. */
     gone: { chance: [...st.decks.chance.gone], chest: [...st.decks.chest.gone] },
     over: st.over,
+    /* Khoản nợ đang dở dang: thiếu nó thì máy tiếp quản không biết chủ đất còn
+       chưa được trả — xem `GameState.debt`. */
+    debt: st.debt ? { ...st.debt } : null,
     /* Thẻ Thời Cuộc: nấc luật, thanh áp lực, hiệu ứng đang chạy và hai chồng
        bài. Thiếu bất cứ thứ nào ở đây là người vào lại giữa ván sẽ chơi bằng
        một bộ luật khác cả bàn — giá thuê tính sai, sự kiện nổ lệch nhịp. */
@@ -95,6 +98,8 @@ export function applySnapshot(st, snap) {
   st.decks.chance.gone = new Set(snap.gone?.chance ?? []);
   st.decks.chest.gone = new Set(snap.gone?.chest ?? []);
   st.over = snap.over;
+  // Ảnh chụp của bản cũ không có `debt`; giữ nguyên cái đang có thay vì xoá nhầm
+  if ('debt' in snap) st.debt = snap.debt ? { ...snap.debt } : null;
 
   /* Ảnh chụp của bản cũ (hay của ván mở trước khi có thẻ Thời Cuộc) không mang
      mấy trường này — giữ nguyên cái đang có thay vì ghi `undefined` đè lên. */

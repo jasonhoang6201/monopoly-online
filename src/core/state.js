@@ -107,6 +107,16 @@ export class GameState {
     /** Đặt true khi ván đã kết thúc. */
     this.over = false;
     /**
+     * Khoản người-trả-người đang dở dang: `{ from, to, amount }`, `null` là
+     * không nợ ai.
+     *
+     * Nằm trong trạng thái (nên đi theo ảnh chụp) vì máy con nợ có thể tắt
+     * ngang giữa lúc đang hỏi họ xoay tiền hay tuyên bố phá sản. Máy khác đọc
+     * ảnh chụp mới biết còn ai chưa trả cho ai mà trả thay hoặc đòi tiếp —
+     * xem `Game.coverDebt`.
+     */
+    this.debt = null;
+    /**
      * Số thứ tự ảnh chụp, tăng một nấc mỗi lần người cầm lái phát đi.
      *
      * Bản online cần nó vì đường truyền **không giữ đúng thứ tự**: một phiên

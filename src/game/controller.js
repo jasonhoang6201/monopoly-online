@@ -762,6 +762,10 @@ export class Game {
 
     this.sync();
     await this.scene.bankruptFx(seat);
+    /* Người này có thể đang đứng giữa một khoản phải trả — chính lúc hộp thoại
+       vỡ nợ mở ra mà họ tắt máy. Chủ nợ không liên can gì tới việc mất kết nối
+       ấy nên vẫn phải nhận đủ. */
+    await this.coverDebt(seat);
 
     // Còn đúng một người trụ lại thì hạ màn ngay, đừng bắt họ đi thêm một lượt
     // vô nghĩa rồi mới báo thắng.
@@ -835,6 +839,15 @@ export class Game {
     }
 
     if (p.bankrupt) { this.endTurn(); return; }
+
+    /* Vào lại giữa chừng mà còn khoản nợ treo (tắt máy đúng lúc hộp thoại vỡ nợ
+       đang mở): đòi cho xong rồi mới bày nút, kẻo nối lại máy là thoát được
+       tiền thuê. */
+    if (st.debt && st.debt.from === p.id) {
+      const d = st.debt;
+      this.guard(() => this.payPlayer(d.from, d.to, d.amount));
+      return;
+    }
 
     p.doubles = 0;
     this.hud.refresh();
@@ -1511,25 +1524,25 @@ export class Game {
 
   /** Người chơi trả tiền cho người chơi khác. */
   async payPlayer(fromId, toId, amount) {
+    const st = this.state;
+    /* Ghi khoản nợ vào trạng thái **trước khi** hỏi han. Hỏi xoay tiền hay hỏi
+       có chịu phá sản không đều là những chỗ đứng chờ người bấm, mà máy con nợ
+       có thể tắt ngang ở đó. Nợ nằm trong ảnh chụp thì máy tiếp quản còn biết
+       chủ đất chưa được trả — xem `coverDebt`. */
+    st.debt = { from: fromId, to: toId, amount };
+    this.sync();
+
     if (!(await this.ensureFunds(fromId, amount))) {
-      /* Con nợ vỡ nợ giữa chừng: đất đai của họ về ngân hàng, nhưng chủ đất thì
-         không việc gì phải chịu mất khoản tiền thuê ấy — ngân hàng trả thay
-         nguyên số. Nếu không, ai xui đón đúng người sắp phá sản là mất trắng
-         một lượt thu, mà lỗi chẳng phải của họ. */
-      const to = this.state.players[toId];
-      if (!to.bankrupt) {
-        await this.bc.show('NGÂN HÀNG TRẢ THAY',
-          `<b>${this.state.players[fromId].name}</b> vỡ nợ — ngân hàng trả thay
-           <span class="up">${money(amount)}</span> cho <b>${to.name}</b>.`, { ms: 3200 });
-        await this.receiveFromBank(toId, amount);
-      }
+      // Vỡ nợ: `doBankrupt` đã trả thay chủ nợ rồi, đây chỉ là chốt chặn cuối
+      await this.coverDebt(fromId);
       return false;
     }
-    const from = this.state.players[fromId];
-    const to = this.state.players[toId];
-    this.state.dryTurn = false;
+    const from = st.players[fromId];
+    const to = st.players[toId];
+    st.dryTurn = false;
     from.money -= amount;
     to.money += amount;
+    st.debt = null;
     this.hud.refresh();
     this.sync();
     this.hud.flashMoney(fromId, false);
@@ -1537,6 +1550,33 @@ export class Game {
     await this.scene.flyMoney(this.hud.cardEl(fromId), this.hud.cardEl(toId), amount,
       { text: `−${money(amount)}`, color: '#FF8A7A' });
     return true;
+  }
+
+  /**
+   * Con nợ vỡ nợ thì ngân hàng trả thay chủ nợ đúng khoản còn treo.
+   *
+   * Đất của người vỡ nợ về ngân hàng chứ không sang tay chủ nợ, nên không trả
+   * thay thì ai xui đón đúng người sắp phá sản là mất trắng một lượt thu, mà
+   * lỗi chẳng phải của họ.
+   *
+   * Khoản nợ đọc từ `state.debt` chứ không từ tham số, nên **máy nào tuyên bố
+   * phá sản cũng trả được**: máy con nợ tự bấm, hay trọng tài tịch thu người đã
+   * tắt máy giữa chừng, kết quả như nhau.
+   *
+   * @param {number} seat chỉ trả cho khoản nợ của đúng người này
+   */
+  async coverDebt(seat) {
+    const st = this.state;
+    const d = st.debt;
+    if (!d || d.from !== seat) return;
+    st.debt = null;
+    const to = st.players[d.to];
+    // Chủ nợ cũng đã rời ván thì không còn ai để trả — đừng in tiền vô chủ
+    if (!to || to.bankrupt) { this.sync(); return; }
+    await this.bc.show('NGÂN HÀNG TRẢ THAY',
+      `<b>${st.players[d.from].name}</b> vỡ nợ — ngân hàng trả thay
+       <span class="up">${money(d.amount)}</span> cho <b>${to.name}</b>.`, { ms: 3200 });
+    await this.receiveFromBank(d.to, d.amount);
   }
 
   /**
@@ -1952,6 +1992,8 @@ export class Game {
       `<b>${p.name}</b> vỡ nợ! ${props} ô đất cùng toàn bộ nhà cửa được trả về <b>ngân hàng</b>.`,
       { kind: 'bad', ms: 5000 });
     await this.scene.bankruptFx(playerId);
+    // Còn nợ ai thì ngân hàng trả thay ngay tại đây, đừng để chủ nợ mất trắng
+    await this.coverDebt(playerId);
 
     // Pháo hoa tiễn người thua — cũng là một cách kết thúc có hậu
     const c = this.scene.boardCenter();
