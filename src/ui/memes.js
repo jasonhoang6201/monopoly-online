@@ -65,7 +65,9 @@ export class MemeDeck {
    */
   setState(state) {
     this.state = state;
-    if (this.btn) this.btn.hidden = false;
+    // Xoá hết ảnh trong assets/meme/ thì giấu luôn nút, chứ mở ra bảng rỗng
+    // thì người bấm tưởng bảng hỏng.
+    if (this.btn) this.btn.hidden = MEMES.length === 0;
     if (this.preloaded) return;
     this.preloaded = true;
     const warm = () => MEMES.forEach((m) => { new Image().src = m.url; });
