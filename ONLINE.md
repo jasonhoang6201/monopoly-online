@@ -132,9 +132,18 @@ sau cùng mới tới `CHANNEL_ERROR` của kênh.
         khách B ──ý định──┘        (chạy luật)               └──ảnh chụp──▶ B
 ```
 
-Giao dịch là chỗ duy nhất cần hỏi–đáp hai chiều: bên A dựng đề nghị trên máy
-mình, rồi `room.ask()` gửi sang máy B và **chờ B bấm**. B rớt mạng thì `ask` trả
-về "từ chối" sau 2 phút chứ không treo lượt của A.
+Có vài chỗ cần hỏi–đáp hai chiều, đều đi qua `room.ask()`: bên hỏi dựng nội
+dung trên máy mình rồi **chờ bên kia bấm**, bên kia rớt mạng thì `ask` trả về
+câu mặc định chứ không treo lượt của ai.
+
+Giao dịch là ví dụ quen nhất (A dựng đề nghị, B duyệt). Cùng một cách ấy có
+**xoay tiền** (`Game.ensureFundsRemote` ↔ câu hỏi `'raise'`): thẻ "mỗi người góp
+tiền mừng", phiên đấu giá hay nước cưỡng chiếm đều bắt một người *không phải*
+người đang đi móc ví, mà bán nhà hay cầm đất là tiêu vào cơ nghiệp của họ. Nên
+bảng quản lý tài sản mở ở **máy con nợ**, trên đúng đất mang tên họ; máy ấy chỉ
+gửi về danh sách thao tác đã bấm, còn ván gốc thì người cầm lái làm lại từng
+thao tác qua đúng cửa luật của `GameState` (`applyRaiseActs`). Hết giờ hay rớt
+mạng thì ngân hàng cấn nợ hộ (`autoCover`), y như nấc cấn nợ của thẻ Thời Cuộc.
 
 ## Hai đường truyền
 

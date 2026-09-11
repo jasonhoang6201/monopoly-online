@@ -198,7 +198,13 @@ await page.evaluate(() => {
   c.payBank(1, 300);                                // 20 + 375 = 395 ≥ 300 → được xoay
 });
 await page.waitForTimeout(1200);
+/* Con nợ không phải người đang đi, mà lại còn xoay được → máy phải chuyền sang
+   cho họ trước. Bán nhà hay cầm đất là tiêu vào cơ nghiệp của chính họ. */
 let title = await page.locator('.scrim.show .modal-eyebrow, .scrim.show .modal-title').allTextContents();
+check(title.includes('CHUYỀN MÁY'), 'chuyền máy cho con nợ trước khi hỏi xoay tiền');
+await page.locator('.scrim.show button.btn', { hasText: 'Tiếp tục' }).first().click();
+await page.waitForTimeout(900);
+title = await page.locator('.scrim.show .modal-eyebrow, .scrim.show .modal-title').allTextContents();
 let btns = await page.locator('.scrim.show button.btn').allTextContents();
 log(`  thiếu 280$ / xoay được 395$ → ${JSON.stringify(title)} ${JSON.stringify(btns)}`);
 check(btns.some((t) => /Bán nhà|Thế chấp/.test(t)), 'còn khả năng chi trả thì vẫn được mời xoay tiền');

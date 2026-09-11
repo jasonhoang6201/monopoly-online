@@ -29,7 +29,7 @@ import { openModal, handoff, dismissTopModal } from '../ui/modal.js';
 import {
   setupModal, buyModal, cardModal, manageModal, tradePickModal,
   tradeBuildModal, tradeReviewModal, redeemPromptModal, bankruptModal,
-  winnerModal, describe, playerModal, tileModal, rollOffModal,
+  winnerModal, describe, playerModal, tileModal, rollOffModal, attachTimer,
 } from '../ui/modals.js';
 import {
   eventCardModal, bracePromptModal, firePromptModal, auctionBidModal,
@@ -72,6 +72,14 @@ export class Game {
     this.turnMs = 60000;
     /** Hạn để trả lời một đề nghị giao dịch. */
     this.tradeMs = 45000;
+    /**
+     * Hạn để một con nợ **ngồi máy khác** xoay đủ tiền.
+     *
+     * Rộng hơn hạn giao dịch vì việc nặng tay hơn: phải đọc bảng tài sản, chọn
+     * ô nào bán nhà, ô nào cầm cố, có khi vài ô liền. Quá hạn thì ngân hàng cấn
+     * nợ hộ (`autoCover`) chứ không treo bàn chờ họ.
+     */
+    this.raiseMs = 60000;
     /**
      * Hạn nới cho người đang mở dở một hộp thoại. Rộng hơn hạn lượt vì họ đang
      * thao tác thật (chọn đất để đổi, tính xây nhà), nhưng vẫn phải có đáy: mở
@@ -459,6 +467,25 @@ export class Game {
       audio.sfx('turn');
       return rollOffModal(this.state, this.net.mySeat, data.rolls ?? [], this.tradeMs);
     }
+    /* Thiếu tiền trả một khoản do người khác gây ra (thẻ "mỗi người góp",
+       đấu giá, cưỡng chiếm): bán nhà hay cầm đất là tiêu vào cơ nghiệp của
+       mình, nên bảng quản lý mở ở đây chứ không ở máy người đang đi.
+       `data.seat` chỉ để đối chiếu — bảng luôn mở trên ghế của chính máy này,
+       nên tin gửi tới cũng không mở được tài sản của ai khác. */
+    if (name === 'raise') {
+      const seat = this.net.mySeat;
+      if (seat < 0 || data?.seat !== seat) return null;
+      audio.sfx('turn');
+      /* Khoá `busy` suốt lúc trả lời. Ván gốc nằm ở máy cầm lái, mà nhịp canh
+         người vắng mặt chạy nền ở đây cũng phát ảnh chụp được (`evictPlayer` →
+         `sync`) — ảnh ấy mang theo mấy ô vừa cầm cố trên bản sao, rồi máy cầm
+         lái làm lại lần nữa là tiền vào hai lần. `checkAbsent` nhường khi bận. */
+      this.busy = true;
+      try {
+        return await this.runRaise(seat, data.amount, { ms: data.ms, record: [] });
+      } finally { this.busy = false; }
+    }
+
     /* Đất thế chấp vừa về tay mình: tiền chuộc lấy từ túi mình nên câu trả lời
        cũng phải là của mình, dù giao dịch do người kia dựng. */
     if (name === 'redeem') {
@@ -1583,19 +1610,130 @@ export class Game {
    * Bảo đảm người chơi có đủ `amount`. Cho phép bán nhà / thế chấp nhiều lần.
    * Nếu bán sạch nhà và thế chấp hết đất vẫn không đủ thì vỡ nợ ngay,
    * khỏi bắt người chơi đi qua từng bước xoay tiền vô ích.
+   *
+   * Hàm này chạy dưới tay **người cầm lái**, nhưng `playerId` không nhất thiết
+   * là họ: thẻ "mỗi người góp tiền mừng", phiên đấu giá, cưỡng chiếm đất — đều
+   * bắt một người khác móc ví. Bán nhà hay cầm đất là tiêu vào cơ nghiệp của
+   * người ta, nên bảng quản lý phải mở ở **máy của chính con nợ**, chứ không
+   * bày tài sản người khác ra trước mặt người đang đi.
+   *
    * @returns {Promise<boolean>} false nếu người chơi chọn (hoặc buộc phải) phá sản
    */
   async ensureFunds(playerId, amount) {
     const st = this.state;
     const p = st.players[playerId];
+    if (p.money >= amount) return true;
 
-    if (p.money < amount) {
-      const raisable = st.liquidValue(playerId);
-      if (raisable < amount) {
-        await bankruptModal(st, playerId, true, amount - p.money, raisable);
-        await this.doBankrupt(playerId);
-        return false;
+    // Con nợ ngồi máy khác → hỏi sang đó; ván gốc vẫn nằm lại máy này.
+    if (this.net && playerId !== this.net.mySeat) {
+      return this.ensureFundsRemote(playerId, amount);
+    }
+
+    /* Bản một máy mà con nợ không phải người đang đi: chuyền máy cho họ rồi
+       trả lại, đúng cách `EventRunner.askOne` hỏi han cả bàn.
+       Chỉ chuyền khi thật sự có gì để quyết — bán sạch nhà, cầm hết đất vẫn
+       không đủ thì hộp thoại kia chỉ có mỗi nút "Chấp nhận", chuyền máy hai
+       lượt chỉ để bấm một cái nút là làm phiền cả bàn. */
+    const relay = !this.net && playerId !== st.turn
+      && st.liquidValue(playerId) >= amount;
+    if (relay) {
+      await handoff(p.name, p.token.css,
+        `${p.name} đang thiếu tiền — chuyền máy cho họ bán nhà hoặc thế chấp.`);
+    }
+    const { bankrupt } = await this.runRaise(playerId, amount);
+    if (relay) {
+      const cur = st.players[st.turn];
+      await handoff(cur.name, cur.token.css, `Xong. Chuyền máy lại cho ${cur.name}.`);
+    }
+    if (bankrupt) { await this.doBankrupt(playerId); return false; }
+    return true;
+  }
+
+  /**
+   * Xoay tiền cho một con nợ **ngồi máy khác**.
+   *
+   * Máy họ chỉ *quyết định*: nó mở bảng quản lý trên bản sao ván của nó rồi gửi
+   * về đây danh sách thao tác đã bấm. Ván gốc chỉ nhúc nhích ở đây, qua đúng
+   * cửa luật của `GameState` — xem `applyRaiseActs`. Nhờ vậy hai máy không bao
+   * giờ ra hai kết quả, mà người đang đi cũng không đụng được vào đất người ta.
+   */
+  async ensureFundsRemote(playerId, amount) {
+    const st = this.state;
+    const p = st.players[playerId];
+
+    while (p.money < amount) {
+      /* Máy bên kia đã rớt thì đừng hỏi: `ask` cứ đứng chờ cho hết hạn rồi mới
+         trả về `fallback`, cả bàn ngồi nhìn một phút cho một câu không ai nghe. */
+      if (!this.net.isSeatLive(playerId)) {
+        if (!(await this.autoCover(playerId, amount))) return false;
+        continue;
       }
+
+      // Gửi ván đi trước khi hỏi, để máy bên kia bày đúng số dư và đúng đất
+      this.sync();
+      await this.bc.show('CHỜ XOAY TIỀN',
+        `<b>${p.name}</b> còn thiếu <span class="down">${money(amount - p.money)}</span> —
+         đang chờ họ bán nhà hoặc thế chấp…`, { kind: 'bad', ms: 2600 });
+
+      /* Đồng hồ chuyển sang con nợ: cả bàn đang chờ họ chứ không chờ người đang
+         đi. Hạn của họ nới thêm vài giây so với con số hộp thoại đếm cho họ xem,
+         để người bấm đúng giây cuối vẫn kịp về đích. */
+      this.armClock(playerId, this.raiseMs + 5000, 'xoay tiền');
+      const ans = await this.net.ask(playerId, 'raise',
+        { seat: playerId, amount, ms: this.raiseMs },
+        { fallback: null, timeout: this.raiseMs + 8000 });
+      this.extendClock(this.busyMs);
+
+      // Không một tiếng trả lời (rớt mạng giữa chừng): cấn nợ hộ luôn
+      if (!ans) {
+        if (!(await this.autoCover(playerId, amount))) return false;
+        continue;
+      }
+
+      /* Thao tác họ kịp bấm thì vẫn tính, kể cả khi sau đó mới hết giờ — đừng
+         bắt người ta cầm cố hai lần cho cùng một khoản nợ. */
+      const done = await this.applyRaiseActs(playerId, ans.acts);
+      if (ans.bankrupt) { await this.doBankrupt(playerId); return false; }
+      if (p.money >= amount) break;
+
+      /* Hết giờ, hoặc trả lời về mà ván không nhúc nhích (bấm Xong sớm, thao
+         tác gửi tới không còn hợp lệ): hỏi lại nữa thì thành vòng lặp không
+         lối ra, nên cấn nợ hộ cho xong khoản này. */
+      if (ans.timeout || done === 0) {
+        if (!(await this.autoCover(playerId, amount))) return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Vòng xoay tiền — **luôn chạy ở máy của chính con nợ**.
+   *
+   * @param {number} playerId
+   * @param {number} amount
+   * @param {object} [o]
+   * @param {number} [o.ms] hạn trả lời; chỉ có ở bản online, khi máy này đang
+   *   trả lời hộ một câu hỏi của máy cầm lái
+   * @param {Array}  [o.record] khác `null` ⇒ máy này **không** giữ ván gốc: mọi
+   *   thao tác chỉ ghi vào đây rồi gửi về cho máy cầm lái làm lại
+   * @returns {Promise<{acts:Array, bankrupt:boolean, timeout?:boolean}>}
+   */
+  async runRaise(playerId, amount, o = {}) {
+    const st = this.state;
+    const p = st.players[playerId];
+    const acts = o.record ?? [];
+    const remote = !!o.record;
+    /* Hạn tính cho **cả vòng**, không cho từng hộp thoại: cầm ba ô là ba lần mở
+       bảng quản lý, mỗi lần một hạn riêng thì tổng lại vượt quá hạn máy cầm lái
+       đang chờ, mà câu trả lời về trễ thì bên ấy đã cấn nợ hộ mất rồi. */
+    const until = remote && o.ms ? Date.now() + o.ms : 0;
+    const timeLeft = () => (until ? Math.max(1500, until - Date.now()) : 0);
+
+    // Bán sạch nhà, cầm hết đất vẫn không đủ → khỏi bắt bấm qua từng bước
+    const raisable = st.liquidValue(playerId);
+    if (raisable < amount) {
+      await bankruptModal(st, playerId, true, amount - p.money, raisable);
+      return { acts, bankrupt: true };
     }
 
     while (p.money < amount) {
@@ -1607,27 +1745,16 @@ export class Game {
 
       if (!canRaise) {
         await bankruptModal(st, playerId, true, amount - p.money);
-        await this.doBankrupt(playerId);
-        return false;
+        return { acts, bankrupt: true };
       }
 
-      const choice = await openModal({
-        eyebrow: 'THIẾU TIỀN',
-        title: `Còn thiếu ${money(amount - p.money)}`,
-        sub: `Bạn cần ${money(amount)} nhưng chỉ có ${money(p.money)}. Hãy bán nhà hoặc thế chấp để xoay tiền.`,
-        body: `<div class="trade-summary">Thế chấp lấy tiền mặt ngay; sau này chuộc lại chịu <b>lãi 10%</b>.
-                 Bán nhà thu về <b>nửa giá xây</b>.</div>`,
-        buttons: [
-          { label: 'Bán nhà / Thế chấp', value: 'manage', cls: 'btn-gold' },
-          { label: 'Tuyên bố phá sản', value: 'bankrupt', cls: 'btn-danger' },
-        ],
-        escValue: 'manage', // Esc không được vô tình đẩy người chơi vào cửa phá sản
-        /* Hết giờ thì không mở tiếp bảng quản lý cho một cái ghế trống — xoay
-           tiền hộ luôn, kẻo mỗi nhịp canh lại đóng/mở một hộp mà nợ vẫn đó. */
-        timeoutValue: 'auto',
-      });
+      if (until && Date.now() >= until) return { acts, bankrupt: false, timeout: true };
+      const choice = await this.shortfallModal(playerId, amount, timeLeft());
 
       if (choice === 'auto') {
+        /* Máy này không giữ ván gốc thì đừng tự cấn nợ — con số sẽ lệch với máy
+           cầm lái. Báo về "hết giờ" để bên ấy cấn trên ván thật. */
+        if (remote) return { acts, bankrupt: false, timeout: true };
         /* Cùng một cách cấn nợ với thẻ Thời Cuộc (`core/events.js`): thế chấp ô
            rẻ nhất trước, giữ nhà tới cùng vì nhà bán ra chỉ được nửa giá xây. */
         const { ok: raised, mortgaged, sold } = autoRaise(st, playerId, amount);
@@ -1646,12 +1773,134 @@ export class Game {
 
       if (choice === 'bankrupt') {
         const sure = await bankruptModal(st, playerId, false);
-        if (sure) { await this.doBankrupt(playerId); return false; }
+        if (sure) return { acts, bankrupt: true };
       } else {
-        await this.openManage(playerId);
+        await this.openManage(playerId, remote ? acts : null);
       }
     }
-    return true;
+    return { acts, bankrupt: false };
+  }
+
+  /**
+   * Hộp "còn thiếu bao nhiêu" — mở ở máy của con nợ.
+   *
+   * `ms` > 0 (bản online, con nợ không phải người đang đi) thì hộp tự đếm ngược:
+   * cả bàn đang đứng chờ một người, không thể để họ bỏ đi pha cà phê là ván treo.
+   */
+  shortfallModal(playerId, amount, ms = 0) {
+    const p = this.state.players[playerId];
+    let ticker = 0;
+    const pr = openModal({
+      eyebrow: 'THIẾU TIỀN',
+      title: `Còn thiếu ${money(amount - p.money)}`,
+      sub: `Bạn cần ${money(amount)} nhưng chỉ có ${money(p.money)}. Hãy bán nhà hoặc thế chấp để xoay tiền.`,
+      body: `<div class="trade-summary">Thế chấp lấy tiền mặt ngay; sau này chuộc lại chịu <b>lãi 10%</b>.
+               Bán nhà thu về <b>nửa giá xây</b>.</div>`,
+      buttons: [
+        { label: 'Bán nhà / Thế chấp', value: 'manage', cls: 'btn-gold' },
+        { label: 'Tuyên bố phá sản', value: 'bankrupt', cls: 'btn-danger' },
+      ],
+      escValue: 'manage', // Esc không được vô tình đẩy người chơi vào cửa phá sản
+      /* Hết giờ thì không mở tiếp bảng quản lý cho một cái ghế trống — xoay
+         tiền hộ luôn, kẻo mỗi nhịp canh lại đóng/mở một hộp mà nợ vẫn đó. */
+      timeoutValue: 'auto',
+      onMount: (body, close) => {
+        if (ms) {
+          ticker = attachTimer(body, ms, close, 'auto',
+            'để xoay tiền — quá hạn thì ngân hàng cấn nợ hộ.');
+        }
+      },
+    });
+    pr.finally(() => clearInterval(ticker));
+    return pr;
+  }
+
+  /**
+   * Làm lại trên **ván gốc** những thao tác con nợ vừa bấm ở máy họ.
+   *
+   * Không tin lời suông: mỗi thao tác vẫn đi qua đúng cửa luật của `GameState`,
+   * và chỉ nhắm vào đất mang tên chính người ấy. Máy kia gửi số ô nào tới cũng
+   * không đụng được tài sản của người khác.
+   *
+   * @returns {Promise<number>} số thao tác thật sự có hiệu lực
+   */
+  async applyRaiseActs(playerId, acts) {
+    const st = this.state;
+    const p = st.players[playerId];
+    const touched = [];
+    const words = [];
+    let gained = 0;
+
+    for (const a of Array.isArray(acts) ? acts : []) {
+      const id = Number(a?.id);
+      // Đất phải đang mang tên người ấy — chốt chặn trước cả luật bán/cầm
+      if (!Number.isInteger(id) || !BOARD[id] || st.owner.get(id) !== playerId) continue;
+
+      let res = null;
+      if (a.act === 'sell') res = st.sellHouse(playerId, id);
+      else if (a.act === 'mortgage') res = st.mortgage(playerId, id);
+      else if (a.act === 'redeem') res = st.redeem(playerId, id);
+      else if (a.act === 'build') res = st.build(playerId, id);
+      if (!res?.ok) continue;
+
+      touched.push(id);
+      const label = tileLabel(id);
+      if (a.act === 'sell') { gained += res.refund; words.push(`bán một căn ở <b>${label}</b>`); }
+      else if (a.act === 'mortgage') {
+        gained += res.amount;
+        addPressure(st, PRESSURE.mortgage);
+        words.push(`cầm cố <b>${label}</b>`);
+      } else if (a.act === 'redeem') { gained -= res.cost; words.push(`chuộc <b>${label}</b>`); }
+      else { gained -= res.cost; words.push(`xây ở <b>${label}</b>`); }
+    }
+
+    if (touched.length === 0) return 0;
+
+    audio.sfx('coin');
+    this.hud.refresh();
+    this.scene.refresh(st);
+    this.sync();
+    this.hud.flashMoney(playerId, gained > 0);
+    /* Một dòng cho cả loạt, không phải mỗi thao tác một dòng: người thiếu tiền
+       thường cầm liền ba bốn ô, mà cả bàn chỉ cần biết họ xoay được bao nhiêu. */
+    await this.bc.show('XOAY TIỀN',
+      `<b>${p.name}</b> ${words.join(' · ')} —
+       ${gained >= 0 ? `nhận <span class="up">${money(gained)}</span>` : `chi <span class="down">${money(-gained)}</span>`}.`,
+      { ms: 3600 });
+    await this.spot(touched);
+    return touched.length;
+  }
+
+  /**
+   * Con nợ không trả lời kịp (hết giờ, rớt mạng) → ngân hàng cấn nợ hộ.
+   *
+   * Cùng thứ tự với `autoRaise` của thẻ Thời Cuộc: thế chấp ô rẻ nhất trước,
+   * giữ nhà tới cùng. Cấn hết mà vẫn thiếu thì mới tới cửa vỡ nợ.
+   * @returns {Promise<boolean>} false nếu đã phá sản
+   */
+  async autoCover(playerId, amount) {
+    const st = this.state;
+    const p = st.players[playerId];
+    const { ok, mortgaged, sold } = autoRaise(st, playerId, amount);
+    this.hud.refresh();
+    this.scene.refresh(st);
+    this.sync();
+
+    if (mortgaged.length || sold.length) {
+      const gone = [...mortgaged, ...sold].map((id) => tileLabel(id));
+      await this.bc.show('CẤN NỢ',
+        `<b>${p.name}</b> chưa xoay tiền — ngân hàng cấn nợ hộ cho đủ
+         <span class="down">${money(amount)}</span>: ${gone.join(' · ')}.`,
+        { kind: 'bad', ms: 3600 });
+      await this.spot([...mortgaged, ...sold]);
+    }
+    if (ok) return true;
+
+    await this.bc.show('VỠ NỢ',
+      `<b>${p.name}</b> không xoay nổi <span class="down">${money(amount)}</span> — vỡ nợ.`,
+      { kind: 'bad', ms: 4000 });
+    await this.doBankrupt(playerId);
+    return false;
   }
 
   // ------------------------------------------------------------------- tù
@@ -1750,13 +1999,47 @@ export class Game {
 
   // -------------------------------------------------------- quản lý tài sản
 
-  manage() { return this.openManage(this.state.turn).then(() => this.restoreActions()); }
+  /**
+   * Nút "Quản lý tài sản" — mở đúng bảng của **người bấm**.
+   *
+   * Bản online lấy ghế của chính máy này, không lấy `state.turn`: hai con số ấy
+   * lệch nhau khi trọng tài cầm lái hộ một ghế đã rớt mạng, và lúc đó lấy theo
+   * lượt là bày đất người khác ra cho người này bán.
+   */
+  manage() {
+    const seat = this.actingSeat();
+    if (seat < 0) { this.restoreActions(); return Promise.resolve(); }
+    return this.openManage(seat).then(() => this.restoreActions());
+  }
 
-  async openManage(playerId) {
+  /**
+   * Ghế mà các nút trên thanh thao tác nhắm tới: bản online là ghế của chính
+   * máy này, bản một máy là người đang tới lượt (cả bàn dùng chung bàn phím).
+   */
+  actingSeat() {
+    return this.net ? this.net.mySeat : (this.state?.turn ?? -1);
+  }
+
+  /**
+   * @param {number} playerId
+   * @param {?Array} [record] khác `null` ⇒ máy này chỉ đang trả lời hộ một câu
+   *   hỏi xoay tiền: ván gốc nằm ở máy cầm lái, nên mọi thao tác chỉ ghi vào
+   *   đây rồi gửi về đó làm lại. Không phát ảnh chụp, không loan tin — cả hai
+   *   việc ấy là của máy cầm lái, xem `applyRaiseActs`.
+   */
+  async openManage(playerId, record = null) {
     await manageModal(this.state, playerId, (act, id, res) => {
       this.hud.refresh();
       this.scene.refresh(this.state);
       if (!res?.ok) return;
+      if (record) {
+        record.push({ act, id });
+        // Phản hồi tại chỗ cho người đang bấm; loan tin cho cả bàn là việc của
+        // máy cầm lái, sau khi nó làm lại thao tác này trên ván gốc
+        audio.sfx('coin');
+        this.hud.flashMoney(playerId, act === 'sell' || act === 'mortgage');
+        return;
+      }
       const p = this.state.players[playerId];
       const label = tileLabel(id);
       // Người đang quản lý tài sản có hộp thoại che bàn; cái nháy này là cho
@@ -1786,7 +2069,7 @@ export class Game {
     });
     this.hud.refresh();
     this.scene.refresh(this.state);
-    this.sync();
+    if (!record) this.sync();
   }
 
   restoreActions() {
@@ -1969,9 +2252,12 @@ export class Game {
   // --------------------------------------------------------------- phá sản
 
   async declareBankrupt() {
-    const sure = await bankruptModal(this.state, this.state.turn, false);
+    // Bỏ ván là bỏ cơ nghiệp của chính mình — cùng lý do với `manage()`
+    const seat = this.actingSeat();
+    if (seat < 0) { this.restoreActions(); return; }
+    const sure = await bankruptModal(this.state, seat, false);
     if (!sure) { this.restoreActions(); return; }
-    await this.doBankrupt(this.state.turn);
+    await this.doBankrupt(seat);
     if (!this.checkGameOver()) await this.endTurn();
   }
 

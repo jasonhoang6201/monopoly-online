@@ -57,6 +57,25 @@ async function idle(maxMs = 40000) {
   return false;
 }
 
+/**
+ * Chờ tới khi túi tiền của một người bằng đúng `want`.
+ *
+ * Chuỗi vỡ nợ chạy mất gần chục giây (bảng thông báo, pháo hoa, rồi mới tới
+ * lượt ngân hàng trả thay), mà mấy kịch bản ở đây gọi thẳng `payPlayer` chứ
+ * không qua `guard` nên `controller.busy` luôn là false — `idle()` về ngay chứ
+ * không chờ hộ. Đọc số dư đúng lúc nó vừa đổi thì phải hỏi lại từng nhịp.
+ */
+async function untilMoney(seat, want, maxMs = 20000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < maxMs) {
+    const m = await page.evaluate(
+      (i) => window.__monopoly.controller.state.players[i].money, seat).catch(() => null);
+    if (m === want) return true;
+    await page.waitForTimeout(300);
+  }
+  return false;
+}
+
 /** Bấm nút đỏ (cửa phá sản) nếu đang có hộp thoại nào bày ra. */
 async function clickDanger(maxMs = 12000) {
   const t0 = Date.now();
@@ -132,13 +151,20 @@ await page.evaluate(() => {
   c.payPlayer(1, 0, 400);
 });
 await page.waitForTimeout(1400);
+/* Con nợ không phải người đang đi mà vẫn xoay được → chuyền máy cho họ đã,
+   rồi mới tới hộp "THIẾU TIỀN". Xem `Game.ensureFunds`. */
+let eyes = await page.locator('.scrim.show .modal-eyebrow').allTextContents();
+check(eyes.includes('CHUYỀN MÁY'), 'chuyền máy cho con nợ trước khi hỏi xoay tiền');
+await page.locator('.scrim.show button.btn', { hasText: 'Tiếp tục' }).first().click();
+await page.waitForTimeout(900);
 let btns = await page.locator('.scrim.show button.btn').allTextContents();
 log(`  hộp thoại: ${JSON.stringify(btns)}`);
 await clickDanger();                    // "Tuyên bố phá sản"
 await page.waitForTimeout(900);
 await clickDanger();                    // xác nhận "Phá sản"
-await page.waitForTimeout(5000);
-await drain(12000);
+await page.waitForTimeout(900);
+await drain(12000);                     // chuyền máy lại cho người đang đi
+await untilMoney(0, 1400);
 await idle();
 s = await st();
 log(`  Cô Ba bk=${s.p[1].bk} · Bảy Viễn 1000$ → ${s.p[0].m}$`);
