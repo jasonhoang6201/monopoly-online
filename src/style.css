@@ -2422,6 +2422,13 @@ html, body {
   25% { transform: translateX(-3px); }
   75% { transform: translateX(3px); }
 }
+/* Thả bằng phím số: nháy nút, vì lúc ấy chuột không ở đâu gần đây cả */
+#meme-btn.key-hit { animation: meme-hit .22s var(--ease-out-back); }
+@keyframes meme-hit {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.22); filter: brightness(1.35); }
+  100% { transform: scale(1); }
+}
 
 #meme-pop {
   position: absolute; right: -2px; bottom: 40px;
@@ -2476,6 +2483,7 @@ html, body {
 .meme-grid::-webkit-scrollbar-thumb:hover { background: rgba(200, 160, 72, .8); }
 .meme-pick {
   display: block;
+  position: relative;   /* mốc cho số phím ở góc ô */
   padding: 4px;
   background: rgba(74, 36, 26, .5);
   border: 1px solid rgba(200, 160, 72, .3);
@@ -2489,6 +2497,20 @@ html, body {
   border-radius: 6px;
   background: rgba(10, 6, 3, .35);
 }
+/* Số phím tắt, góc trên trái ô. Đặt chìm (nền tối, chữ vàng nhạt) để đọc được
+   mà không át ảnh — nó chỉ cần thấy lúc người ta đi tìm phím. */
+.meme-key {
+  position: absolute; top: 1px; left: 1px;
+  min-width: 13px; padding: 0 3px;
+  border-radius: 5px;
+  background: rgba(10, 6, 3, .82);
+  border: 1px solid rgba(200, 160, 72, .34);
+  color: var(--gold);
+  font-size: 9px; line-height: 13px; text-align: center;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.meme-pick:hover .meme-key { color: var(--gold-light); border-color: var(--gold-light); }
 .meme-pick:hover { transform: translateY(-2px); border-color: var(--gold-light); background: rgba(74, 36, 26, .9); }
 .meme-pick:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
 .meme-pick:disabled { opacity: .34; cursor: not-allowed; transform: none; }

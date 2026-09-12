@@ -9,6 +9,11 @@
  * gửi, đứng vài giây rồi tắt. Bong bóng bám theo quân: quân đang chạy thì bong
  * bóng chạy theo, vì mỗi khung hình đều đọc lại toạ độ quân từ scene.
  *
+ * Mười meme đầu trong `MEMES` còn có phím tắt 1…9 rồi 0: bấm là thả thẳng,
+ * không qua bảng chọn. Phím số không đụng ai — hộp thoại cầm Enter/Esc/Space,
+ * thanh hành động cầm chữ cái — nên phím tắt meme chạy được cả lúc đang có hộp
+ * thoại mở, đúng như nút: meme không theo lượt.
+ *
  * Hạn mức: `MEME_QUOTA` lần trong `MEME_WINDOW_MS`, tính theo cửa sổ trượt —
  * mỗi lần gửi tự hồi lại sau đúng một cửa sổ, không phải chờ tới mốc chẵn phút.
  * Cần hạn vì đây là thứ duy nhất trong ván không theo lượt: không chặn thì một
@@ -16,6 +21,9 @@
  */
 import { MEMES, MEME_BY_ID } from '../data/memes.js';
 import { audio } from '../audio/audio.js';
+
+/** Bao nhiêu meme đầu bảng được gán phím số. Mười vì bàn phím có mười phím số. */
+export const MEME_HOTKEYS = 10;
 
 export const MEME_QUOTA = 6;
 /* Cửa sổ ngắn hơn bong bóng nhiều (3,6s × 6 = 21,6s ≈ một cửa sổ), nên hạn mức
@@ -27,6 +35,15 @@ export const MEME_WINDOW_MS = 20000;
 const SHOW_MS = 3600;
 /** Thời gian mờ dần — phải khớp với `transition` của `.meme-bub` trong style.css. */
 const FADE_MS = 240;
+
+/* Đang gõ tên phòng hay số tiền trong hộp thoại thì phím số là chữ người ta
+   nhập, không phải lệnh thả meme. */
+const isTyping = (el) => el instanceof HTMLInputElement
+  || el instanceof HTMLTextAreaElement
+  || (el instanceof HTMLElement && el.isContentEditable);
+
+/** Phím số → chỗ trong `MEMES`: '1'→0 … '9'→8, '0'→9. Phím khác trả về -1. */
+const slotOfKey = (key) => (/^[0-9]$/.test(key) ? (key === '0' ? 9 : Number(key) - 1) : -1);
 
 /** Bỏ khỏi danh sách mốc thời gian những lần đã ra ngoài cửa sổ. */
 const prune = (stamps, now) => {
@@ -86,12 +103,19 @@ export class MemeDeck {
     this.pop = document.createElement('div');
     this.pop.id = 'meme-pop';
     this.pop.hidden = true;
+    /* Số phím dán ngay lên ô: không có nó thì phím tắt chỉ người đọc mã mới
+       biết. Mười ô đầu ứng với 1…9 rồi 0, đúng thứ tự phím trên bàn phím. */
     this.pop.innerHTML = `
-      <div class="meme-grid">${MEMES.map((m) => `
+      <div class="meme-grid">${MEMES.map((m, i) => {
+        const key = i < MEME_HOTKEYS ? `${(i + 1) % 10}` : '';
+        const hint = key ? ` (phím ${key})` : '';
+        return `
         <button class="meme-pick" data-id="${m.id}" type="button"
-                title="${m.label}" aria-label="${m.label}">
+                title="${m.label}${hint}" aria-label="${m.label}${hint}">
           <img src="${m.url}" alt="${m.label}" draggable="false">
-        </button>`).join('')}
+          ${key ? `<span class="meme-key" aria-hidden="true">${key}</span>` : ''}
+        </button>`;
+      }).join('')}
       </div>
       <div class="meme-quota"></div>`;
     this.btn.parentElement.appendChild(this.pop);
@@ -107,6 +131,42 @@ export class MemeDeck {
     // để bấm thẳng từ bảng meme sang một nút khác vẫn ăn ngay lần đầu.
     document.addEventListener('click', () => this.close());
     window.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.close(); });
+    window.addEventListener('keydown', (e) => this.#onKey(e));
+  }
+
+  /**
+   * Phím 1…9, 0 thả thẳng meme thứ 1…10, không cần mở bảng chọn trước.
+   *
+   * Không đòi bảng phải mở: bắt mở bảng rồi mới nhận phím thì phím tắt chẳng
+   * nhanh hơn cú bấm chuột nào cả. Chặn `repeat` vì giữ phím sẽ ngốn sạch hạn
+   * mức trong một nhịp; `preventDefault` để phím số không kích luôn nút đang
+   * giữ focus phía sau.
+   */
+  #onKey(e) {
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+    if (isTyping(e.target)) return;
+    const slot = slotOfKey(e.key);
+    if (slot < 0 || slot >= MEME_HOTKEYS) return;
+    // Nút còn ẩn nghĩa là chưa vào ván (đang ở sảnh) — chưa có ghế để thả.
+    if (!this.state || this.btn?.hidden) return;
+    const m = MEMES[slot];
+    if (!m) return;
+    e.preventDefault();
+    // Nháy sau khi gửi, vì hết lượt thì `#fire` cho nút lắc một cái — hai hoạt
+    // cảnh cùng đặt trên một nút thì cái sau đè mất cái trước.
+    if (this.#fire(m.id)) this.#hit();
+  }
+
+  /**
+   * Nháy nút meme một cái. Bong bóng mọc trên đầu quân cờ, xa chỗ tay đang đặt;
+   * không nháy gì ở đây thì bấm phím xong không biết nó có ăn hay không.
+   */
+  #hit() {
+    if (!this.btn) return;
+    this.btn.classList.remove('key-hit');
+    void this.btn.offsetWidth;
+    this.btn.classList.add('key-hit');
+    setTimeout(() => this.btn.classList.remove('key-hit'), 220);
   }
 
   toggle() { if (this.pop?.hidden) this.open(); else this.close(); }
@@ -150,9 +210,10 @@ export class MemeDeck {
 
   // ------------------------------------------------------------ gửi / nhận
 
+  /** @returns {boolean} có thật sự gửi đi hay không. */
   #fire(id) {
     const seat = this.seatOf();
-    if (seat == null || seat < 0 || !MEME_BY_ID[id]) return;
+    if (seat == null || seat < 0 || !MEME_BY_ID[id]) return false;
 
     if (this.left() <= 0) {
       // Lắc nút cho biết là bấm có ăn, chỉ là hết lượt
@@ -160,7 +221,7 @@ export class MemeDeck {
       void this.btn.offsetWidth;
       this.btn.classList.add('deny');
       this.#refreshQuota();
-      return;
+      return false;
     }
 
     this.sent.push(Date.now());
@@ -168,6 +229,7 @@ export class MemeDeck {
     this.close();
     this.show(seat, id);
     this.send(id);
+    return true;
   }
 
   /**

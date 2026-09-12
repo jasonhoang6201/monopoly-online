@@ -21,6 +21,10 @@
  * rỗng). Thêm meme mới thì thêm dòng, đừng sửa `id` cũ. Tệp chép vào mà chưa có
  * dòng nào nhận vẫn dùng được: nó xếp cuối, lấy tên tệp làm cả id lẫn nhãn.
  *
+ * Mười dòng đầu ăn phím tắt 1…9 rồi 0 (xem `#onKey` trong `ui/memes.js`), nên
+ * xáo thứ tự mười dòng ấy là đổi luôn phím của người đang chơi quen tay. Thêm
+ * meme mới thì nối vào cuối; muốn nó có phím thì đổi chỗ có chủ đích.
+ *
  * Ảnh gốc đã nén lại bằng gifsicle về cạnh dài tối đa 200px — bong bóng trên
  * bàn rộng nhiều nhất 150px, giữ ảnh 498px chỉ tốn băng thông chứ không nét
  * thêm. Thêm meme mới thì nén trước rồi mới chép vào đây:
@@ -34,6 +38,17 @@
  * dính vệt của khung trước. Gif nào trên 30 khung thì giữ khung chẵn và nhân
  * đôi delay (`-d…` cùng danh sách `#0 #2 #4 …`): ở 150px mắt không thấy khác,
  * tệp nhẹ đi gần một nửa.
+ *
+ * Gif quay từ màn hình điện thoại (nguồn đã là video nén, ~30 khung/giây, trên
+ * 100 khung) thì giữ một trong ba khung, `-d10`, `--colors 48 --lossy=110`:
+ * `meo-yaobaobao` 9,1MB → 583KB, `cat-shake-hand` 1,4MB → 370KB. Bệt màu thêm
+ * không thấy được vì bản gốc đã bệt sẵn.
+ *
+ * Gif dài hơn 4 giây thì cắt bớt đuôi trước khi làm gì khác: bong bóng chỉ
+ * đứng `SHOW_MS` = 3,6 giây (xem `ui/memes.js`), phần sau mốc ấy không ai xem
+ * mà vẫn nằm trong tệp. `meo-dance-2` gốc 10 giây / 20,5MB, cắt còn 120 khung
+ * đầu rồi giữ khung chẵn (`-d7`, 60 khung, 4,2 giây) ra 756KB — giữ đủ 299
+ * khung cùng mức nén thì 1,2MB. Cảnh lặp tại chỗ nên cắt không mất gì.
  */
 
 /**
@@ -50,7 +65,6 @@ const CATALOG = [
   ['jail', 'worry-jail', 'Vô tù'],
   ['fire', 'worry-fire', 'Cháy nhà'],
   ['stab', 'worry-stab', 'Đâm sau lưng'],
-  ['find', 'pepe-find', 'Đi tìm'],
   ['pinch', 'pepe-pinch', 'Nhéo má'],
   ['cute', 'chiikawa', 'Dễ thương'],
   ['broke', 'broke', 'Cháy túi'],
@@ -58,7 +72,10 @@ const CATALOG = [
   ['scream', 'meo-aaa', 'La làng'],
   ['dance', 'meo-dance', 'Quẩy'],
   ['stare', 'meo-surprise', 'Trố mắt'],
-  ['delivery', 'meo-delivery', 'Giao hàng'],
+  ['trend', 'cat-dance-trend', 'Bắt trend'],
+  ['shake', 'cat-shake-hand', 'Bắt tay'],
+  ['yao', 'meo-yaobaobao', 'Yao bao bao'],
+  ['dance2', 'meo-dance-2', 'Quẩy siêu thị'],
 ];
 
 /* Liệt kê đuôi cụ thể thay vì `*`: thư mục còn dính `.DS_Store` của Finder,

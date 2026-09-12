@@ -132,7 +132,9 @@ function wireChrome() {
   window.addEventListener('pointerdown', kick, { capture: true });
   window.addEventListener('keydown', kick, { capture: true });
 
-  // Phím tắt: F toàn màn hình · M tắt nhạc · G bảng meme
+  /* Phím tắt: F toàn màn hình · M tắt nhạc · G bảng meme.
+     Số 1…0 cũng là phím tắt meme, nhưng nằm trong ui/memes.js vì nó cần biết
+     hạn mức và ghế của người bấm. */
   window.addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement) return;
     const k = e.key.toLowerCase();

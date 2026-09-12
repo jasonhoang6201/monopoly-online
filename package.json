@@ -8,7 +8,7 @@
     "dev": "vite --port 5174",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node tests/play-through.mjs && node tests/features.mjs && node tests/endgame.mjs && node tests/jail-debt.mjs && node tests/creditor-paid.mjs && node tests/audio.mjs && node tests/ui-v2.mjs && node tests/events.mjs && node tests/cards.mjs",
+    "test": "node tests/play-through.mjs && node tests/features.mjs && node tests/endgame.mjs && node tests/jail-debt.mjs && node tests/creditor-paid.mjs && node tests/audio.mjs && node tests/ui-v2.mjs && node tests/events.mjs && node tests/cards.mjs && node tests/meme-hotkey.mjs",
     "test:online": "node tests/online.mjs && node tests/rejoin.mjs && node tests/events-online.mjs && node tests/creditor-online.mjs",
     "test:rules": "node tests/endgame.mjs && node tests/jail-debt.mjs && node tests/creditor-paid.mjs",
     "test:audio": "node tests/audio.mjs",
