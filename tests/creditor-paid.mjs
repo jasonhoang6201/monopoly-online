@@ -194,16 +194,16 @@ check(s.p[1].bk === true, 'người góp không nổi thì vỡ nợ');
 check(s.p[2].m === 880, 'người góp còn tiền trả đủ 120$');
 check(s.p[0].m === 1240, 'người rút thẻ nhận đủ cả hai phần góp (240$)');
 
-/* ====== 4. CƯỠNG CHIẾM — NGƯỜI DÙNG THẺ VỠ NỢ LÚC ĐỀN TIỀN ====== */
-log('\n=== 4. CƯỠNG CHIẾM: người dùng thẻ vỡ nợ lúc đền tiền ===');
+/* ====== 4. CƯỠNG CHẾ MUA ĐẤT — NGƯỜI DÙNG THẺ VỠ NỢ LÚC ĐỀN TIỀN ====== */
+log('\n=== 4. CƯỠNG CHẾ MUA ĐẤT: người dùng thẻ vỡ nợ lúc đền tiền ===');
 await reset([1000, 20, 1000]);
 await page.evaluate(() => {
   const c = window.__monopoly.controller;
   const s = c.state;
-  s.owner.set(39, 0);                   // đất của Bảy Viễn, giá thế chấp 200$
+  s.owner.set(39, 0);                   // đất của Bảy Viễn, giá gốc 400$ → đền 500$
   c.hud.refresh(); c.scene.refresh(s);
-  // Cô Ba cưỡng chiếm nhưng chỉ có 20$ và không tài sản → vỡ nợ ngay
-  c.seizeTile(s.players[1], 39, 'CƯỠNG CHIẾM');
+  // Cô Ba cưỡng chế mua nhưng chỉ có 20$ và không tài sản → vỡ nợ ngay
+  c.seizeTile(s.players[1], 39, 'CƯỠNG CHẾ MUA ĐẤT');
 });
 await page.waitForTimeout(2500);
 await clickDanger();
@@ -214,8 +214,8 @@ s = await st();
 const owner39 = Object.fromEntries(s.owner)[39];
 log(`  Cô Ba bk=${s.p[1].bk} · Bảy Viễn 1000$ → ${s.p[0].m}$ · chủ ô 39 = ${owner39}`);
 check(s.p[1].bk === true, 'người dùng thẻ vỡ nợ');
-check(s.p[0].m === 1200, 'chủ đất nhận đủ 200$ tiền đền');
-check(owner39 === 0, 'đất không sang tên khi người cưỡng chiếm vỡ nợ');
+check(s.p[0].m === 1500, 'chủ đất nhận đủ 500$ tiền đền (giá gốc +25%)');
+check(owner39 === 0, 'đất không sang tên khi người cưỡng chế mua vỡ nợ');
 
 /* ====== 5. ĐẤU GIÁ BÁN LẠI — NGƯỜI THẮNG VỠ NỢ, CHỦ CŨ VẪN NHẬN ====== */
 log('\n=== 5. ĐẤU GIÁ: người thắng vỡ nợ, chủ cũ vẫn nhận tiền ===');

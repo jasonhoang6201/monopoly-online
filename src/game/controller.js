@@ -4,7 +4,7 @@
  * và giao diện (HTML).
  */
 import {
-  BOARD, money, tileLabel, GO_LANDING_MULT, JAIL_FINE, JAIL_TILE, GOTO_JAIL_TILE,
+  BOARD, GROUPS, money, tileLabel, GO_LANDING_MULT, JAIL_FINE, JAIL_TILE, GOTO_JAIL_TILE,
   START_MONEY,
   MAX_JAIL_TURNS,
 } from '../data/board.js';
@@ -14,9 +14,10 @@ import {
 } from '../core/events.js';
 import {
   cardType, isKeepable, demolishLevels, usableCard, useReason, cardTargets,
-  othersOf, shareEach, repairBill, seizePrice, forcedSaleRefund, resumePrice,
+  demolishGroups, demolishPicks,
+  othersOf, shareEach, repairBill, seizePrice, resumePrice,
 } from '../core/cards.js';
-import { cardOf, CARD_KINDS } from '../data/cards.js';
+import { cardOf, CARD_KINDS, cardName, cardEffect } from '../data/cards.js';
 import { inventoryModal } from '../ui/inventory.js';
 import { EventRunner } from './eventRunner.js';
 import { snapshot, fromSnapshot, applySnapshot } from '../core/serialize.js';
@@ -35,6 +36,7 @@ import {
   eventCardModal, bracePromptModal, firePromptModal, auctionBidModal,
 } from '../ui/eventModals.js';
 import { pickTileOnBoard, litTiles } from '../ui/tilePicker.js';
+import { pickGroupModal } from '../ui/groupPicker.js';
 import { EVENT_BY_ID } from '../data/events.js';
 import { audio } from '../audio/audio.js';
 import { MemeDeck } from '../ui/memes.js';
@@ -505,12 +507,17 @@ export class Game {
     }
     if (name === 'ev-fire') {
       audio.sfx('turn');
-      return litTiles(this.scene, [data.plan.tileId],
-        () => firePromptModal(this.state, this.net.mySeat, data.plan, ms));
+      return litTiles(this.scene, data.lots.map((l) => l.id),
+        () => firePromptModal(this.state, this.net.mySeat, data.lots, ms));
     }
     if (name === 'ev-pick') {
       audio.sfx('turn');
       return this.pickTile(data.ids, data.text, ms);
+    }
+    if (name === 'ev-group') {
+      audio.sfx('turn');
+      return litTiles(this.scene, data.ids,
+        () => pickGroupModal(this.state, data, ms));
     }
     if (name === 'ev-bid') {
       audio.sfx('turn');
@@ -1259,17 +1266,15 @@ export class Game {
   async keepCard(p, kind, drawn, title) {
     const st = this.state;
     const meta = CARD_KINDS[cardType(drawn.card)];
+    const name = cardName(drawn.card);
     await cardModal(kind, drawn.card, {
-      note: `<b>${meta.sigil} ${meta.name}</b> — cất vào túi, khi nào thấy đúng lúc
-             thì mở <b>Túi thẻ</b> ra dùng.`,
+      note: `<b>${meta.sigil} ${name}</b> — ${cardEffect(drawn.card)}`,
       label: 'Cất vào túi',
     });
     st.takeCard(p.id, kind, drawn.index);
     this.hud.refresh();
     this.sync();
-    await this.bc.show(title,
-      `<b>${p.name}</b> cất được <b>${meta.name}</b> vào túi — lá này rời khỏi bộ bài
-       cho tới khi có người xài tới.`);
+    await this.bc.show(title, `<b>${p.name}</b> cất được <b>${name}</b> vào túi.`);
   }
 
   /** Mở túi thẻ của người đang đi; chọn một tấm thì dùng luôn tấm ấy. */
@@ -1309,10 +1314,11 @@ export class Game {
     this.hud.refresh();
     this.sync();
 
-    const title = CARD_KINDS[cardType(card)]?.name ?? 'THẺ';
+    const title = cardName(card);
     switch (cardType(card)) {
       case 'jail-free':     return this.useJailCard(false);
       case 'resume-random': return this.resumeRandom(p, card, title);
+      case 'demolish':      return this.demolishInGroup(p, card, title);
       default:              return this.strikeWithPick(p, card, title);
     }
   }
@@ -1328,8 +1334,8 @@ export class Game {
   }
 
   /**
-   * Ba thẻ đụng thẳng vào nhà đất người khác: ép bán nhà, dỡ nhà, cưỡng chiếm
-   * — và thẻ giải toả chỉ định.
+   * Hai thẻ bắt người dùng tự chọn **một ô**: cưỡng chế mua và giải toả chỉ
+   * định. (Thẻ dỡ nhà chọn tới mức khu — xem `demolishInGroup`.)
    *
    * Người dùng thẻ tự chọn mục tiêu; đây mới là chỗ đắt giá, và cũng là chỗ ép
    * đất đổi chủ mà không cần đối phương gật đầu. Hỏi qua `events.askOne` nên
@@ -1341,27 +1347,12 @@ export class Game {
     const ids = cardTargets(st, card, p.id);
     if (ids.length === 0) return;   // bàn vừa đổi thế giữa chừng
     const type = cardType(card);
-    const levels = demolishLevels(card);
 
     const text = {
-      'force-sell': {
-        eyebrow: 'PHÁT MÃI NHÀ CỬA',
-        title: 'Ép ai bán nhà?',
-        sub: 'Ô bạn chọn bị <b>dỡ sạch nhà cửa</b>; chủ đất chỉ nhận lại nửa giá xây.',
-        note: 'Chỉ chọn được ô đang có nhà của người khác.',
-        confirm: 'Chốt ô này',
-      },
-      demolish: {
-        eyebrow: 'DỠ NHÀ LẤN LỘ GIỚI',
-        title: `Dỡ ${levels} cấp nhà ở ô nào?`,
-        sub: `Ô bạn chọn bị <b>hạ ${levels} cấp nhà</b>, chủ đất không được đền một đồng nào.`,
-        note: 'Chỉ chọn được ô đang có nhà của người khác.',
-        confirm: 'Chốt ô này',
-      },
       seize: {
-        eyebrow: 'CƯỠNG CHIẾM ĐỊA GIỚI',
+        eyebrow: 'CƯỠNG CHẾ MUA ĐẤT',
         title: 'Lấy lô đất nào?',
-        sub: 'Lô bạn chọn <b>sang tên cho bạn</b> ngay, chủ cũ chỉ được đền đúng giá thế chấp.',
+        sub: 'Lô bạn chọn <b>sang tên cho bạn</b> ngay, chủ cũ nhận <b>giá gốc +25%</b>.',
         note: 'Chỉ lô đất trống, chưa thế chấp, và bạn phải đủ tiền mặt trả tiền đền.',
         confirm: 'Lấy lô này',
       },
@@ -1390,10 +1381,60 @@ export class Game {
     // Đất có thể vừa đổi chủ trong lúc hỏi (người kia phá sản) — soát lại
     if (!cardTargets(st, card, p.id).includes(tileId)) return;
 
-    if (type === 'force-sell') return this.forceSellHouses(p, tileId, title);
-    if (type === 'demolish') return this.demolishHouse(p, tileId, levels, title);
     if (type === 'resume') return this.resumeTile(p, tileId, card, title);
     return this.seizeTile(p, tileId, title);
+  }
+
+  /**
+   * Thẻ dỡ nhà: người dùng chỉ chọn **khu màu**, bàn cờ bốc thăm ô.
+   *
+   * Chọn thẳng một ô thì tấm thẻ luôn rơi đúng lô đắt nhất của người dẫn đầu,
+   * lần nào cũng vậy. Chọn khu rồi bốc thăm thì vẫn nhắm được vào ai, nhưng
+   * nhắm vào chỗ nào là chuyện hên xui — và người bị dỡ có cớ để rải nhà ra
+   * nhiều ô thay vì dồn hết vào một lô.
+   */
+  async demolishInGroup(p, card, title) {
+    const st = this.state;
+    const groups = demolishGroups(st, card, p.id);
+    if (groups.length === 0) return;
+    const ids = cardTargets(st, card, p.id);
+    const levels = demolishLevels(card);
+    const data = { groups, ids, levels };
+
+    const group = await this.events.askOne({
+      seat: p.id,
+      name: 'ev-group',
+      data,
+      local: () => litTiles(this.scene, ids, () => pickGroupModal(st, data, this.events.localMs)),
+      // Hết giờ / bỏ bàn: lấy khu đầu bảng, khu rẻ nhất trong số chọn được
+      fallback: groups[0],
+      note: 'họ vừa lôi ra thẻ dỡ nhà',
+    });
+    const key = groups.includes(group) ? group : groups[0];
+
+    // Bàn có thể vừa đổi thế trong lúc hỏi (người kia vỡ nợ) — soát lại từ đầu
+    if (!demolishGroups(st, card, p.id).includes(key)) return;
+    const { candidates, hits } = demolishPicks(st, card, p.id, key);
+    if (hits.length === 0) return;
+
+    await this.bc.show(title,
+      `<b>${p.name}</b> nhắm vào khu <b>${GROUPS[key].name}</b> —
+       bàn cờ đang bốc thăm giữa <b>${candidates.length}</b> ô.`, { kind: 'bad', ms: 2200 });
+
+    /* Bốc thăm từng ô một, quay xong ô nào dỡ ô ấy: quay cả hai rồi mới dỡ thì
+       người xem không biết cấp nhà vừa mất là của vòng quay nào. Ô đã bốc rồi
+       thì rời khỏi vòng quay sau, đúng như bốc thăm không hoàn lại. */
+    let wheel = [...candidates];
+    for (const hit of hits) {
+      if (wheel.length > 1) {
+        this.netEmit('spin', { ids: wheel, tileId: hit.id });
+        await this.scene.spinTiles(wheel, hit.id);
+      }
+      wheel = wheel.filter((id) => id !== hit.id);
+      if (st.housesOn(hit.id) === 0) continue;   // ô vừa đổi chủ hoặc đã bị dỡ sạch
+      await this.demolishHouse(p, hit.id, hit.levels, title);
+    }
+    this.scene.highlightTile(p.pos, p.token.color);
   }
 
   /**
@@ -1419,25 +1460,7 @@ export class Game {
     await this.resumeTile(p, tileId, card, title);
   }
 
-  /** Ép bán: nhà trên ô về hết kho ngân hàng, chủ đất nhận nửa giá xây. */
-  async forceSellHouses(p, tileId, title) {
-    const st = this.state;
-    const owner = st.ownerOf(tileId);
-    const refund = forcedSaleRefund(st, tileId);
-    const levels = st.clearHouses(tileId);
-
-    audio.sfx('bankrupt');
-    this.hud.refresh();
-    this.scene.refresh(st);
-    this.sync();
-    await this.bc.show(title,
-      `<b>${p.name}</b> ép <b>${owner.name}</b> phát mãi <b>${levels} cấp nhà</b>
-       ở <b>${tileLabel(tileId)}</b> — chỉ được lại nửa giá xây.`, { kind: 'bad' });
-    await this.spot([tileId]);
-    await this.receiveFromBank(owner.id, refund);
-  }
-
-  /** Dỡ nhà: mất mấy cấp, không đền bù — nặng tay hơn ép bán đúng ở chỗ đó. */
+  /** Dỡ nhà một ô: mất mấy cấp, không đền bù đồng nào. */
   async demolishHouse(p, tileId, levels, title) {
     const st = this.state;
     const owner = st.ownerOf(tileId);
@@ -1493,15 +1516,15 @@ export class Game {
     });
   }
 
-  /** Cưỡng chiếm: lô đất sang tên, chủ cũ nhận đúng giá thế chấp. */
+  /** Cưỡng chế mua: lô đất sang tên, chủ cũ nhận giá gốc +25%. */
   async seizeTile(p, tileId, title) {
     const st = this.state;
     const owner = st.ownerOf(tileId);
     const price = seizePrice(tileId);
 
     await this.bc.show(title,
-      `<b>${p.name}</b> cưỡng chiếm <b>${tileLabel(tileId)}</b> của <b>${owner.name}</b>,
-       đền <span class="down">${money(price)}</span> theo giá thế chấp.`, { kind: 'trade' });
+      `<b>${p.name}</b> cưỡng chế mua <b>${tileLabel(tileId)}</b> của <b>${owner.name}</b>,
+       trả <span class="down">${money(price)}</span> — giá gốc +25%.`, { kind: 'trade' });
     await this.spot([tileId]);
     // Trả tiền đền trước: người dùng thẻ vỡ nợ ngay tại đây thì đất không đi đâu cả
     if (!(await this.payPlayer(p.id, owner.id, price))) return;

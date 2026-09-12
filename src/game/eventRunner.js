@@ -87,7 +87,7 @@ export class EventRunner {
       case 'dong-dat':
         return `Khu <b>${GROUPS[plan.group].name}</b> — ${plan.tiles.length} ô có nhà.`;
       case 'hoa-hoan':
-        return `<b>${tileLabel(plan.tileId)}</b> của ${who(plan.seat)}.`;
+        return `Khu <b>${GROUPS[plan.group].name}</b> — ${plan.tiles.length} ô đang cháy.`;
       case 'mo-duong':
         return `Khu <b>${GROUPS[plan.group].name}</b> lên giá thuê <b>+50%</b>, vĩnh viễn.`;
       case 'trung-thu':
@@ -276,41 +276,64 @@ export class EventRunner {
    */
   collapse(tileId) { this.state.demolish(tileId); }
 
-  /** Hoả hoạn: cháy sạch một ô, trừ khi chủ thuê phu chữa cháy. */
-  async fire(card, plan) {
+  /**
+   * Hoả hoạn: cả một khu bốc thăm trúng cùng cháy.
+   *
+   * Hỏi **theo chủ đất** chứ không theo ô, y như động đất: một người có ba ô
+   * trong khu thì chỉ mở một hộp thoại, trả một khoản, giữ cả ba. Không chữa
+   * thì mỗi ô mất nửa số nhà đang đứng trên đó, làm tròn xuống.
+   */
+  async fire(_card, plan) {
     const st = this.state;
-    const p = st.players[plan.seat];
-    const keep = plan.houses === 5 ? 2 : Math.floor(plan.houses / 2);
+    await this.g.spot(plan.tiles.map((l) => l.id));
 
-    await this.g.spot([plan.tileId]);
+    // Gom theo chủ đất; bỏ qua ô đã đổi chủ hoặc chủ đã vỡ nợ từ lúc lập kế hoạch
+    const bySeat = new Map();
+    for (const lot of plan.tiles) {
+      if (st.owner.get(lot.id) !== lot.seat || st.players[lot.seat].bankrupt) continue;
+      if (!bySeat.has(lot.seat)) bySeat.set(lot.seat, []);
+      bySeat.get(lot.seat).push(lot);
+    }
 
-    const answer = await this.askOne({
-      seat: plan.seat,
+    const answers = await this.askMany([...bySeat].map(([seat, lots]) => ({
+      seat,
       name: 'ev-fire',
-      data: { plan },
-      local: () => litTiles(this.g.scene, [plan.tileId],
-        () => firePromptModal(st, plan.seat, plan, this.localMs)),
+      data: { lots },
+      local: () => litTiles(this.g.scene, lots.map((l) => l.id),
+        () => firePromptModal(st, seat, lots, this.localMs)),
       fallback: null,
       note: 'dãy phố của họ đang cháy',
-    });
+    })));
 
-    const saved = answer === 'save' && p.money >= plan.save;
-    if (saved) await this.g.payBank(plan.seat, plan.save);
+    for (const [seat, lots] of bySeat) {
+      const p = st.players[seat];
+      const total = lots.reduce((sum, l) => sum + l.save, 0);
+      // Chốt lại ở máy cầm lái: câu trả lời gửi từ xa không được tin suông
+      if (answers.get(seat) === 'save' && p.money >= total) {
+        await this.g.bc.show('DẬP LỬA KỊP',
+          `<b>${p.name}</b> trả <span class="down">${money(total)}</span> cho phu chữa cháy —
+           nhà cửa ở ${lots.map((l) => tileShortLabel(l.id)).join(', ')} còn nguyên.`);
+        await this.g.payBank(seat, total);
+        continue;
+      }
 
-    // Đưa ô về đúng số nhà còn lại, phần thiếu trả hết về kho
-    const target = saved ? keep : 0;
-    while (st.housesOn(plan.tileId) > target) this.collapse(plan.tileId);
-
-    audio.sfx('bankrupt');
-    this.g.hud.refresh();
-    this.g.scene.refresh(st);
-    this.g.sync();
-    await this.g.bc.show(saved ? 'CHỮA CHÁY KỊP' : 'CHÁY RỤI',
-      saved
-        ? `<b>${p.name}</b> trả <span class="down">${money(plan.save)}</span> cho phu chữa cháy,
-           giữ lại <b>${keep} căn</b> ở ${tileShortLabel(plan.tileId)}.`
-        : `<b>${tileLabel(plan.tileId)}</b> cháy rụi — <b>${p.name}</b> mất trắng toàn bộ nhà cửa trên ô này.`,
-      { kind: 'bad', ms: 4600 });
+      let gone = 0;
+      for (const lot of lots) {
+        for (let i = 0; i < lot.lose && st.housesOn(lot.id) > 0; i++) {
+          this.collapse(lot.id);
+          gone += 1;
+        }
+      }
+      audio.sfx('bankrupt');
+      this.g.hud.refresh();
+      this.g.scene.refresh(st);
+      this.g.sync();
+      await this.g.bc.show('CHÁY NHÀ',
+        `<b>${p.name}</b> để mặc lửa cháy — mất <b>${gone} cấp nhà</b> ở
+         ${lots.map((l) => tileShortLabel(l.id)).join(', ')}, không đền bù.`,
+        { kind: 'bad', ms: 4600 });
+      await this.g.spot(lots.map((l) => l.id), 1600);
+    }
   }
 
   /** Mất giấy tờ: mỗi người tự chọn ô nào của mình chịu treo. */

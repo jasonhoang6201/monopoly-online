@@ -103,29 +103,35 @@ export function bracePromptModal(state, playerId, lots, ms = 0) {
   return pr;
 }
 
-/** Hoả hoạn: cứu một nửa số nhà bằng tiền thuê phu chữa cháy, hoặc mất sạch. */
-export function firePromptModal(state, playerId, plan, ms = 0) {
+/**
+ * Hoả hoạn: trả tiền phu chữa cháy thì cả mấy ô đang cháy của mình giữ nguyên
+ * nhà, để mặc thì mỗi ô mất nửa số nhà (đã tính sẵn trong `lose`).
+ *
+ * @param {Array<{id:number,houses:number,lose:number,save:number}>} lots
+ */
+export function firePromptModal(state, playerId, lots, ms = 0) {
   const p = state.players[playerId];
-  const keep = plan.houses === 5 ? 2 : Math.floor(plan.houses / 2);
+  const total = lots.reduce((s, l) => s + l.save, 0);
+  const losing = lots.reduce((s, l) => s + l.lose, 0);
   let ticker = 0;
 
   const pr = openModal({
     eyebrow: 'HOẢ HOẠN',
     title: 'Thuê phu chữa cháy?',
-    sub: `Để mặc thì cháy sạch nhà trên ô này. Chữa cháy thì giữ lại được
-          <b>${keep} căn</b>. Bạn đang có ${money(p.money)}.`,
-    body: `${tileRow(plan.tileId,
-      `Đang có ${plan.houses === 5 ? 'khách sạn' : `${plan.houses} nhà`} · chữa cháy ${money(plan.save)}`)}
-      <div class="trade-summary">Không chữa thì mất trắng
-        <b>${plan.houses === 5 ? 'khách sạn' : `${plan.houses} căn`}</b>.</div>
+    sub: `Dập được lửa thì nhà cửa còn nguyên. Để mặc thì mất
+          <b>${losing} cấp nhà</b>, không đền bù. Bạn đang có ${money(p.money)}.`,
+    body: `${lots.map((l) => tileRow(l.id,
+      `Đang có ${l.houses === 5 ? 'khách sạn' : `${l.houses} nhà`} · cháy mất
+       ${l.lose} cấp · chữa cháy ${money(l.save)}`)).join('')}
+      <div class="trade-summary">Chữa cháy tất cả: <b>${money(total)}</b></div>
       ${PEEK_HINT}`,
     dismissible: false,
     buttons: [
-      { label: `Chữa cháy ${money(plan.save)}`, value: 'save', cls: 'btn-gold', disabled: p.money < plan.save },
+      { label: `Chữa cháy ${money(total)}`, value: 'save', cls: 'btn-gold', disabled: p.money < total },
       { label: 'Để mặc nó cháy', value: null, cls: 'btn-danger' },
     ],
     onMount: (body, close) => {
-      if (ms) ticker = attachTimer(body, ms, close, null, 'để quyết định — quá hạn thì cháy sạch.');
+      if (ms) ticker = attachTimer(body, ms, close, null, 'để quyết định — quá hạn thì cứ để cháy.');
     },
   });
   pr.finally(() => clearInterval(ticker));

@@ -1603,6 +1603,36 @@ html, body {
 .bag-why { font-size: 11px; color: #FF8A7A; }
 .bag-use { flex: none; }
 
+/* ------------------------------------------------------------
+   Chọn khu màu — thẻ dỡ nhà nhắm tới cả khu chứ không tới từng ô
+   ------------------------------------------------------------ */
+.grp-list { display: flex; flex-direction: column; gap: 8px; }
+.grp-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 11px 12px; border-radius: 9px; text-align: left;
+  background: rgba(20, 14, 9, .38);
+  border: 1px solid rgba(200, 160, 72, .28);
+  color: inherit; font: inherit; cursor: pointer;
+  transition: background .16s, border-color .16s, transform .1s;
+}
+.grp-row:hover { background: rgba(200, 160, 72, .16); border-color: rgba(200, 160, 72, .6); }
+.grp-row:active { transform: translateY(1px); }
+/* Vệt màu đúng bằng màu in trên đầu ô — nhận ra khu mà khỏi đọc tên */
+.grp-swatch {
+  flex: none; width: 14px; height: 34px; border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35);
+}
+.grp-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.grp-name {
+  font-family: var(--display); font-size: 13px; letter-spacing: .04em;
+  color: var(--paper);
+}
+.grp-meta { font-size: 11.5px; line-height: 1.45; color: var(--paper-deep); opacity: .85; }
+.grp-go {
+  flex: none; font-family: var(--display); font-size: 11px;
+  letter-spacing: .18em; color: var(--gold-light);
+}
+
 /* Dòng nói rõ thẻ này rơi vào ai, vào ô nào — nhỏ hơn lời thẻ một bậc */
 .fate-note {
   margin-top: 12px; padding-top: 10px;

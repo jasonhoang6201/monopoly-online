@@ -7,23 +7,26 @@
  * dùng được chưa (kèm lý do nếu chưa).
  */
 import { openModal } from './modal.js';
-import { CARD_KINDS, DECK_META } from '../data/cards.js';
+import { CARD_KINDS, DECK_META, cardName, cardEffect } from '../data/cards.js';
 import { inventoryOf } from '../core/cards.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-/** Một dòng thẻ trong túi. */
+/**
+ * Một dòng thẻ trong túi: tên thẻ và **công dụng**, không in lại lời văn bối
+ * cảnh trên mặt thẻ — người chơi mở túi ra là để quyết dùng hay không.
+ */
 function cardRow(item) {
-  const meta = CARD_KINDS[item.card.type] ?? { name: 'Thẻ', sigil: '✦' };
+  const meta = CARD_KINDS[item.card.type] ?? { sigil: '✦' };
   const deck = DECK_META[item.ref.kind];
   return `
     <div class="bag-row${item.ok ? '' : ' off'}">
       <span class="bag-sigil" style="color:${deck.accent}">${meta.sigil}</span>
       <span class="bag-main">
-        <span class="bag-name">${esc(meta.name)}
+        <span class="bag-name">${esc(cardName(item.card))}
           <i style="color:${deck.accent}">${deck.title}</i></span>
-        <span class="bag-text">${esc(item.card.text.replace(/\s+/g, ' ').trim())}</span>
+        <span class="bag-text">${esc(cardEffect(item.card))}</span>
         ${item.ok ? '' : `<span class="bag-why">${esc(item.reason)}</span>`}
       </span>
       <button type="button" class="btn ${item.ok ? 'btn-gold' : 'btn-ghost'} bag-use"
@@ -52,7 +55,7 @@ export function inventoryModal(state, playerId) {
     wide: true,
     body: items.length
       ? `<div class="bag-list">${items.map(cardRow).join('')}</div>`
-      : `<div class="trade-summary">Vé ra tù, lệnh dỡ nhà, cưỡng chiếm, giải toả —
+      : `<div class="trade-summary">Vé ra tù, dỡ nhà, cưỡng chế mua đất, giải toả —
            mấy thẻ ấy không nổ ngay lúc bóc mà nằm chờ trong túi cho tới khi bạn
            thấy đúng lúc.</div>`,
     buttons: [{ label: 'Đóng', value: null, cls: 'btn-ghost' }],

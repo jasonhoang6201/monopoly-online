@@ -11,8 +11,11 @@
  *      đất" khi cả bàn chưa ai có đất thì bày ra chỉ tổ hụt hẫng.
  *   2. Người rút được nhắm vào những ô nào (`cardTargets`).
  */
-import { BOARD } from '../data/board.js';
+import { BOARD, GROUPS, GROUP_TILES } from '../data/board.js';
 import { KEEPABLE, cardOf } from '../data/cards.js';
+
+/** Tiền đền khi cưỡng chế mua đất: giá gốc cộng thêm 25%. */
+export const SEIZE_RATE = 1.25;
 
 /** Loại thẻ, mặc định là cộng/trừ tiền với ngân hàng. */
 export function cardType(card) { return card.type ?? 'bank'; }
@@ -65,17 +68,16 @@ export function cardTargets(st, card, seat) {
     .map(([id]) => id);
 
   switch (cardType(card)) {
-    // Có nhà mới phá được, mới ép bán được
-    case 'force-sell':
+    // Có nhà mới dỡ được
     case 'demolish':
       return foreign.filter((id) => st.housesOn(id) > 0).sort((a, b) => a - b);
 
-    /* Cưỡng chiếm: chỉ lô đất trống (nhà cửa không sang tên theo, y như luật
+    /* Cưỡng chế mua: chỉ lô đất trống (nhà cửa không sang tên theo, y như luật
        giao dịch), và chỉ lô mà người rút **trả nổi tiền đền** bằng tiền mặt —
        thẻ may mắn mà đẩy chính người rút tới chỗ phá sản thì hỏng. */
     case 'seize':
       return foreign
-        .filter((id) => st.housesOn(id) === 0 && st.players[seat].money >= BOARD[id].mortgage)
+        .filter((id) => st.housesOn(id) === 0 && st.players[seat].money >= seizePrice(id))
         .sort((a, b) => a - b);
 
     /* Giải toả nhắm được vào **mọi** lô đang có chủ, kể cả đất của chính người
@@ -94,21 +96,69 @@ export function cardTargets(st, card, seat) {
   }
 }
 
+/**
+ * Những **khu màu** thẻ dỡ nhà nhắm được: khu nào có ít nhất một ô của người
+ * khác đang có nhà.
+ *
+ * Người dùng thẻ chỉ chọn tới mức khu, còn ô nào lãnh đủ thì bàn cờ bốc thăm.
+ * Cho chọn thẳng một ô thì lần nào thẻ cũng rơi đúng lô đắt nhất của người dẫn
+ * đầu — đoán trước được thì hết còn là rủi ro. Chọn khu rồi bốc thăm thì vẫn
+ * nhắm được vào ai, nhưng trúng ô nào là chuyện hên xui, và người bị dỡ có cớ
+ * để rải nhà ra nhiều ô thay vì dồn hết vào một lô.
+ *
+ * @returns {string[]} khoá khu màu, theo đúng thứ tự trong `GROUPS`
+ */
+export function demolishGroups(st, card, seat) {
+  const ids = new Set(cardTargets(st, card, seat));
+  return Object.keys(GROUPS).filter((g) => GROUP_TILES[g].some((id) => ids.has(id)));
+}
+
+/**
+ * Bốc thăm xem trong khu ấy ô nào bị dỡ, mỗi ô mấy cấp.
+ *
+ * Thẻ dỡ 2 nhà rải vào **hai ô khác nhau** khi khu còn đủ ô có nhà — dỡ hai
+ * cấp cùng một ô thì gần như san phẳng một lô, mà thẻ này sinh ra để chặn đà
+ * xây chứ không phải để xoá sổ. Khu chỉ còn một ô có nhà thì ô ấy chịu cả hai
+ * cấp, vì không còn chỗ nào khác để rải.
+ *
+ * @param {?()=>number} rand nguồn ngẫu nhiên — máy cầm lái gieo đúng một lần
+ * @returns {{candidates:number[], hits:Array<{id:number, levels:number}>}}
+ */
+export function demolishPicks(st, card, seat, group, rand = Math.random) {
+  const ids = new Set(cardTargets(st, card, seat));
+  const candidates = GROUP_TILES[group].filter((id) => ids.has(id));
+  const want = demolishLevels(card);
+  const hits = [];
+  const pool = [...candidates];
+
+  for (let left = want; left > 0 && pool.length; left--) {
+    const at = Math.floor(rand() * pool.length);
+    const [id] = pool.splice(at, 1);
+    hits.push({ id, levels: 1 });
+  }
+  // Hết ô để rải: dồn số cấp còn thiếu vào ô đã bốc, nhiều nhất là số nhà đang có
+  if (hits.length && hits.length < want) {
+    const extra = want - hits.length;
+    hits[hits.length - 1].levels = Math.min(1 + extra, st.housesOn(hits[hits.length - 1].id));
+  }
+  return { candidates, hits };
+}
+
 /** Tiền đền giải toả — giá gốc cộng thêm phần thiệt hại (mặc định +20%). */
 export function resumePrice(tileId, card) {
   return Math.round(BOARD[tileId].price * (card.rate ?? 1.2));
 }
 
-/** Tiền đền khi cưỡng chiếm — đúng giá thế chấp, tức nửa giá gốc. */
-export function seizePrice(tileId) { return BOARD[tileId].mortgage; }
-
 /**
- * Ép bán nhà: chủ đất nhận nửa giá xây cho **từng cấp** trên ô đó.
- * Khách sạn tính bằng năm cấp, đúng như lúc xây lên.
+ * Tiền đền khi cưỡng chế mua — giá gốc +25%.
+ *
+ * Trước đây chỉ trả đúng giá thế chấp (nửa giá gốc), nên tấm thẻ này gần như
+ * là cướp không: người bị lấy đất mất cả lô lẫn nửa số vốn đã bỏ ra. Trả trên
+ * giá gốc thì đổi chủ vẫn ép được, nhưng người dùng thẻ phải gom đủ tiền mặt,
+ * và người mất đất cầm về nhiều hơn tiền họ đã mua.
  */
-export function forcedSaleRefund(st, tileId) {
-  const levels = st.housesOn(tileId) === 5 ? 5 : st.housesOn(tileId);
-  return Math.floor(BOARD[tileId].house_cost / 2) * levels;
+export function seizePrice(tileId) {
+  return Math.round(BOARD[tileId].price * SEIZE_RATE);
 }
 
 /**
@@ -145,12 +195,10 @@ export function useReason(st, card, seat) {
       return st.players[seat].inJail
         ? { ok: true }
         : { ok: false, reason: 'Chỉ chìa ra được khi đang ngồi Khám Lớn.' };
-    case 'force-sell':
-      return noTarget('Chưa ai xây nhà trên đất của họ.');
     case 'demolish':
-      return noTarget('Chưa có ô nào của người khác có nhà để dỡ.');
+      return noTarget('Chưa có khu nào của người khác có nhà để dỡ.');
     case 'seize':
-      return noTarget('Không có lô đất trống nào bạn đủ tiền mặt đền bù.');
+      return noTarget('Không có lô đất trống nào bạn đủ tiền mặt trả giá gốc +25%.');
     case 'resume':
     case 'resume-random':
       return noTarget('Trên bàn chưa có lô đất trống nào có chủ.');

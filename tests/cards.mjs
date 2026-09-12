@@ -1,6 +1,6 @@
 /**
  * Bộ thẻ CƠ HỘI / KHÍ VẬN sau khi có thêm loại thẻ mới: tiền mừng chia đều,
- * vé ra tù, thuế nhà cửa, và ba thẻ đụng vào nhà đất người khác.
+ * vé ra tù, thuế nhà cửa, và mấy thẻ đụng vào nhà đất người khác.
  *
  * Kiểm luật thuần trước (chạy trong trang, vì `data/board.js` nạp JSON), rồi
  * cho vài thẻ chạy thật trên bàn cờ để chắc phần diễn không vướng.
@@ -76,23 +76,42 @@ const r = await page.evaluate(async () => {
   out.repair = bill.houses === 3 && bill.hotels === 1 && bill.amount === 3 * 25 + 100;
   out.repairSkipsEmpty = !cr.usableCard(st, find(CHEST, 'repair'), 2);
 
-  // Ba thẻ đụng nhà đất: chỉ nhắm được vào người khác
-  const forceSell = cr.cardTargets(st, { type: 'force-sell' }, 0);
-  out.strikeOnlyOthers = forceSell.every((id) => st.owner.get(id) !== 0)
-    && forceSell.every((id) => st.housesOn(id) > 0)
-    && forceSell.includes(brown[0]);
+  // Mấy thẻ đụng nhà đất: chỉ nhắm được vào người khác
+  const strike = cr.cardTargets(st, { type: 'demolish' }, 0);
+  out.strikeOnlyOthers = strike.every((id) => st.owner.get(id) !== 0)
+    && strike.every((id) => st.housesOn(id) > 0)
+    && strike.includes(brown[0]);
   out.ownerCantSelfStrike = cr.cardTargets(st, { type: 'demolish' }, 1).length === 0;
+
+  // Thẻ dỡ nhà chọn tới mức khu, rồi bốc thăm ô trong khu ấy
+  out.demolishGroups = cr.demolishGroups(st, { type: 'demolish' }, 0);
+  const two = cr.demolishPicks(st, { type: 'demolish', levels: 2 }, 0, 'brown');
+  out.demolishTwoTiles = two.hits.length === 2
+    && two.hits.every((h) => h.levels === 1)
+    && new Set(two.hits.map((h) => h.id)).size === 2
+    && two.hits.every((h) => brown.includes(h.id));
+  // Khu chỉ còn một ô có nhà: ô ấy chịu cả hai cấp
+  st.houses.delete(brown[0]);
+  const lone = cr.demolishPicks(st, { type: 'demolish', levels: 2 }, 0, 'brown');
+  out.demolishLone = lone.hits.length === 1 && lone.hits[0].id === brown[1]
+    && lone.hits[0].levels === 2;
+  st.houses.set(brown[0], 3);
 
   // Cưỡng chiếm: chỉ lô trống, chưa thế chấp, và phải đủ tiền mặt đền
   light.forEach((id) => st.owner.set(id, 1));
   st.mortgaged.add(light[0]);
   st.players[0].money = 0;
   out.seizeNeedsCash = cr.cardTargets(st, { type: 'seize' }, 0).length === 0;
+  // Đủ tiền trả lô này nhưng chưa đủ cho lô kia: chỉ lô trả nổi mới nhắm được
+  st.players[0].money = cr.seizePrice(light[1]);
+  out.seizeNeedsFullPrice = cr.cardTargets(st, { type: 'seize' }, 0).includes(light[1]);
+  st.players[0].money = cr.seizePrice(light[1]) - 1;
+  out.seizeShortOfCash = !cr.cardTargets(st, { type: 'seize' }, 0).includes(light[1]);
   st.players[0].money = 5000;
   const seize = cr.cardTargets(st, { type: 'seize' }, 0);
   out.seizeTargets = seize.includes(light[1]) && !seize.includes(light[0])
     && !seize.includes(brown[0]);
-  out.seizePrice = cr.seizePrice(light[1]) === BOARD[light[1]].mortgage;
+  out.seizePrice = cr.seizePrice(light[1]) === Math.round(BOARD[light[1]].price * 1.25);
 
   // Giải toả: nhắm được cả đất của chính mình, đền giá gốc +20%
   st.owner.set(GROUP_TILES.orange[0], 0);
@@ -102,9 +121,7 @@ const r = await page.evaluate(async () => {
   out.resumePrice = cr.resumePrice(light[1], { rate: 1.2 })
     === Math.round(BOARD[light[1]].price * 1.2);
 
-  // Ép bán trả về nửa giá xây cho từng cấp; dỡ nhà thì không đền gì
-  out.refund = cr.forcedSaleRefund(st, brown[1])
-    === Math.floor(BOARD[brown[1]].house_cost / 2) * 5;
+  // Dỡ nhà thì không đền gì; khách sạn hạ xuống thành bốn căn
   const bankBefore = st.bankHotels;
   st.demolish(brown[1]);
   out.demolishHotel = st.housesOn(brown[1]) === 4 && st.bankHotels === bankBefore + 1;
@@ -115,7 +132,7 @@ const r = await page.evaluate(async () => {
 
   // Thẻ giữ túi thì lúc nào rút cũng được, kể cả khi chưa có mục tiêu nào
   st.owner.clear(); st.houses.clear();
-  out.keepableAlwaysDrawn = ['force-sell', 'demolish', 'seize', 'resume', 'resume-random']
+  out.keepableAlwaysDrawn = ['demolish', 'seize', 'resume', 'resume-random']
     .every((t) => cr.usableCard(st, { type: t }, 0));
   brown.forEach((id) => st.owner.set(id, 1));
   st.houses.set(brown[0], 3);
@@ -172,14 +189,19 @@ const r = await page.evaluate(async () => {
   st.players[2].bankrupt = false;
 
   // Mọi thẻ trong cả hai bộ đều khai báo đúng loại
-  const known = ['bank', 'collect', 'repair', 'jail-free', 'force-sell', 'demolish',
+  const known = ['bank', 'collect', 'repair', 'jail-free', 'demolish',
     'seize', 'resume', 'resume-random'];
   out.badType = [...CHANCE, ...CHEST].filter((x) => !known.includes(cr.cardType(x))).length;
-  out.hasNew = ['collect', 'repair', 'jail-free', 'force-sell', 'demolish', 'seize',
+  out.hasNew = ['collect', 'repair', 'jail-free', 'demolish', 'seize',
     'resume', 'resume-random'].every((t) => !!find(CHANCE.concat(CHEST), t));
-  // Mọi loại giữ túi đều có tên và biểu tượng để in ra bảng túi thẻ
-  const { CARD_KINDS, KEEPABLE } = await import('/src/data/cards.js');
-  out.kindsNamed = [...KEEPABLE].every((t) => !!CARD_KINDS[t]?.name && !!CARD_KINDS[t]?.sigil);
+  // Bộ bài không còn thẻ phát mãi
+  out.noForceSell = [...CHANCE, ...CHEST].every((x) => cr.cardType(x) !== 'force-sell');
+  /* Mọi loại giữ túi đều có tên, biểu tượng và một câu công dụng — bảng túi
+     thẻ in đúng hai dòng ấy chứ không in lời văn bối cảnh. */
+  const { CARD_KINDS, KEEPABLE, cardName, cardEffect } = await import('/src/data/cards.js');
+  out.kindsNamed = [...KEEPABLE].every((t) => !!CARD_KINDS[t]?.name && !!CARD_KINDS[t]?.sigil
+    && cardEffect({ type: t, levels: 1 }).length > 20);
+  out.demolishNamed = [1, 2].map((n) => cardName({ type: 'demolish', levels: n }));
 
   return out;
 });
@@ -189,15 +211,20 @@ ok('tiền mừng chia đều cho người còn lại', r.each3 === 75 && r.each
 ok('còn một mình thì không rút được thẻ tiền mừng', r.collectNeedsOthers === true);
 ok('thuế nhà cửa tính đầu nhà, đầu khách sạn', r.repair);
 ok('chưa có nhà thì bỏ qua thẻ thuế nhà', r.repairSkipsEmpty);
-ok('thẻ ép bán chỉ nhắm vào ô có nhà của người khác', r.strikeOnlyOthers);
+ok('thẻ dỡ nhà chỉ nhắm vào ô có nhà của người khác', r.strikeOnlyOthers);
 ok('không tự nhắm vào đất của chính mình', r.ownerCantSelfStrike);
-ok('không đủ tiền đền thì không cưỡng chiếm được', r.seizeNeedsCash);
-ok('cưỡng chiếm chỉ lô trống, chưa thế chấp', r.seizeTargets);
-ok('tiền đền cưỡng chiếm bằng giá thế chấp', r.seizePrice);
+ok('không đủ tiền đền thì không cưỡng chế mua được', r.seizeNeedsCash);
+ok('đủ đúng giá đền thì cưỡng chế mua được, thiếu một đồng thì không',
+  r.seizeNeedsFullPrice && r.seizeShortOfCash);
+ok('cưỡng chế mua chỉ lô trống, chưa thế chấp', r.seizeTargets);
+ok('tiền đền cưỡng chế mua bằng giá gốc +25%', r.seizePrice);
+ok('thẻ dỡ nhà nhắm được vào khu có nhà của người khác',
+  r.demolishGroups.includes('brown'), r.demolishGroups.join());
+ok('thẻ dỡ 2 nhà rải vào hai ô khác nhau trong khu', r.demolishTwoTiles);
+ok('khu chỉ còn một ô có nhà thì ô ấy chịu cả hai cấp', r.demolishLone);
 ok('giải toả nhắm được cả đất của mình', r.resumeIncludesOwn);
 ok('giải toả bỏ qua ô đã xây nhà', r.resumeSkipsBuilt);
 ok('tiền đền giải toả là giá gốc +20%', r.resumePrice);
-ok('ép bán trả nửa giá xây từng cấp', r.refund);
 ok('dỡ khách sạn thì hạ xuống 4 nhà', r.demolishHotel);
 ok('dỡ sạch nhà trên một ô', r.clearHouses);
 ok('bốn vé ra tù chia đều hai bộ', r.tickets[0] === 2 && r.tickets[1] === 2, r.tickets.join('/'));
@@ -213,7 +240,11 @@ ok('xài vé xong thì lá trả về bộ', r.ticketBack);
 ok('vỡ nợ thì vé trả về bộ', r.ticketOnBankrupt);
 ok('mọi thẻ đều khai đúng loại', r.badType === 0);
 ok('cả hai bộ đều có đủ loại thẻ mới', r.hasNew);
-ok('mọi thẻ giữ túi đều có tên và biểu tượng', r.kindsNamed);
+ok('mọi thẻ giữ túi đều có tên, biểu tượng và câu công dụng', r.kindsNamed);
+ok('bộ bài không còn thẻ phát mãi', r.noForceSell);
+ok('thẻ dỡ nhà gọi tên theo số cấp nó dỡ',
+  r.demolishNamed[0] === 'Dỡ 1 nhà' && r.demolishNamed[1] === 'Dỡ 2 nhà',
+  r.demolishNamed.join(' / '));
 
 /* ---------------------------------------------------- vài thẻ chạy thật trên bàn */
 
@@ -266,8 +297,11 @@ ok('tiền mừng do người chơi khác góp, không phải ngân hàng', gain
 // Vé ra tù: rút được, cất vào túi, HUD hiện nhãn, xài thì ra tù miễn phí
 await forceCard('chance', 'jail-free');
 await page.waitForTimeout(900);
-ok('thẻ giữ được ghi rõ là cất vào túi',
-  (await page.locator('.fate-note').innerText()).includes('Túi thẻ'));
+ok('mặt thẻ giữ được ghi tên thẻ và công dụng, không kể lể chuyện bộ bài',
+  await (async () => {
+    const note = await page.locator('.fate-note').innerText();
+    return note.includes('Vé ra tù') && note.includes('Khám Lớn') && !note.includes('bộ bài');
+  })());
 await page.locator('.scrim.show .modal-foot button.btn').first().click();
 await page.waitForTimeout(2200);
 const ticket = await page.evaluate(() => {
@@ -354,6 +388,9 @@ const clickThrough = async (maxMs = 60000) => {
     await page.waitForTimeout(600);
     // Bảng chọn ô nằm trên bàn cờ chứ không có nền tối — phải bấm vào ô
     if (await picking(page)) { await pickOnBoard(page).catch(() => {}); continue; }
+    // Hộp chọn khu màu không có nút ở chân hộp — bấm thẳng vào dòng khu
+    const grp = page.locator('.scrim.show .grp-row').first();
+    if (await grp.isVisible().catch(() => false)) { await grp.click(); continue; }
     const btn = page.locator('.scrim.show .modal-foot button.btn').first();
     if (await btn.isVisible().catch(() => false)) { await btn.click(); continue; }
     // Không còn hộp nào mà ván cũng rảnh tay → chuỗi hộp thoại đã xong
@@ -381,11 +418,26 @@ ok('thẻ dỡ nhà nằm trong túi chứ không nổ ngay', await page.evaluat
   return st.players[st.turn].cards.length === 1 && st.housesOn(39) === 3;
 }));
 
+/** Chọn khu màu trong hộp thẻ dỡ nhà, rồi chờ vòng bốc thăm chạy xong. */
+const pickGroup = async (key) => {
+  const row = page.locator(`.grp-row[data-g="${key}"]`);
+  await row.waitFor({ timeout: 15000 });
+  await row.click();
+  await page.waitForTimeout(3200);
+};
+
 await useFromBag();
-ok('bàn cờ mời chọn mục tiêu', await page.locator('.tile-pick').first().isVisible());
-ok('chỉ ô có nhà của người khác được sáng', (await markedTiles(page)).join() === '39');
-await pickOnBoard(page);                                                     // bấm ô rồi chốt
-await page.waitForTimeout(2600);
+ok('thẻ dỡ nhà mời chọn khu màu chứ không chọn ô',
+  await page.locator('.grp-list .grp-row').first().isVisible());
+const groupKeys = await page.locator('.grp-row').evaluateAll(
+  (els) => els.map((e) => e.dataset.g));
+ok('chỉ khu có nhà của người khác được bày ra', groupKeys.join() === 'dark_blue',
+  groupKeys.join());
+/* Vệt sáng kiểu "chỉ trỏ" (`litTiles`) không đụng `markSet` — con trỏ chuột
+   giữ nguyên vì đây không phải lời mời bấm vào ô, nên đọc thẳng `marked`. */
+const litIds = await page.evaluate(() => [...(window.__monopoly.scene.marked?.ids ?? [])]);
+ok('ô trong tầm ngắm sáng sẵn trên bàn cờ', litIds.join() === '39', litIds.join());
+await pickGroup('dark_blue');
 const after = await page.evaluate(() => {
   const st = window.__monopoly.controller.state;
   return { houses: st.housesOn(39), owner: st.owner.get(39),
@@ -396,15 +448,14 @@ ok('dỡ nhà hạ đúng một cấp, đất vẫn của chủ cũ', after.hous
   JSON.stringify(after));
 ok('thẻ đã dùng rời túi và trả về bộ', after.held === 0 && after.inDeck);
 
-// Thẻ dỡ 2 cấp của bộ Cơ Hội
+// Thẻ dỡ 2 cấp của bộ Cơ Hội: khu chỉ có một ô có nhà nên ô ấy chịu cả hai cấp
 await page.evaluate(() => { window.__monopoly.controller.state.houses.set(39, 4); });
 await forceCard('chance', 'demolish');
 await page.waitForTimeout(900);
 await page.locator('.scrim.show .modal-foot button.btn').first().click();
 await page.waitForTimeout(1400);
 await useFromBag();
-await pickOnBoard(page);
-await page.waitForTimeout(2600);
+await pickGroup('dark_blue');
 ok('thẻ Cơ Hội dỡ đúng hai cấp', await page.evaluate(() => (
   window.__monopoly.controller.state.housesOn(39) === 2)));
 

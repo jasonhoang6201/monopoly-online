@@ -4,7 +4,7 @@
  * cho cả bàn cùng đọc.
  */
 import { money, TOTAL_HOUSES, tileLabel } from '../data/board.js';
-import { cardOf, CARD_KINDS } from '../data/cards.js';
+import { cardOf, cardName } from '../data/cards.js';
 import { paintToken } from '../render/pieces.js';
 import {
   eventsOn, unlocked, pressureRatio, threshold, eraOpen, modLabel,
@@ -229,7 +229,7 @@ export class Hud {
     if (!p.bankrupt && p.cards?.length) {
       for (const ref of p.cards) {
         const c = cardOf(ref);
-        tags.push(`<span class="pop-tag">${CARD_KINDS[c?.type]?.name ?? 'Thẻ'}</span>`);
+        tags.push(`<span class="pop-tag">${cardName(c)}</span>`);
       }
     }
     if (st.turn === p.id && !st.over) tags.push('<span class="pop-tag turn">Đang tới lượt</span>');

@@ -92,6 +92,19 @@ function builtGroups(st) {
   return Object.keys(GROUPS).filter((g) => GROUP_TILES[g].some((id) => st.housesOn(id) > 0));
 }
 
+/** Số cấp nhà một ô mất khi để lửa cháy: nửa số nhà đang có, làm tròn xuống. */
+export function burnLoss(houses) { return Math.floor(houses / 2); }
+
+/**
+ * Khu nào đem ra bốc thăm hoả hoạn được: phải có ít nhất một ô mất được một
+ * cấp nhà. Khu toàn ô một căn thì cháy xong chẳng ô nào suy suyển — nổ một sự
+ * kiện rỗng như thế thì thà bốc thẻ khác.
+ */
+function burnableGroups(st) {
+  return Object.keys(GROUPS)
+    .filter((g) => GROUP_TILES[g].some((id) => burnLoss(st.housesOn(id)) > 0));
+}
+
 /** Người giàu nhất bàn — thẻ trưng thu nhắm vào đây, tiêu chí ai cũng kiểm được. */
 export function leaderSeat(st) {
   const alive = st.alive();
@@ -127,7 +140,7 @@ export function usable(st, card) {
     case 'dong-dat':
       return builtGroups(st).length > 0;
     case 'hoa-hoan':
-      return [...st.houses.values()].some((h) => h > 0);
+      return burnableGroups(st).length > 0;
     case 'mat-giay-to':
       return alive.filter((p) => st.propertiesOf(p.id).length > 0).length >= 2;
     case 'trung-thu': {
@@ -259,19 +272,24 @@ export function planEvent(st, card) {
     }
 
     case 'hoa-hoan': {
-      // Ô đông nhà nhất bàn — tiêu chí công khai, không phải bốc thăm ai xui
-      const worst = [...st.houses.entries()]
-        .filter(([, h]) => h > 0)
-        .sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
-      if (!worst) return null;
-      const [id, houses] = worst;
-      const levels = houses === 5 ? 5 : houses;
-      return {
-        tileId: id,
-        seat: st.owner.get(id),
-        houses,
-        save: Math.ceil(BOARD[id].house_cost * levels * card.saveRate),
-      };
+      /* Bốc thăm một khu màu, cả khu cùng cháy.
+         Trước đây lửa luôn rơi đúng ô đông nhà nhất bàn, tức luôn rơi vào
+         người đang dẫn — đoán trước được thì chẳng còn là tai hoạ, chỉ còn là
+         một khoản thuế người dẫn đầu biết trước mà chừa tiền ra. Bốc thăm khu
+         thì ai xây cũng có phần rủi, và cháy cả khu mới ra cái nghĩa "cháy lan
+         cả dãy phố". */
+      const groups = burnableGroups(st);
+      if (groups.length === 0) return null;
+      const group = pick(groups);
+      const tiles = GROUP_TILES[group]
+        .map((id) => ({ id, houses: st.housesOn(id), lose: burnLoss(st.housesOn(id)) }))
+        .filter((t) => t.lose > 0)
+        .map((t) => ({
+          ...t,
+          seat: st.owner.get(t.id),
+          save: Math.ceil(BOARD[t.id].house_cost * t.lose * card.saveRate),
+        }));
+      return tiles.length ? { group, tiles } : null;
     }
 
     case 'mat-giay-to': {

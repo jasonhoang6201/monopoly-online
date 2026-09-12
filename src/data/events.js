@@ -99,8 +99,10 @@ export const EVENTS = [
   {
     id: 'hoa-hoan', era: 2, kind: 'bad', sigil: '☲',
     title: 'HOẢ HOẠN',
-    text: `Lửa bén từ một tiệm dầu, cháy lan cả dãy phố sầm uất nhất bàn cờ.
-           Thuê phu chữa cháy thì cứu được một nửa.`,
+    text: `Lửa bén từ một tiệm dầu, cháy lan một khu phố bốc thăm trúng.
+           Thuê phu chữa cháy kịp thì nhà cửa còn nguyên; để mặc thì mỗi ô
+           trong khu mất nửa số nhà.`,
+    /** Tiền thuê phu chữa cháy = 40% giá xây của phần nhà sắp cháy. */
     saveRate: 0.4,
   },
   {

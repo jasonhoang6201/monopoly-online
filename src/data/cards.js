@@ -12,11 +12,11 @@
  *   · `repair`    — thuế nhà cửa: tính trên từng căn nhà, từng khách sạn mình
  *                   đang có (`perHouse` / `perHotel`).
  *   · `jail-free` — vé ra tù.
- *   · `force-sell`— ép chủ một ô của người khác bán sạch nhà trên ô đó, họ chỉ
- *                   nhận lại nửa giá xây.
- *   · `demolish`  — dỡ `levels` cấp nhà của người khác, không đền một đồng.
- *   · `seize`     — cưỡng chiếm một lô đất trống của người khác, đền bằng đúng
- *                   giá thế chấp.
+ *   · `demolish`  — chọn một **khu màu** của người khác rồi bốc thăm ô trong khu
+ *                   ấy: `levels` ô mỗi ô mất một cấp nhà (khu chỉ có một ô có
+ *                   nhà thì ô ấy chịu cả `levels` cấp), không đền một đồng.
+ *   · `seize`     — cưỡng chế mua một lô đất trống của người khác, trả cho họ
+ *                   **giá gốc +25%**.
  *   · `resume`    — giải toả: chọn một lô đất trống đang có chủ (kể cả của
  *                   mình), đền thiệt hại **giá gốc +20%**, rồi lô ấy đem
  *                   **đấu giá kín** cho cả bàn tranh nhau.
@@ -25,9 +25,9 @@
  *                   dừng ở đâu là lô ấy.
  *
  * ── Thẻ giữ trong túi ──────────────────────────────────────────────────────
- * Sáu loại kể trên (`KEEPABLE`) **không nổ ngay lúc rút**: rút được thì cất
+ * Năm loại kể trên (`KEEPABLE`) **không nổ ngay lúc rút**: rút được thì cất
  * vào túi, khi nào thấy đúng lúc mới lôi ra dùng. Đây mới là chỗ đáng chơi của
- * chúng — dỡ nhà đúng lúc đối phương vừa cất khách sạn, cưỡng chiếm đúng lô
+ * chúng — dỡ nhà đúng lúc đối phương vừa cất khách sạn, cưỡng chế đúng lô
  * còn thiếu để đủ bộ. Thẻ đang nằm trong túi ai thì **rời khỏi bộ bài**
  * (`Deck.gone`), xài xong mới trả về.
  *
@@ -70,16 +70,13 @@ export const CHANCE = [
     type: 'jail-free',
   },
   {
-    text: `Toà xử vụ kiện lấn không gian: nhà bên phải hạ xuống hai tầng cho đúng
-           lộ giới, dỡ tới đâu chịu tới đó.`,
+    text: `Toà xử vụ kiện lấn lộ giới cả một khu phố: đội lục lộ bốc thăm hai
+           căn trong khu, dỡ tới đâu chủ nhà chịu tới đó.`,
     type: 'demolish', levels: 2,
   },
   {
-    text: 'Kiện ra toà chuyện lấn ranh, toà xử người ta phải phát mãi nhà cửa trên lô đất tranh chấp.',
-    type: 'force-sell',
-  },
-  {
-    text: 'Lục lại văn khế cũ trong hộc tủ, thì ra một lô đất người ta đang giữ vốn có chủ khác.',
+    text: `Lục lại văn khế cũ trong hộc tủ, thì ra một lô đất người ta đang giữ
+           vốn có chủ khác — toà cho chuộc lại theo giá toà định.`,
     type: 'seize',
   },
   {
@@ -120,7 +117,8 @@ export const CHEST = [
     type: 'jail-free',
   },
   {
-    text: 'Đội lục lộ đo lại lộ giới, phán một căn nhà của người ta cất lấn ra đường — phải dỡ.',
+    text: `Đội lục lộ đo lại lộ giới cả khu phố rồi bốc thăm, trúng nhà nào thì
+           nhà ấy bị phán là cất lấn ra đường — phải dỡ.`,
     type: 'demolish', levels: 1,
   },
   {
@@ -206,7 +204,7 @@ function shuffled(a) {
  * Những loại thẻ **giữ được trong túi**, dùng sau chứ không nổ ngay lúc rút.
  */
 export const KEEPABLE = new Set([
-  'jail-free', 'force-sell', 'demolish', 'seize', 'resume', 'resume-random',
+  'jail-free', 'demolish', 'seize', 'resume', 'resume-random',
 ]);
 
 /** Hai bộ tra theo tên — thẻ trong túi chỉ ghi `{kind, index}` cho gọn ảnh chụp. */
@@ -216,18 +214,58 @@ export const DECKS = { chance: CHANCE, chest: CHEST };
 export function cardOf(ref) { return DECKS[ref?.kind]?.[ref?.index] ?? null; }
 
 /**
- * Tên gọi và biểu tượng của từng loại thẻ giữ được — bảng túi thẻ in theo đây.
+ * Tên gọi, biểu tượng và **công dụng** của từng loại thẻ giữ được.
+ *
+ * Tên đặt theo đúng việc thẻ làm, `effect` viết bằng câu người chơi đọc là
+ * hiểu ngay phải làm gì tiếp: bảng túi thẻ và mặt thẻ vừa bóc đều in hai dòng
+ * ấy, chứ không in lại lời văn bối cảnh.
+ *
  * Ký tự cố ý **đơn sắc**: mấy hình như 🔨 bị trình duyệt vẽ thành emoji màu,
  * lạc hẳn khỏi mặt thẻ giấy dó.
  */
 export const CARD_KINDS = {
-  'jail-free':     { name: 'Vé ra tù',            sigil: '⚿' },
-  'force-sell':    { name: 'Lệnh phát mãi',       sigil: '⚖' },
-  demolish:        { name: 'Lệnh dỡ nhà',         sigil: '⚒' },
-  seize:           { name: 'Cưỡng chiếm địa giới', sigil: '⚑' },
-  resume:          { name: 'Lệnh giải toả',       sigil: '⌁' },
-  'resume-random': { name: 'Giải toả bốc thăm',   sigil: '⟳' },
+  'jail-free': {
+    name: 'Vé ra tù', sigil: '⚿',
+    effect: 'Ra khỏi Khám Lớn ngay, khỏi đóng tiền chuộc và khỏi chờ đủ ba lượt.',
+  },
+  demolish: {
+    name: 'Dỡ nhà', sigil: '⚒',
+    effect: (card) => {
+      const n = Math.max(1, card?.levels ?? 1);
+      return `Chọn một khu màu người khác đang có nhà, bàn cờ bốc thăm ${n} ô
+              trong khu ấy — mỗi ô mất một cấp nhà, chủ đất không được đền.`;
+    },
+  },
+  seize: {
+    name: 'Cưỡng chế mua đất', sigil: '⚑',
+    effect: 'Lấy một lô đất trống của người khác, trả cho họ giá gốc +25%.',
+  },
+  resume: {
+    name: 'Giải toả chọn lô', sigil: '⌁',
+    effect: `Chọn một lô đất trống bất kỳ đang có chủ: chủ lô nhận giá gốc +20%,
+             rồi lô ấy đem đấu giá kín cho cả bàn.`,
+  },
+  'resume-random': {
+    name: 'Giải toả bốc thăm', sigil: '⟳',
+    effect: `Bàn cờ bốc thăm một lô đất trống đang có chủ: chủ lô nhận giá gốc
+             +20%, rồi lô ấy đem đấu giá kín cho cả bàn.`,
+  },
 };
+
+/** Tên thẻ hiện cho người chơi — thẻ dỡ nhà kèm luôn số cấp nó dỡ. */
+export function cardName(card) {
+  const kind = CARD_KINDS[card?.type];
+  if (!kind) return 'Thẻ';
+  if (card.type === 'demolish') return `Dỡ ${Math.max(1, card.levels ?? 1)} nhà`;
+  return kind.name;
+}
+
+/** Câu nói rõ thẻ này làm gì — một dòng, không có lời văn bối cảnh. */
+export function cardEffect(card) {
+  const e = CARD_KINDS[card?.type]?.effect;
+  const text = typeof e === 'function' ? e(card) : e;
+  return (text ?? '').replace(/\s+/g, ' ').trim();
+}
 
 export const DECK_META = {
   chance: { title: 'CƠ HỘI', sigil: '✦', accent: '#C8A048' },

@@ -86,9 +86,9 @@ kho nhà của ngân hàng và ba nút tiện ích. Không rê ô nào thì bả
 | **Ở tù** | Mỗi lượt **chỉ được cầu đôi một lần** — trượt thì hết lượt, chờ vòng sau. Ra đôi thì được tha nhưng không có lượt lắc thêm |
 | **Ra tù** | Nộp 50$, hoặc lắc ra đôi. Cầu đôi hụt tới **lần thứ 3** thì buộc nộp 50$ rồi đi theo số vừa lắc |
 | **Cơ Hội / Khí Vận** | Hơn 20 thẻ mỗi bộ, bóc ngẫu nhiên. Ngoài thẻ cộng/trừ tiền còn có: **tiền mừng** (chia đều thu từ những người chơi khác), **thuế nhà cửa** (tính đầu nhà, đầu khách sạn), và bảy loại thẻ **giữ được trong túi** — xem hai dòng dưới |
-| **Túi thẻ** | Sáu loại thẻ (vé ra tù, phát mãi, dỡ nhà, cưỡng chiếm, giải toả, giải toả bốc thăm) **không nổ ngay lúc bóc** mà cất vào túi, khi nào thấy đúng lúc thì mở nút **Túi thẻ** ra dùng. Bảng túi thẻ ghi rõ thẻ làm gì và *lúc này* dùng được chưa. Thẻ đang trong túi ai thì **rời khỏi bộ bài**, xài xong mới trả về; vỡ nợ cũng trả về |
+| **Túi thẻ** | Năm loại thẻ (vé ra tù, dỡ 1 nhà / dỡ 2 nhà, cưỡng chế mua đất, giải toả chọn lô, giải toả bốc thăm) **không nổ ngay lúc bóc** mà cất vào túi, khi nào thấy đúng lúc thì mở nút **Túi thẻ** ra dùng. Bảng túi thẻ ghi rõ thẻ làm gì và *lúc này* dùng được chưa. Thẻ đang trong túi ai thì **rời khỏi bộ bài**, xài xong mới trả về; vỡ nợ cũng trả về |
 | **Vé ra tù** | **Bốn tấm, chia đều hai bộ**. Đang ngồi tù thì chìa ra là được thả miễn phí, rồi lắc đi như thường |
-| **Thẻ nhắm vào nhà đất** | Người dùng thẻ tự chọn mục tiêu, chỉ nhắm được vào **người khác** (riêng giải toả chọn được cả đất mình), và không đụng ô đang thế chấp. Ép bán: dỡ sạch nhà một ô, chủ nhận nửa giá xây · Dỡ nhà: mất **1 cấp** (Khí Vận) hoặc **2 cấp** (Cơ Hội), không đền · Cưỡng chiếm: lô đất trống sang tên, đền bằng giá thế chấp |
+| **Thẻ nhắm vào nhà đất** | Chỉ nhắm được vào **người khác** (riêng giải toả chọn được cả đất mình), và không đụng ô đang thế chấp. Dỡ nhà: người dùng chọn **khu màu**, bàn cờ bốc thăm **1 ô** (Khí Vận) hoặc **2 ô** (Cơ Hội) trong khu ấy, mỗi ô mất một cấp nhà, không đền — khu chỉ còn một ô có nhà thì ô ấy chịu cả hai cấp · Cưỡng chế mua đất: lô đất trống sang tên, trả chủ cũ **giá gốc +25%** |
 | **Giải toả** | Chủ lô lãnh **giá gốc +20%**, lô đất đem **đấu giá kín**. Hai kiểu: *chỉ định* (tự chọn lô) và *bốc thăm* — bàn cờ sáng chạy lần lượt qua từng lô đất trống, chậm dần rồi dừng ở lô trúng. Cả hai chỉ nhắm được lô **chưa xây nhà** |
 | **Mua đất** | Dừng ở ô trống và còn tiền thì hiện popup hỏi mua. Không mua thì thôi — **không có luật đấu giá** |
 | **Xây nhà** | Phải đủ bộ màu. Cả bàn chỉ có **32 căn nhà**; hết nhà thì người khác không xây được nữa |
@@ -120,7 +120,7 @@ nổ sự kiện lúc đất còn ế là phá ván. Gần đầy thì thanh đ�
 | Kỳ | Mở khi nào | Thẻ |
 |---|---|---|
 | **Kỳ 1** — tiền và luật tạm thời | ngay từ lần nổ đầu | Sưu cao thuế nặng (tiền vào **Quỹ Công**, ai ghé Bến Đậu thì ẵm trọn) · Giá gạo leo thang (thuê +25%) · Mất mùa (lương qua ô Bắt Đầu còn một nửa) · Bão giá vật liệu · Ngân hàng siết tín dụng · Giới nghiêm (cấm xây) · Hội chợ Đấu Xảo · Ân xá · Quỹ Công phát chẩn |
-| **Kỳ 2** — nhà cửa và quyền sở hữu | sau vài lần nổ (nấc *Hỗn loạn* mở ngay) | **Động đất** (cả khu sập một tầng, bỏ tiền chống đỡ thì giữ được) · **Hoả hoạn** · **Mất giấy tờ** (mỗi người chọn một ô ngưng thu tiền thuê) · **Trưng thu quy hoạch** · **Sang nhượng bắt buộc** · **Hoán đổi địa bạ** · Mở đường lớn · Đại hạ giá |
+| **Kỳ 2** — nhà cửa và quyền sở hữu | sau vài lần nổ (nấc *Hỗn loạn* mở ngay) | **Động đất** (cả khu sập một tầng, bỏ tiền chống đỡ thì giữ được) · **Hoả hoạn** (bốc thăm một khu màu; dập lửa kịp thì nhà còn nguyên, để mặc thì mỗi ô mất nửa số nhà, làm tròn xuống) · **Mất giấy tờ** (mỗi người chọn một ô ngưng thu tiền thuê) · **Trưng thu quy hoạch** · **Sang nhượng bắt buộc** · **Hoán đổi địa bạ** · Mở đường lớn · Đại hạ giá |
 
 Ba thẻ *Trưng thu*, *Sang nhượng bắt buộc* và *Đại hạ giá* đem đất ra **đấu giá
 kín**: mọi người ghi một con số cùng lúc, cao nhất lấy đất, hoà thì người đi
