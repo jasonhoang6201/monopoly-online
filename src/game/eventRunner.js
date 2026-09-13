@@ -25,6 +25,19 @@ import { eventCase, newSeed } from '../ui/caseOpen.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Thẻ Thời Cuộc lật ra bao lâu thì mạch sự kiện chạy tiếp — đếm từ lúc mặt thẻ
+ * nở ra xong (`onReveal`), chứ không từ lúc mở hộp: băng chuyền còn đang chạy
+ * mà thông báo đã nổi lên thì hoá ra nói trước cả tấm thẻ.
+ *
+ * Hộp thẻ không chặn đường nữa: chờ người chơi bấm thì cả bàn treo theo người
+ * đọc chậm nhất, mà tự đóng thì lại giật tấm thẻ khỏi tay người đang đọc. Nên
+ * cắt đôi: hộp cứ đứng đó tới lúc họ bấm, còn `apply()` và mấy dòng thông báo
+ * thì chạy sau bấy nhiêu đây. Hộp hỏi nào của `apply()` mở lên sẽ đẩy tấm thẻ
+ * đi — xem `yieldToNext` trong `ui/modal.js`.
+ */
+const ALERT_MS = 2000;
+
 export class EventRunner {
   /** @param {import('./controller.js').Game} game */
   constructor(game) {
@@ -70,14 +83,18 @@ export class EventRunner {
     /* Tiếng bóc thẻ do băng chuyền phát lúc mặt thẻ hiện ra, không phát ở đây
        nữa. Seed gửi kèm để máy ngồi xem dựng đúng dải ấy và dừng đúng ô ấy.
 
-       Hộp thẻ tự đóng sau `EVENT_CARD_MS` ở **mọi** máy, kể cả máy này: chờ
-       người cầm lái bấm thì cả bàn treo theo một người đã rời máy, mà mấy máy
-       kia đã đóng từ lâu. Đóng xong `apply()` mới chạy, nên mọi dòng thông báo
-       "đã áp dụng" đều nổi lên sau khi bàn nào cũng đọc xong thẻ. */
+       Hộp thẻ không tự đóng và cũng không được chờ: `eventCase` chạy mà không
+       ai `await`, mạch đi tiếp sau `ALERT_MS`. Mặt thẻ đứng đó tới lúc người
+       chơi bấm — máy nào cũng vậy, mỗi máy một nhịp. */
     const seed = newSeed();
     this.g.netEmit('eventcard', { id: card.id, detail, seed });
     this.bumpClock('thời cuộc');
-    await eventCase(card, { detail, seed });
+    let revealed;
+    const shown = new Promise((r) => { revealed = r; });
+    eventCase(card, { detail, seed, onReveal: revealed });
+    // Hộp hỏng đường nào đó mà không lật được thì cũng đừng treo cả ván ở đây
+    await Promise.race([shown, wait(12000)]);
+    await wait(ALERT_MS);
 
     await this.apply(card, plan);
 

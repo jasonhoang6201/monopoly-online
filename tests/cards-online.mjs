@@ -139,12 +139,23 @@ const faceB = await other.locator('.co-face .fate-card').waitFor({ state: 'visib
 ok(!!faceA && faceA.replace(/\s+/g, ' ') === faceB?.replace(/\s+/g, ' '),
   'mặt thẻ lật ra giống nhau trên hai máy');
 
-// Máy ngồi xem tự đóng hộp, không cần ai bấm
-ok(await until(async () => (await other.locator('#modal-root .scrim.show').count()) === 0, 12000),
-  'hộp ở máy ngồi xem tự đóng');
+/* Nút và phím Enter là của riêng người đang đi: máy ngồi xem chỉ xem, và hộp
+   bên ấy tắt theo cú bấm bên kia chứ không theo hẹn giờ riêng. */
+ok((await other.locator('.modal-foot button.btn').count()) === 0,
+  'máy ngồi xem không có nút bấm');
+ok(await until(async () => (await other.locator('.co-wait').count()) === 1, 3000),
+  'máy ngồi xem hiện dòng chờ thay cho nút');
+
+await other.bringToFront();
+await other.keyboard.press('Enter');
+await other.waitForTimeout(700);
+ok((await other.locator('#modal-root .scrim.show').count()) > 0,
+  'Enter ở máy ngồi xem không đóng hộp');
 
 await drv.page.bringToFront();
-await drv.page.locator('.modal-foot button.btn').first().click().catch(() => {});
+await drv.page.locator('.modal-foot button.btn').first().click();
+ok(await until(async () => (await other.locator('.co-face').count()) === 0, 8000),
+  'người đang đi bấm xong thì hộp ở máy ngồi xem mới tắt');
 await drv.page.waitForTimeout(1500);
 
 console.log(errors.length ? `\nLỖI TRANG:\n${errors.join('\n')}` : '\nKhông có lỗi trang.');

@@ -131,18 +131,19 @@ ok(await until(() => other.locator('.scrim.show .modal-foot:not(.co-foot-hidden)
 ok(await until(() => other.locator('.event-effect-list li').first().isVisible()),
   'mặt thẻ in phần áp dụng');
 
-// Hộp tự đóng ở cả hai máy — không máy nào chặn đường sự kiện chạy tiếp
+/* Hộp thẻ không tự đóng, nhưng cũng không chặn mạch: hai giây sau khi lật,
+   `apply()` mở hộp ghi giá ở cả hai máy, và chính hộp ấy đẩy tấm thẻ đi
+   (`yieldToNext`) — không ai phải dọn hai lớp mới thấy bàn cờ. */
 await drv.page.bringToFront();
-await drv.page.locator('.scrim.show button.btn').first().click({ timeout: 2000 }).catch(() => {});
-ok(await until(() => other.locator('.event-card').count().then((n) => n === 0), 8000),
-  'thẻ tự đóng ở máy ngồi xem');
-
-// Cả hai máy phải nhận được hộp ghi giá
 ok(await until(() => drv.page.locator('.bid-box input').isVisible(), 20000),
-  'máy cầm lái nhận hộp ghi giá');
+  'máy cầm lái nhận hộp ghi giá mà không phải bấm đóng thẻ');
+ok(await until(() => drv.page.locator('.event-card').count().then((n) => n === 0), 5000),
+  'hộp ghi giá đẩy tấm thẻ đi ở máy cầm lái');
 await other.bringToFront();
 ok(await until(() => other.locator('.bid-box input').isVisible(), 20000),
   'máy bên kia cũng nhận hộp ghi giá');
+ok(await until(() => other.locator('.event-card').count().then((n) => n === 0), 5000),
+  'tấm thẻ cũng nhường chỗ ở máy ngồi xem');
 
 // Bên kia trả thấp, máy cầm lái trả cao → máy cầm lái phải thắng
 await other.locator('.bid-box input').fill('40');

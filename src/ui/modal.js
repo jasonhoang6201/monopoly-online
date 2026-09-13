@@ -95,6 +95,7 @@ window.addEventListener('blur', () => setPeek(false));
  * @param {any}    [o.timeoutValue] giá trị khi hết giờ lượt tự đóng hộp
  *   (mặc định: như `escValue`) — xem `dismissTopModal`
  * @param {boolean}[o.enter]    false = không cho Enter bấm nút đầu tiên
+ * @param {boolean}[o.yieldToNext] true = hộp thoại nào mở sau sẽ đẩy hộp này đi
  * @param {Function}[o.onMount] (bodyEl, close, modalEl, footEl, stash) — gắn sự
  *   kiện động. `stash(true/false)` cất hộp thoại đi rồi gọi nó về, dùng khi
  *   người chơi cần thao tác thẳng trên bàn cờ.
@@ -103,6 +104,13 @@ window.addEventListener('blur', () => setPeek(false));
 export function openModal(o) {
   const peekable = o.peekable !== false;
   setPeek(false); // modal mới mở thì luôn hiện ra đàng hoàng
+  /* Hộp khai `yieldToNext` đứng đó cho người ta đọc chứ không tự tắt — nhưng nó
+     phải nhường chỗ ngay khi có hộp cần thao tác: thẻ Thời Cuộc còn nằm đó mà
+     hộp đấu giá chồng lên thì bấm xong một lớp vẫn chưa thấy bàn cờ, và cú bấm
+     "Đã rõ" lúc ấy rơi vào tấm thẻ của chuyện đã xong từ đời nào. */
+  for (const s of root()?.querySelectorAll('.scrim:not(.hide)') ?? []) {
+    if (s._yield) s._close?.(null);
+  }
   const scrim = document.createElement('div');
   scrim.className = 'scrim' + (peekable ? '' : ' no-peek');
 
@@ -252,6 +260,7 @@ export function openModal(o) {
      khai `timeoutValue` riêng (hộp thiếu tiền: hết giờ là xoay tiền hộ). */
   scrim._autoValue = 'timeoutValue' in o ? o.timeoutValue : escValue;
   scrim._dismissible = o.dismissible !== false;
+  scrim._yield = !!o.yieldToNext;
 
   /* Tạm cất hộp thoại đi để người chơi thao tác thẳng trên bàn cờ (chọn đất
      lúc dựng đề nghị giao dịch). Khác `setPeek`: peek chỉ làm mờ và cú bấm kế

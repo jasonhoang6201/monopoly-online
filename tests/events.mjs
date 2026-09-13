@@ -182,20 +182,31 @@ await page.evaluate(() => {
   st.pressure = 999;
   c.guard(() => c.endTurn());
 });
-/* Thẻ nay đi qua băng chuyền (`ui/caseOpen.js`): dải chạy 4 giây, dừng lại một
+/* Thẻ nay đi qua băng chuyền (`ui/caseOpen.js`): dải chạy 2,5 giây, dừng lại một
    nhịp rồi mặt thẻ mới nở ra. Chờ đúng lúc nó hiện chứ đừng đếm giây. */
 const cardSeen = await page.locator('.event-card')
   .waitFor({ state: 'visible', timeout: 15000 }).then(() => true).catch(() => false);
 ok('thẻ Thời Cuộc hiện ra khi thanh đầy', cardSeen);
 if (cardSeen) {
+  const cashBefore = await page.evaluate(
+    () => window.__monopoly.controller.state.players.reduce((s, p) => s + p.money, 0));
   ok('thẻ ghi rõ sự kiện rơi vào ai', (await page.locator('.event-detail').innerText()).length > 0);
   // Nửa dưới mặt thẻ phải in luật sẽ áp dụng, không để người chơi đoán theo lời văn
   const effect = await page.locator('.event-effect-list li').allInnerTexts().catch(() => []);
   ok('thẻ in rõ phần áp dụng', effect.length > 0, effect.join(' | '));
-  /* Hộp tự đóng sau `EVENT_CARD_MS`, nên cú bấm này có thể rơi vào chỗ trống —
-     kiểm cái cần kiểm là hộp **có biến mất**, chứ không phải ai đóng nó. */
-  await page.locator('.scrim.show button.btn').first().click({ timeout: 2000 }).catch(() => {});
-  ok('hộp thẻ tự đóng, không chờ ai bấm', await page.locator('.event-card')
+  /* Hộp thẻ không chặn mạch nữa: hai giây sau khi lật, `apply()` chạy và dòng
+     thông báo nổi lên dù chưa ai bấm — còn tấm thẻ thì vẫn nằm nguyên đó.
+     Soi qua tiền trong ví chứ không qua câu chữ: thẻ "hội chợ" cho người nghèo
+     nhất 200$, tức tổng tiền cả bàn phải nhúc nhích trong lúc hộp còn mở. */
+  const applied = await page.waitForFunction(
+    (n) => window.__monopoly.controller.state.players.reduce((s, p) => s + p.money, 0) > n,
+    cashBefore, { timeout: 8000 }).then(() => true).catch(() => false);
+  ok('luật áp dụng xong dù chưa bấm đóng thẻ', applied);
+  ok('thông báo nổi lên cùng lúc', (await page.locator('#broadcast .bcast').count()) > 0);
+  ok('thẻ vẫn nằm đó, không tự tắt',
+    await page.locator('.event-card').isVisible().catch(() => false));
+  await page.locator('.scrim.show button.btn').first().click({ timeout: 8000 });
+  ok('bấm nút thì hộp đóng', await page.locator('.event-card')
     .waitFor({ state: 'detached', timeout: 6000 }).then(() => true).catch(() => false));
   await page.waitForTimeout(1500);
 }

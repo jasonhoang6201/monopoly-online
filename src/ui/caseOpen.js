@@ -133,7 +133,7 @@ function cellHtml(kind, card, i) {
  * Ba chặng: nhấn ga, trôi đều, rồi hãm rất dài.
  *
  * `a`, `b` là hai mốc **thời gian** tính theo phần của cả pha (mặc định 0.15 và
- * 0.72 — tức 0,6 s tăng tốc, 2,3 s trôi, 1,1 s hãm trong pha 4 s). Vận tốc chặng
+ * 0.72 — tức 0,38 s tăng tốc, 1,43 s trôi, 0,70 s hãm trong pha 2,5 s). Vận tốc chặng
  * cuối giảm theo luỹ thừa ba nên mấy ô cuối bò từng chút một; chỗ hồi hộp nằm cả
  * ở đó chứ không phải lúc chạy nhanh.
  *
@@ -223,10 +223,14 @@ function spin(track, o) {
  *   - `faceHtml` mặt thẻ hiện ra sau khi dừng; bỏ trống thì dựng từ
  *     `fateCardBody` / `eventCardBody` như hộp thoại thường.
  *   - `seed` để mọi máy chạy ra cùng một dải; bỏ trống thì tự bốc.
- *   - `autoMs` > 0 thì tự đóng sau khi lật — dành cho máy ngồi xem.
+ *   - `yieldToNext` hộp thoại mở sau sẽ đẩy hộp này đi — xem `openModal`.
+ *   - `onReveal` gọi đúng lúc mặt thẻ vừa nở ra xong.
+ *   - `closeOn` lời hứa đóng hộp từ bên ngoài, chỉ nghe từ sau khi thẻ đã lật:
+ *     máy ngồi xem không có nút, hộp bên ấy tắt theo cú bấm của người đang đi.
+ *   - `waitNote` dòng chữ thay chỗ thanh nút trên máy ngồi xem.
  *   - `dismissAfter` cho phép hết giờ lượt đóng hộp, tính từ lúc thẻ đã lật.
  *   - `buttons` / `label` thanh nút, dựng như `openModal`.
- *   - Nhịp: `ms` pha trôi (4000), `holdMs` đứng yên trước khi lật (460),
+ *   - Nhịp: `ms` pha trôi (2500), `holdMs` đứng yên trước khi lật (460),
  *     `accel` và `cruiseEnd` hai mốc của đường chuyển động (0.15 / 0.72).
  *   - Dải: `minSpin` + `spinSpread` số ô trôi qua (42 + 0…18), `jitter` phần
  *     biên an toàn được phép lệch tâm (0.55).
@@ -237,7 +241,7 @@ function spin(track, o) {
 export function caseOpenModal(kind, card, pool, o = {}) {
   const seed = o.seed ?? newSeed();
   const rng = rngFrom(seed);
-  const ms = o.ms ?? 4000;
+  const ms = o.ms ?? 2500;
   const sound = o.sound !== false;
   const rank = rankOf(kind, card);
 
@@ -269,6 +273,7 @@ export function caseOpenModal(kind, card, pool, o = {}) {
     body: stage,
     dismissible: false,
     peekable: false,
+    yieldToNext: o.yieldToNext,
     enter: false,                       // Enter chỉ mở khoá sau khi dải dừng
     buttons: o.buttons ?? [{
       label: o.label ?? 'Nhận thẻ',
@@ -345,11 +350,24 @@ export function caseOpenModal(kind, card, pool, o = {}) {
       // dưới vạch.
       await new Promise((r) => setTimeout(r, o.holdMs ?? 460));
       await reveal(stage, reel, cell, kind, card, rank, o);
+      o.onReveal?.();          // mốc để bên gọi đếm giờ từ lúc thẻ hiện ra
 
       foot?.classList.remove('co-foot-hidden');
+      /* Không có nút thì phải nói vì sao: hộp không nút mà cũng không tắt được
+         thì người ngồi xem tưởng máy treo. */
+      if (o.waitNote) {
+        const note = document.createElement('div');
+        note.className = 'co-wait';
+        note.textContent = o.waitNote;
+        modal.appendChild(note);
+      }
       const btn = foot?.querySelector('.btn');
       if (btn) {
         const onKey = (e) => {
+          /* Hộp đóng bằng đường khác (hết giờ lượt, tin từ máy đang đi) thì nút
+             rời khỏi trang mà listener còn treo trên `window`: gỡ ngay, không
+             thì nó nuốt phím Enter của hộp thoại kế tiếp. */
+          if (!btn.isConnected) { window.removeEventListener('keydown', onKey, true); return; }
           if (e.key !== 'Enter' || e.repeat) return;
           e.preventDefault();
           window.removeEventListener('keydown', onKey, true);
@@ -365,35 +383,12 @@ export function caseOpenModal(kind, card, pool, o = {}) {
         const scrim = modal.parentElement;
         if (scrim) { scrim._dismissible = true; scrim._autoValue = true; }
       }
-      if (o.autoMs) {
-        setTimeout(() => close(null), o.autoMs);
-        countdown(btn, o.autoMs);
-      }
+      /* Đăng ký **sau** khi thẻ đã lật, không phải lúc mở hộp: máy nào chạy dải
+         chậm hơn một nhịp mà nghe ngay từ đầu thì tắt hộp trước cả lúc mặt thẻ
+         hiện ra — xem dải nãy giờ để rồi không thấy thẻ. */
+      if (o.closeOn) o.closeOn.then(() => close(null));
     },
   });
-}
-
-/**
- * Đếm ngược in ngay trên nút đóng.
- *
- * Hộp tự đóng mà nút không nói gì thì người chơi vừa đưa chuột tới đã thấy nó
- * biến mất, tưởng mình bấm nhầm. Con số chạy cho biết còn bao lâu, ai đọc xong
- * trước thì bấm luôn khỏi chờ.
- */
-function countdown(btn, ms) {
-  if (!btn) return;
-  const tag = document.createElement('span');
-  tag.className = 'co-count';
-  btn.appendChild(tag);
-  const t0 = performance.now();
-  const tick = () => {
-    if (!btn.isConnected) return;
-    const left = Math.ceil((ms - (performance.now() - t0)) / 1000);
-    if (left <= 0) { tag.remove(); return; }
-    tag.textContent = String(left);
-    setTimeout(tick, 200);
-  };
-  tick();
 }
 
 /* ------------------------------------------------------------------- lật thẻ */
@@ -443,16 +438,22 @@ async function reveal(stage, reel, cell, kind, card, rank, o) {
  * thêm `seed` để mọi máy chạy ra cùng một dải.
  *
  * @param {{amount?:?number, note?:string, label?:string, seed?:number,
- *   autoMs?:number}} [o]
+ *   closeOn?:Promise, waitNote?:string}} [o]
  */
 export function fateCase(kind, card, o = {}) {
   const amount = o.amount ?? null;
   const up = amount !== null && amount > 0;
+  /* Thẻ Cơ Hội / Khí Vận là chuyện của riêng người vừa đáp xuống ô: nút và phím
+     Enter chỉ có trên máy ấy. Máy ngồi xem nhận `closeOn` — không dựng nút nên
+     `openModal` cũng không gắn Enter, và hộp tắt theo cú bấm bên kia. Bỏ luôn
+     `dismissAfter`: đồng hồ lượt bên này không phải của họ, đóng hộ là cắt ngang
+     giữa chừng. */
+  const watching = !!o.closeOn;
   return caseOpenModal(kind, card, DECKS[kind], {
-    dismissAfter: true,
+    dismissAfter: !watching,
     ...o,
     faceHtml: fateCardBody(kind, card, o),
-    buttons: [{
+    buttons: watching ? [] : [{
       label: o.label ?? (up ? 'Nhận tiền' : 'Đành chịu'),
       value: true,
       cls: up ? 'btn-jade' : 'btn-danger',
@@ -461,28 +462,23 @@ export function fateCase(kind, card, o = {}) {
 }
 
 /**
- * Hộp thẻ Thời Cuộc đứng bao lâu sau khi lật, trước khi tự đóng.
- *
- * Thẻ Thời Cuộc là chuyện của **cả bàn**, nên máy nào cũng bày cùng một mặt
- * thẻ và cũng phải rời khỏi nó cùng một nhịp: người cầm lái đóng chậm thì mấy
- * máy kia ngồi nhìn màn hình trống, mà chờ họ bấm thì cả bàn treo theo một
- * người đã rời máy. Hết bấy nhiêu đây là hộp tự đóng ở mọi máy, rồi thông báo
- * "đã áp dụng" mới nổi lên.
- */
-export const EVENT_CARD_MS = 2000;
-
-/**
  * Bóc một thẻ Thời Cuộc. Thay chỗ `eventCardModal` cũ.
  *
- * Máy nào cũng có nút đóng — kể cả máy đang ngồi xem: đọc xong sớm thì tắt đi
- * ngó bàn cờ, không phải ngồi đợi hết giờ. Bấm hay không bấm thì sau `autoMs`
- * hộp cũng tự đóng, nên không máy nào chặn đường sự kiện chạy tiếp.
+ * Hộp **không tự đóng**: thẻ đổi luật của cả bàn, mặt thẻ có mấy dòng áp dụng,
+ * đọc chưa xong mà nó biến mất thì người chơi không biết vừa dính chuyện gì.
+ * Máy nào cũng có nút, mỗi máy đóng theo nhịp của mình.
  *
- * @param {{detail?:string, label?:string, seed?:number, autoMs?:number}} [o]
+ * Hai đường đóng khác, cho hộp khỏi thành tấm bảng chắn:
+ * `yieldToNext` — mạch sự kiện mở hộp hỏi (đấu giá, chọn khu) thì tấm thẻ nhường
+ * chỗ, chứ chồng lên nhau thì người chơi phải dọn hai lớp mới thấy bàn cờ;
+ * `dismissAfter` — đồng hồ lượt đóng hộ ở máy người bỏ đi giữa chừng.
+ *
+ * @param {{detail?:string, label?:string, seed?:number}} [o]
  */
 export function eventCase(card, o = {}) {
   return caseOpenModal('event', card, EVENTS, {
-    autoMs: EVENT_CARD_MS,
+    yieldToNext: true,
+    dismissAfter: true,
     ...o,
     faceHtml: eventCardBody(card, o.detail ?? ''),
     buttons: [{ label: o.label ?? 'Đã rõ', value: true, cls: 'btn-gold' }],

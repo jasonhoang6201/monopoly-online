@@ -52,6 +52,12 @@ export class Game {
     // Rê chuột trên bàn cờ → bảng xem nhanh bên cột trái
     this.scene.onTileHover = (id) => this.quick.show(id);
     this.busy = false;
+    /**
+     * Những chốt chờ đang treo của hộp thẻ Cơ Hội / Khí Vận trên **máy ngồi
+     * xem**: hộp bên ấy không có nút, nó tắt khi người đang đi bấm — xem
+     * `fateWatch`.
+     */
+    this.fateWaiters = new Set();
     /** Người thi hành thẻ Thời Cuộc — xem `game/eventRunner.js`. */
     this.events = new EventRunner(this);
     /** Phòng online, hoặc null khi cả bàn ngồi chung một máy. */
@@ -446,21 +452,29 @@ export class Game {
     } else if (name === 'eventcard') {
       /* Thẻ Thời Cuộc là chuyện của cả bàn, nên máy nào cũng phải thấy mặt thẻ.
          Cùng `seed` thì dải xếp y hệt và dừng đúng ô ấy, cả bàn hồi hộp cùng
-         nhau. Hạn đứng của hộp cũng để mặc định như máy cầm lái (`EVENT_CARD_MS`):
-         cả bàn rời khỏi mặt thẻ cùng một nhịp, rồi mới tới thông báo áp dụng. */
+         nhau. Khác thẻ Cơ Hội / Khí Vận ở chỗ nút đóng có ở **mọi** máy: thẻ
+         này đổi luật của cả bàn, ai cũng phải tự đọc rồi tự bấm — hộp không tự
+         tắt. Không `await`: mặt thẻ còn nằm đó thì hoạt cảnh kế tiếp vẫn phải
+         diễn, cùng nhịp với máy đang chạy sự kiện. */
       const card = EVENT_BY_ID[data.id];
-      if (card) await eventCase(card, { detail: data.detail, seed: data.seed });
+      if (card) eventCase(card, { detail: data.detail, seed: data.seed });
     } else if (name === 'fatecard') {
       /* Cơ Hội / Khí Vận vốn là chuyện riêng của người vừa đáp xuống ô, trước
          đây máy khác không thấy gì. Nay dải chạy nên cả bàn cùng xem, chỉ khác
-         là máy ngồi xem không bấm nút. */
+         là máy ngồi xem không bấm nút: nút "Đành chịu" và phím Enter là của
+         người đang đi, hộp bên này tắt theo cú bấm ấy (`fatedone`) chứ không
+         theo một cái hẹn giờ riêng — hai bên rời khỏi mặt thẻ cùng một nhịp. */
       const card = DECKS[data.kind]?.[data.index];
       if (card) {
         await fateCase(data.kind, card, {
           amount: data.amount ?? null, note: data.note ?? '',
-          seed: data.seed, autoMs: 1800,
+          seed: data.seed,
+          closeOn: this.fateWatch(),
+          waitNote: data.by ? `Chờ ${data.by} bấm…` : 'Chờ người đang đi…',
         });
       }
+    } else if (name === 'fatedone') {
+      this.fateDone();
     }
   }
 
@@ -1228,13 +1242,40 @@ export class Game {
    * máy tự dựng lại từ seed, không việc gì phải gửi cả năm chục ô qua đường
    * truyền.
    */
-  showFateCard(kind, card, o) {
+  async showFateCard(kind, card, o) {
     const index = DECKS[kind].indexOf(card);
     this.netEmit('fatecard', {
       kind, index, seed: o.seed,
       amount: o.amount ?? null, note: o.note ?? '',
+      by: this.state.players[this.state.turn]?.name ?? '',
     });
-    return fateCase(kind, card, o);
+    const v = await fateCase(kind, card, o);
+    // Hộp bên máy ngồi xem không có nút — nó tắt theo đúng cú bấm vừa rồi
+    this.netEmit('fatedone', {});
+    return v;
+  }
+
+  /**
+   * Chốt chờ cho hộp thẻ đang mở trên máy ngồi xem.
+   *
+   * Hộp ấy không có nút nên đường đóng duy nhất tới từ ngoài: tin `fatedone`
+   * của người đang đi. Vẫn kèm một hạn chót, vì máy kia có thể tắt giữa chừng —
+   * không thì cả bàn ngồi trước một tấm thẻ không cách nào bỏ đi. Hạn tính từ
+   * lúc nhận tin, tức còn khoảng mười giây sau khi thẻ lật xong.
+   */
+  fateWatch(ms = 15000) {
+    return new Promise((done) => {
+      this.fateWaiters.add(done);
+      setTimeout(() => {
+        if (this.fateWaiters.delete(done)) done();
+      }, ms);
+    });
+  }
+
+  /** Người đang đi đã bấm xong: đóng hộp thẻ ở máy này. */
+  fateDone() {
+    for (const done of this.fateWaiters) done();
+    this.fateWaiters.clear();
   }
 
   /** Thẻ cũ: cộng hoặc trừ tiền với ngân hàng. */
