@@ -395,11 +395,9 @@ const clickThrough = async (maxMs = 60000) => {
   const t0 = Date.now();
   while (Date.now() - t0 < maxMs) {
     await page.waitForTimeout(600);
-    // Bảng chọn ô nằm trên bàn cờ chứ không có nền tối — phải bấm vào ô
+    /* Bảng chọn ô (và bảng chọn khu, nay cũng chọn trên bàn) nằm trên bàn cờ
+       chứ không có nền tối — phải bấm vào ô */
     if (await picking(page)) { await pickOnBoard(page).catch(() => {}); continue; }
-    // Hộp chọn khu màu không có nút ở chân hộp — bấm thẳng vào dòng khu
-    const grp = page.locator('.scrim.show .grp-row').first();
-    if (await grp.isVisible().catch(() => false)) { await grp.click(); continue; }
     const btn = page.locator('.scrim.show .modal-foot button.btn').first();
     if (await btn.isVisible().catch(() => false)) { await btn.click(); continue; }
     // Không còn hộp nào mà ván cũng rảnh tay → chuỗi hộp thoại đã xong
@@ -427,26 +425,35 @@ ok('thẻ dỡ nhà nằm trong túi chứ không nổ ngay', await page.evaluat
   return st.players[st.turn].cards.length === 1 && st.housesOn(39) === 3;
 }));
 
-/** Chọn khu màu trong hộp thẻ dỡ nhà, rồi chờ vòng bốc thăm chạy xong. */
-const pickGroup = async (key) => {
-  const row = page.locator(`.grp-row[data-g="${key}"]`);
-  await row.waitFor({ timeout: 15000 });
-  await row.click();
+/**
+ * Chọn khu bằng cách bấm **một ô của khu ấy** trên bàn cờ, rồi chờ vòng bốc
+ * thăm chạy xong. Cùng một thao tác với bảng chọn ô, nên dùng lại `pickOnBoard`.
+ */
+const pickGroup = async (id) => {
+  await pickOnBoard(page, id);
   await page.waitForTimeout(3200);
 };
 
+/* Lôi thẻ ra rồi đổi ý: bảng chọn có nút bỏ ngang, và thẻ phải còn nguyên
+   trong túi. Trước đây thẻ rời túi ngay lúc bấm "Dùng" nên bỏ ngang là mất
+   trắng — mở ra ngắm bàn cờ rồi thấy chưa đáng dùng là chuyện thường. */
 await useFromBag();
-ok('thẻ dỡ nhà mời chọn khu màu chứ không chọn ô',
-  await page.locator('.grp-list .grp-row').first().isVisible());
-const groupKeys = await page.locator('.grp-row').evaluateAll(
-  (els) => els.map((e) => e.dataset.g));
-ok('chỉ khu có nhà của người khác được bày ra', groupKeys.join() === 'dark_blue',
-  groupKeys.join());
-/* Vệt sáng kiểu "chỉ trỏ" (`litTiles`) không đụng `markSet` — con trỏ chuột
-   giữ nguyên vì đây không phải lời mời bấm vào ô, nên đọc thẳng `marked`. */
-const litIds = await page.evaluate(() => [...(window.__monopoly.scene.marked?.ids ?? [])]);
+await page.locator('.tile-pick .tp-cancel').click();
+await page.waitForTimeout(900);
+ok('bỏ ngang lúc chọn khu thì thẻ còn nguyên trong túi', await page.evaluate(() => {
+  const st = window.__monopoly.controller.state;
+  return st.players[st.turn].cards.length === 1 && st.housesOn(39) === 3;
+}));
+
+await useFromBag();
+ok('thẻ dỡ nhà mời chọn khu ngay trên bàn cờ', await picking(page));
+const chips = (await page.locator('.tile-pick .tp-chip').allTextContents())
+  .map((t) => t.trim());
+ok('chỉ khu có nhà của người khác được bày ra', chips.length === 1, chips.join());
+// Phiên chọn thật (`markSet`), không phải vệt chỉ trỏ: bấm vào ô là ăn
+const litIds = await markedTiles(page);
 ok('ô trong tầm ngắm sáng sẵn trên bàn cờ', litIds.join() === '39', litIds.join());
-await pickGroup('dark_blue');
+await pickGroup(39);
 const after = await page.evaluate(() => {
   const st = window.__monopoly.controller.state;
   return { houses: st.housesOn(39), owner: st.owner.get(39),
@@ -464,7 +471,7 @@ await page.waitForTimeout(900);
 await page.locator('.scrim.show .modal-foot button.btn').first().click();
 await page.waitForTimeout(1400);
 await useFromBag();
-await pickGroup('dark_blue');
+await pickGroup(39);
 ok('thẻ Cơ Hội dỡ đúng hai cấp', await page.evaluate(() => (
   window.__monopoly.controller.state.housesOn(39) === 2)));
 
@@ -477,6 +484,15 @@ await page.locator('.scrim.show .modal-foot button.btn').first().click();     //
 await page.waitForTimeout(1400);
 await useFromBag();
 ok('giải toả cũng mời chọn lô trên bàn cờ', await page.locator('.tile-pick').first().isVisible());
+
+// Bỏ ngang ở bảng chọn ô cũng giữ thẻ lại, y như bảng chọn khu
+await page.locator('.tile-pick .tp-cancel').click();
+await page.waitForTimeout(900);
+ok('bỏ ngang lúc chọn lô thì thẻ còn nguyên trong túi', await page.evaluate(() => {
+  const st = window.__monopoly.controller.state;
+  return st.players[st.turn].cards.length === 1;
+}));
+await useFromBag();
 
 // Chốt lô sáng đầu tiên, rồi đối chiếu theo đúng lô đó
 const lot = (await markedTiles(page))[0];

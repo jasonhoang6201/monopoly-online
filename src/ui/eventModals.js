@@ -215,3 +215,76 @@ export function auctionBidModal(state, playerId, tileId, o = {}) {
   });
   return pr.finally(() => clearInterval(ticker)).then(() => bid);
 }
+
+/**
+ * Bảng giá mở ra sau khi phiên đấu giá đóng — ai ghi bao nhiêu, xếp từ cao
+ * xuống thấp, hàng người thắng tô vàng.
+ *
+ * Trước đây chốt phiên chỉ có một dòng thông báo: tên người thắng, giá của họ,
+ * và giá người kế tiếp. Giá kín nên người thua không biết mình hụt bao nhiêu,
+ * mà mấy người còn lại thì không biết gì cả. Giá chỉ cần kín tới lúc tiền đã
+ * trao; mở hết ra sau đó thì phiên sau ai cũng đoán được tay nào chịu chi.
+ *
+ * Hộp này mở ở **mọi máy** (xem `auctionend` trong `controller.onEvent`), và
+ * khai `yieldToNext` để không chắn đường hộp hỏi của nước kế tiếp.
+ *
+ * @param {object} state
+ * @param {number} tileId
+ * @param {Array<{seat:number,bid:number}>} rows đã xếp sẵn, hoà thì người đi
+ *   trước trong vòng lượt đứng trên
+ * @param {{winner:number, sellerName?:string}} o
+ */
+export function auctionResultModal(state, tileId, rows, o) {
+  const t = BOARD[tileId];
+  /* Xếp lại lần nữa cho chắc, và `sort` của JS giữ nguyên thứ tự hai giá bằng
+     nhau — tức giữ đúng luật hoà mà bên gọi đã áp: người đi trước đứng trên. */
+  const list = [...rows].sort((a, b) => b.bid - a.bid);
+  const win = state.players[o.winner];
+  /* Giá chốt lấy từ hàng của người thắng chứ không lấy hàng đầu bảng: người trả
+     cao hơn mà vỡ nợ ngay trong phiên thì bên gọi đã gạt họ khỏi `rows`, nhưng
+     đọc theo hàng đầu vẫn an toàn hơn là tin vào thứ tự. */
+  const paid = list.find((r) => r.seat === o.winner)?.bid ?? list[0]?.bid ?? 0;
+
+  const line = (r, i) => {
+    const p = state.players[r.seat];
+    if (!p) return '';
+    const won = r.seat === o.winner;
+    /* Hoà giá mà thua thì phải nói rõ vì sao, không thì bảng hiện "hụt 0$" —
+       người ấy tưởng máy tính sai chứ không nhớ ra luật hoà. */
+    const meta = won ? 'Trả cao nhất — lấy đất'
+      : r.bid === paid ? 'Bằng giá — thua vì đi sau trong vòng lượt'
+      : r.bid > 0 ? `Hụt ${money(paid - r.bid)}`
+      : 'Không ghi giá — bỏ qua phiên';
+    return `
+      <div class="arow bid-row${won ? ' win' : ''}${r.bid > 0 ? '' : ' pass'}">
+        <span class="bid-rank">${won ? '★' : i + 1}</span>
+        <span class="arow-chip" style="background:${p.token.css}"></span>
+        <span class="arow-main">
+          <span class="arow-name">${esc(p.name)}</span>
+          <span class="arow-meta">${meta}</span>
+        </span>
+        <span class="bid-money">${r.bid > 0 ? money(r.bid) : '—'}</span>
+      </div>`;
+  };
+
+  return openModal({
+    eyebrow: 'CHỐT PHIÊN ĐẤU GIÁ',
+    title: esc(t.name.split(' (')[0]),
+    sub: `<b style="color:${win.token.css}">${esc(win.name)}</b> trả
+          <b>${money(paid)}</b> — cao nhất bàn, lô đất về tay họ.`,
+    scrimClose: true,
+    yieldToNext: true,
+    body: `
+      ${tileRow(tileId, `Giá gốc ${money(t.price)} · chốt ${money(paid)}`)}
+      <div class="bid-table">
+        <div class="bid-head">
+          <span>Hạng</span><span></span><span>Người trả giá</span><span>Giá đã ghi</span>
+        </div>
+        ${list.map(line).join('')}
+      </div>
+      <div class="trade-summary">Tiền về
+        ${o.sellerName ? `tay <b>${esc(o.sellerName)}</b>` : '<b>kho ngân hàng</b>'} —
+        giá kín chỉ kín tới lúc chốt, giờ cả bàn cùng thấy.</div>`,
+    buttons: [{ label: 'Đã rõ', value: true, cls: 'btn-gold' }],
+  });
+}

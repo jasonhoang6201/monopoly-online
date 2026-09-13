@@ -1,8 +1,7 @@
 # Cờ Tỷ Phú — Sài Gòn · Gia Định (bản online)
 
-> Bản **nhiều máy**, sao chép từ [`../monopoly-base`](../monopoly-base) và đang thêm lớp mạng
-> Supabase Realtime. Kiến trúc mạng cùng lộ trình: [`ONLINE.md`](ONLINE.md).
-> Cần bản offline một máy đã ổn định thì dùng `monopoly-base`.
+> Bản **nhiều máy** chạy trên Supabase Realtime.
+> Kiến trúc mạng cùng lộ trình: [`ONLINE.md`](ONLINE.md).
 
 Monopoly phiên bản Việt Nam, chạy hoàn toàn **local** bằng thư viện [Phaser 3](https://phaser.io)
 (mã nguồn mở, giấy phép MIT — **không tốn phí**). Bàn cờ lấy tên đường Sài Gòn thời Pháp thuộc
@@ -21,7 +20,7 @@ cp .env.example .env    # điền khoá Supabase, xem ONLINE.md
 npm run dev             # mở http://localhost:5174
 ```
 
-Cổng 5174 để mở song song với `monopoly-base` (cổng 5173) mà không đụng nhau.
+Cổng 5174; hai cổng 5178 và 5179 để dành cho bộ kiểm thử, xem phần dưới.
 
 Build bản tĩnh:
 

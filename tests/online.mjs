@@ -333,6 +333,55 @@ await A.bringToFront();
 ok(await until(async () => (await A.locator('#actions button:not([disabled])').count()) > 0, 20000),
   'xong giao dịch thì bên gửi được trả lại thanh nút');
 
+/* ============ 7b · bảng quản lý tài sản phát từng thao tác, không đợi đóng */
+
+/* Người xây nhà có thể ngồi trong bảng quản lý cả phút. Nếu ảnh chụp chỉ phát
+   lúc đóng bảng thì mấy máy kia đọc dòng "đã xây nhà ở X" mà số tiền và căn
+   nhà trên bàn vẫn y như cũ — hai thứ nói ngược nhau. Kiểm đúng chỗ ấy: bảng
+   **vẫn đang mở** ở máy A mà máy B đã thấy đủ cả nhà lẫn tiền. */
+
+console.log('\n▸ 7b. Xây nhà hiện ngay trên máy kia, chưa cần đóng bảng');
+const built = await A.evaluate(async () => {
+  const { GROUP_TILES } = await import('/src/data/board.js');
+  const c = window.__monopoly.controller;
+  const st = c.state;
+  const seat = c.net.mySeat;
+  // Khu đầu bảng là khu rẻ nhất — đủ bộ thì xây được ngay
+  const ids = GROUP_TILES[Object.keys(GROUP_TILES)[0]];
+  st.players[seat].money = 99999;
+  for (const id of ids) {
+    st.owner.delete(id);
+    st.mortgaged.delete(id);
+    st.houses.delete(id);
+    st.buy(seat, id);
+  }
+  st.players[seat].money = 5000;
+  c.hud.refresh();
+  c.scene.refresh(st);
+  c.sync();
+  return { seat, ids };
+});
+await A.waitForTimeout(700);
+
+await A.bringToFront();
+await A.locator('#actions button[data-key="q"]').click();
+const buildBtn = A.locator(`.scrim.show [data-act="build"][data-tile="${built.ids[0]}"]`).first();
+ok(await until(async () => (await buildBtn.count()) > 0, 20000), 'bảng quản lý mở ra, khu đủ bộ xây được');
+const cashBefore = await money(B, built.seat);
+await buildBtn.click();
+
+ok(await until(async () => B.evaluate(
+  (id) => window.__monopoly.controller.state.housesOn(id) === 1, built.ids[0]), 15000),
+  'căn nhà vừa xây hiện trên máy bên kia');
+ok(await until(async () => (await money(B, built.seat)) < cashBefore, 15000),
+  'tiền xây cũng trừ ngay ở đó', `${cashBefore} → ${await money(B, built.seat)}`);
+ok((await A.locator('.scrim.show #mg-body').count()) === 1,
+  'và bảng quản lý vẫn đang mở suốt lúc ấy');
+
+await A.locator('.scrim.show .modal-foot button.btn', { hasText: 'Xong' }).click();
+ok(await until(async () => (await A.locator('#actions button:not([disabled])').count()) > 0, 20000),
+  'đóng bảng thì thanh nút trở lại');
+
 /* ======================================= 8 · đứt đường truyền rồi nối lại */
 
 console.log('\n▸ 8. Đứt đường truyền giữa ván rồi tự nối lại');

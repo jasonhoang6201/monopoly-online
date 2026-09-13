@@ -33,10 +33,10 @@ import {
   winnerModal, describe, playerModal, tileModal, rollOffModal, attachTimer,
 } from '../ui/modals.js';
 import {
-  bracePromptModal, firePromptModal, auctionBidModal,
+  bracePromptModal, firePromptModal, auctionBidModal, auctionResultModal,
 } from '../ui/eventModals.js';
 import { pickTileOnBoard, litTiles } from '../ui/tilePicker.js';
-import { pickGroupModal } from '../ui/groupPicker.js';
+import { pickGroupOnBoard } from '../ui/groupPicker.js';
 import { EVENT_BY_ID } from '../data/events.js';
 import { audio } from '../audio/audio.js';
 import { MemeDeck } from '../ui/memes.js';
@@ -481,6 +481,12 @@ export class Game {
           waitNote: data.by ? `Chờ ${data.by} bấm…` : 'Chờ người đang đi…',
         });
       }
+    } else if (name === 'auctionend') {
+      /* Bảng giá chốt phiên: giá kín nên máy ngồi xem không tự dựng lại được,
+         phải nhận nguyên danh sách từ máy cầm lái. Không `await` — hộp đứng đó
+         tới lúc người ở máy này bấm, không giữ nhịp của ai. */
+      auctionResultModal(this.state, data.tileId, data.rows,
+        { winner: data.winner, sellerName: data.sellerName });
     } else if (name === 'fatedone') {
       this.fateDone();
     }
@@ -550,8 +556,7 @@ export class Game {
     }
     if (name === 'ev-group') {
       audio.sfx('turn');
-      return litTiles(this.scene, data.ids,
-        () => pickGroupModal(this.state, data, ms));
+      return this.pickGroup(data, ms);
     }
     if (name === 'ev-bid') {
       audio.sfx('turn');
@@ -1374,10 +1379,15 @@ export class Game {
   /**
    * Dùng một tấm trong túi.
    *
-   * Lá bài **trả về bộ trước khi thi hành**: hiệu ứng có thể mở đấu giá, có
-   * thể làm ai đó vỡ nợ, mà giữa chừng ấy không được để lá bài kẹt lại ngoài
-   * bộ. Quyền dùng cũng soát lại ở đây chứ không tin nút bấm suông — bàn cờ
-   * đổi liên tục, nút bày ra lúc nãy có thể đã hết đúng.
+   * Ba thẻ nhắm vào nhà đất (dỡ nhà, cưỡng chế mua, giải toả chỉ định) **hỏi
+   * mục tiêu trước, rút thẻ khỏi túi sau**. Lôi thẻ ra, nhìn lại bàn cờ rồi
+   * thấy chưa đáng dùng là chuyện thường; rút trước thì thẻ mất trắng dù chưa
+   * đụng tới ai. Hỏi xong mới rút cũng không lệch luật cũ: lá bài vẫn **trả về
+   * bộ trước khi hiệu ứng chạy** — hiệu ứng có thể mở đấu giá, có thể làm ai đó
+   * vỡ nợ, mà giữa chừng ấy không được để lá bài kẹt lại ngoài bộ.
+   *
+   * Quyền dùng soát lại ở đây chứ không tin nút bấm suông — bàn cờ đổi liên
+   * tục, nút bày ra lúc nãy có thể đã hết đúng.
    */
   async useHeldCard(at) {
     const st = this.state;
@@ -1392,18 +1402,45 @@ export class Game {
       return;
     }
 
-    st.dropCard(p.id, at);
+    const title = cardName(card);
+    const type = cardType(card);
+
+    // Hỏi mục tiêu trước; bỏ ngang thì thẻ còn nguyên trong túi, coi như chưa bấm
+    let target;
+    if (type === 'demolish' || type === 'seize' || type === 'resume') {
+      target = type === 'demolish'
+        ? await this.askDemolishGroup(p, card)
+        : await this.askStrikeTile(p, card, type);
+      if (target == null) return;
+    }
+
+    if (!this.spendCard(p, at, ref)) return;
+
+    switch (type) {
+      case 'jail-free':     return this.useJailCard(false);
+      case 'resume-random': return this.resumeRandom(p, card, title);
+      case 'demolish':      return this.demolishInGroup(p, card, title, target);
+      default:              return this.strikeWithPick(p, card, title, target);
+    }
+  }
+
+  /**
+   * Rút đúng tấm vừa chọn khỏi túi rồi loan tin.
+   *
+   * Bám theo chính tấm thẻ (`ref`) chứ không bám chỉ số trong túi: quãng hỏi
+   * mục tiêu kéo dài hàng chục giây, mà túi có thể đã xáo giữa chừng (vỡ nợ
+   * trả thẻ về bộ). Chỉ số cũ lúc ấy trỏ sang tấm khác.
+   *
+   * @returns {boolean} `false` nếu tấm ấy không còn trong túi — bên gọi bỏ nước
+   */
+  spendCard(p, at, ref) {
+    const i = p.cards[at] === ref ? at : p.cards.indexOf(ref);
+    if (i < 0) return false;
+    this.state.dropCard(p.id, i);
     audio.sfx('card');
     this.hud.refresh();
     this.sync();
-
-    const title = cardName(card);
-    switch (cardType(card)) {
-      case 'jail-free':     return this.useJailCard(false);
-      case 'resume-random': return this.resumeRandom(p, card, title);
-      case 'demolish':      return this.demolishInGroup(p, card, title);
-      default:              return this.strikeWithPick(p, card, title);
-    }
+    return true;
   }
 
   /**
@@ -1417,19 +1454,25 @@ export class Game {
   }
 
   /**
-   * Hai thẻ bắt người dùng tự chọn **một ô**: cưỡng chế mua và giải toả chỉ
-   * định. (Thẻ dỡ nhà chọn tới mức khu — xem `demolishInGroup`.)
+   * Hỏi mục tiêu cho hai thẻ bắt chọn **một ô**: cưỡng chế mua và giải toả chỉ
+   * định. (Thẻ dỡ nhà chọn tới mức khu — xem `askDemolishGroup`.)
    *
    * Người dùng thẻ tự chọn mục tiêu; đây mới là chỗ đắt giá, và cũng là chỗ ép
    * đất đổi chủ mà không cần đối phương gật đầu. Hỏi qua `events.askOne` nên
    * bản một máy chuyền tay, bản online hiện đúng ở máy người ấy, mà họ đã bỏ
    * bàn thì có sẵn câu trả lời mặc định.
+   *
+   * Thẻ tự lôi ra khỏi túi thì lùi lại được: phiên chọn có nút bỏ ngang, và hết
+   * giờ cũng là bỏ ngang. Lúc gọi tới đây thẻ chưa rời túi, nên bỏ ngang không
+   * mất gì — khác hẳn mấy phiên chọn do sự kiện ép, ở đó bỏ trống là sự kiện
+   * đứng lại giữa chừng.
+   *
+   * @returns {Promise<?number>} ô đã chốt, `null` nếu bỏ ngang hoặc hết mục tiêu
    */
-  async strikeWithPick(p, card, title) {
+  async askStrikeTile(p, card, type) {
     const st = this.state;
     const ids = cardTargets(st, card, p.id);
-    if (ids.length === 0) return;   // bàn vừa đổi thế giữa chừng
-    const type = cardType(card);
+    if (ids.length === 0) return null;   // bàn vừa đổi thế giữa chừng
 
     const text = {
       seize: {
@@ -1449,52 +1492,75 @@ export class Game {
       },
     }[type];
     text.owned = false;
+    text.cancel = 'Thôi, cất thẻ lại';
 
-    // Hết giờ / bỏ bàn thì nhắm vào ô rẻ nhất — nhẹ tay nhất trong các lựa chọn
-    const fallback = [...ids].sort((a, b) => BOARD[a].price - BOARD[b].price)[0];
     const picked = await this.events.askOne({
       seat: p.id,
       name: 'ev-pick',
       data: { ids, text },
       local: () => this.pickTile(ids, text, this.events.localMs),
-      fallback,
+      fallback: null,
       note: 'họ vừa lôi ra một thẻ nhắm vào nhà đất người khác',
     });
-    const tileId = ids.includes(picked) ? picked : fallback;
-    // Đất có thể vừa đổi chủ trong lúc hỏi (người kia phá sản) — soát lại
-    if (!cardTargets(st, card, p.id).includes(tileId)) return;
+    return ids.includes(picked) ? picked : null;
+  }
 
-    if (type === 'resume') return this.resumeTile(p, tileId, card, title);
+  /** Thi hành thẻ cưỡng chế mua / giải toả lên ô đã chốt ở `askStrikeTile`. */
+  async strikeWithPick(p, card, title, tileId) {
+    // Đất có thể vừa đổi chủ trong lúc hỏi (người kia phá sản) — soát lại
+    if (!cardTargets(this.state, card, p.id).includes(tileId)) return;
+
+    if (cardType(card) === 'resume') return this.resumeTile(p, tileId, card, title);
     return this.seizeTile(p, tileId, title);
   }
 
   /**
-   * Thẻ dỡ nhà: người dùng chỉ chọn **khu màu**, bàn cờ bốc thăm ô.
+   * Hỏi mục tiêu cho thẻ dỡ nhà: người dùng chỉ chọn **khu màu**, bàn cờ bốc
+   * thăm ô.
    *
    * Chọn thẳng một ô thì tấm thẻ luôn rơi đúng lô đắt nhất của người dẫn đầu,
    * lần nào cũng vậy. Chọn khu rồi bốc thăm thì vẫn nhắm được vào ai, nhưng
    * nhắm vào chỗ nào là chuyện hên xui — và người bị dỡ có cớ để rải nhà ra
    * nhiều ô thay vì dồn hết vào một lô.
+   *
+   * @returns {Promise<?string>} khoá khu, `null` nếu bỏ ngang hoặc hết mục tiêu
    */
-  async demolishInGroup(p, card, title) {
+  async askDemolishGroup(p, card) {
     const st = this.state;
     const groups = demolishGroups(st, card, p.id);
-    if (groups.length === 0) return;
-    const ids = cardTargets(st, card, p.id);
-    const levels = demolishLevels(card);
-    const data = { groups, ids, levels };
+    if (groups.length === 0) return null;
+    const data = {
+      groups,
+      ids: cardTargets(st, card, p.id),
+      levels: demolishLevels(card),
+      // Thẻ chưa rời túi lúc này, nên bỏ ngang không mất gì — xem `askStrikeTile`
+      cancel: 'Thôi, cất thẻ lại',
+    };
 
     const group = await this.events.askOne({
       seat: p.id,
       name: 'ev-group',
       data,
-      local: () => litTiles(this.scene, ids, () => pickGroupModal(st, data, this.events.localMs)),
-      // Hết giờ / bỏ bàn: lấy khu đầu bảng, khu rẻ nhất trong số chọn được
-      fallback: groups[0],
+      local: () => this.pickGroup(data, this.events.localMs),
+      fallback: null,
       note: 'họ vừa lôi ra thẻ dỡ nhà',
     });
-    const key = groups.includes(group) ? group : groups[0];
+    return groups.includes(group) ? group : null;
+  }
 
+  /**
+   * Chọn một khu ngay trên bàn cờ — xem `ui/groupPicker.js`.
+   *
+   * Gom vào đây cùng lý do với `pickTile`: cả `onAsk` lẫn `askDemolishGroup`
+   * đều cần đúng một cách hỏi, mà chỗ duy nhất giữ `scene` là controller.
+   */
+  pickGroup(data, ms = 0) {
+    return pickGroupOnBoard(this.scene, this.state, data, ms);
+  }
+
+  /** Thi hành thẻ dỡ nhà lên khu đã chốt ở `askDemolishGroup`. */
+  async demolishInGroup(p, card, title, key) {
+    const st = this.state;
     // Bàn có thể vừa đổi thế trong lúc hỏi (người kia vỡ nợ) — soát lại từ đầu
     if (!demolishGroups(st, card, p.id).includes(key)) return;
     const { candidates, hits } = demolishPicks(st, card, p.id, key);
@@ -2148,6 +2214,11 @@ export class Game {
       }
       const p = this.state.players[playerId];
       const label = tileLabel(id);
+      /* Phát ảnh chụp ngay sau **từng** thao tác, đừng đợi lúc đóng bảng.
+         Người xây nhà có thể ngồi trong bảng quản lý cả phút; chờ tới lúc ấy
+         mới phát thì mấy máy kia đọc dòng "đã xây nhà ở X" mà số tiền và căn
+         nhà trên bàn vẫn y như cũ — hai thứ nói ngược nhau. */
+      this.sync();
       // Người đang quản lý tài sản có hộp thoại che bàn; cái nháy này là cho
       // mấy máy còn lại, họ chỉ thấy dòng thông báo chứ không thấy nút nào bấm
       this.spot([id]);

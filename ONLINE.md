@@ -1,7 +1,7 @@
 # Chơi online nhiều máy — kiến trúc và hiện trạng
 
-Bản này sao chép từ [`../monopoly-base`](../monopoly-base) rồi bọc thêm lớp mạng ở
-`src/net/`. Luật chơi, mỹ thuật, âm thanh giữ nguyên.
+Lớp mạng nằm gọn trong `src/net/`, bọc ngoài phần luật chơi, mỹ thuật và âm thanh
+vốn chạy được một mình.
 
 ## Vào phòng thế nào
 

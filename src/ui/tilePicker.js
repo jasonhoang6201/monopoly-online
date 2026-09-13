@@ -37,15 +37,19 @@ function tileMeta(state, id, owned) {
  * @param {import('../core/state.js').GameState} state
  * @param {number[]} ids các ô chọn được
  * @param {{eyebrow:string,title:string,sub:string,note?:string,confirm:string,
- *          owned?:boolean}} text
+ *          owned?:boolean,cancel?:string}} text `cancel` là nhãn nút bỏ ngang;
+ *   bỏ trống thì phiên chọn này bắt buộc phải ra một ô. Chỉ đặt khi bên gọi còn
+ *   lùi lại được — thẻ tự lôi ra khỏi túi thì lùi được, sự kiện ép chọn thì không.
  * @param {number} [ms] bản online: hạn chọn. Hết giờ thì lấy ô **rẻ nhất** —
  *   bỏ trống thì sự kiện đứng lại, mà tự lấy ô đắt thì hoá ra phạt người mất
- *   kết nối nặng hơn người ngồi bấm.
- * @returns {Promise<number>} ô đã chốt
+ *   kết nối nặng hơn người ngồi bấm. Phiên bỏ ngang được thì hết giờ là bỏ
+ *   ngang, vì chưa có gì xảy ra để mà phải gánh hậu quả.
+ * @returns {Promise<?number>} ô đã chốt, `null` nếu bỏ ngang
  */
 export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
   const cheapest = [...ids].sort((a, b) => BOARD[a].price - BOARD[b].price)[0];
   const owned = text.owned !== false;
+  const cancel = text.cancel ?? null;
 
   return new Promise((resolve) => {
     const hud = document.getElementById('board-hud');
@@ -58,7 +62,10 @@ export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
       <div class="tp-call">Bấm vào <b>ô đang sáng</b> trên bàn cờ —
         có <b>${ids.length}</b> ô chọn được</div>
       ${text.note ? `<div class="tp-note">${text.note}</div>` : ''}
-      <div class="tp-timer" hidden></div>`;
+      <div class="tp-timer" hidden></div>
+      ${cancel ? `<div class="tp-acts">
+        <button type="button" class="btn btn-ghost tp-cancel">${esc(cancel)}</button>
+      </div>` : ''}`;
     hud.appendChild(panel);
     // Thanh nút hành động nằm đúng chỗ này; cất đi trong lúc chọn
     hud.classList.add('picking');
@@ -126,16 +133,21 @@ export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
       else scene.markTiles(ids);   // quay lại chọn, bỏ vệt sáng gắt của ô cũ
     };
 
+    panel.querySelector('.tp-cancel')?.addEventListener('click', () => {
+      audio.sfx('click');
+      finish(null);
+    });
+
     if (ms) {
       const timer = panel.querySelector('.tp-timer');
       timer.hidden = false;
       const until = Date.now() + ms;
       const tick = () => {
         const left = Math.max(0, until - Date.now());
-        timer.innerHTML = `Còn <b>${Math.ceil(left / 1000)} giây</b>
-          để chọn — quá hạn thì lấy ô rẻ nhất.`;
+        timer.innerHTML = `Còn <b>${Math.ceil(left / 1000)} giây</b> để chọn —
+          quá hạn thì ${cancel ? 'bỏ ngang' : 'lấy ô rẻ nhất'}.`;
         timer.classList.toggle('warn', left <= 10000);
-        if (left <= 0) finish(cheapest);
+        if (left <= 0) finish(cancel ? null : cheapest);
       };
       tick();
       ticker = setInterval(tick, 250);

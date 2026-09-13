@@ -1604,33 +1604,13 @@ html, body {
 .bag-use { flex: none; }
 
 /* ------------------------------------------------------------
-   Chọn khu màu — thẻ dỡ nhà nhắm tới cả khu chứ không tới từng ô
+   Chọn khu màu — thẻ dỡ nhà nhắm tới cả khu chứ không tới từng ô.
+   Khu chọn ngay trên bàn cờ, chỗ này chỉ còn vệt màu trong hộp xác nhận.
    ------------------------------------------------------------ */
-.grp-list { display: flex; flex-direction: column; gap: 8px; }
-.grp-row {
-  display: flex; align-items: center; gap: 12px; width: 100%;
-  padding: 11px 12px; border-radius: 9px; text-align: left;
-  background: rgba(20, 14, 9, .38);
-  border: 1px solid rgba(200, 160, 72, .28);
-  color: inherit; font: inherit; cursor: pointer;
-  transition: background .16s, border-color .16s, transform .1s;
-}
-.grp-row:hover { background: rgba(200, 160, 72, .16); border-color: rgba(200, 160, 72, .6); }
-.grp-row:active { transform: translateY(1px); }
 /* Vệt màu đúng bằng màu in trên đầu ô — nhận ra khu mà khỏi đọc tên */
 .grp-swatch {
   flex: none; width: 14px; height: 34px; border-radius: 3px;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35);
-}
-.grp-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.grp-name {
-  font-family: var(--display); font-size: 13px; letter-spacing: .04em;
-  color: var(--paper);
-}
-.grp-meta { font-size: 11.5px; line-height: 1.45; color: var(--paper-deep); opacity: .85; }
-.grp-go {
-  flex: none; font-family: var(--display); font-size: 11px;
-  letter-spacing: .18em; color: var(--gold-light);
 }
 
 /* Dòng nói rõ thẻ này rơi vào ai, vào ô nào — nhỏ hơn lời thẻ một bậc */
@@ -2357,6 +2337,43 @@ html, body {
 .bid-box input:focus { outline: none; border-color: var(--gold-light); }
 .bid-quick { display: flex; gap: 6px; margin-top: 8px; }
 .bid-quick .btn { flex: 1; padding: 6px 4px; font-size: 11.5px; }
+
+/* --- bảng giá lúc chốt phiên -----------------------------------------
+   Bốn cột: hạng, màu quân, tên, giá. Cột hạng và cột giá cố định bề ngang
+   để con số của các hàng thẳng nhau, đọc dọc là so được ngay ai hơn ai. */
+.bid-table { margin-top: 12px; text-align: left; }
+.bid-head, .bid-row {
+  display: grid;
+  grid-template-columns: 26px 10px 1fr auto;
+  gap: 10px; align-items: center;
+}
+.bid-head {
+  padding: 0 11px 5px;
+  font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--gold); opacity: .7;
+}
+.bid-head span:last-child { text-align: right; }
+.bid-rank {
+  font-family: var(--serif); font-size: 13px; text-align: center;
+  color: var(--paper-deep); opacity: .7;
+  font-variant-numeric: tabular-nums;
+}
+.bid-money {
+  font-family: var(--serif); font-size: 15px; text-align: right;
+  color: var(--paper); font-variant-numeric: tabular-nums;
+}
+/* Hàng thắng phiên — viền vàng và nền vàng nhạt, cùng lối tô với hàng giá
+   thuê đang áp dụng (`.rent-table .rr.now`) */
+.bid-row.win {
+  background: rgba(200, 160, 72, .16);
+  border-color: var(--gold-light);
+}
+.bid-row.win .bid-rank { color: var(--gold-light); opacity: 1; }
+.bid-row.win .arow-name { color: var(--gold-pale); }
+.bid-row.win .bid-money { color: var(--gold-light); font-size: 16.5px; }
+/* Người ghi 0 thì mờ đi — họ có mặt trong bảng để thấy là đã được hỏi */
+.bid-row.pass { opacity: .55; }
+.bid-row.pass .bid-money { color: var(--paper-deep); }
 
 /* Chọn nấc thẻ Thời Cuộc trong phòng chờ */
 .lobby-rule {

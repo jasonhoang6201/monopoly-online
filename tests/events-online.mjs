@@ -152,6 +152,32 @@ await drv.page.bringToFront();
 await drv.page.locator('.bid-box input').fill('300');
 await drv.page.locator('.scrim.show button.btn', { hasText: 'Chốt giá' }).click();
 
+/* Bảng giá lúc chốt phiên phải mở ở **cả hai máy**. Máy ngồi xem không tự dựng
+   lại được nó: giá của người khác ghi kín, nó chỉ biết qua tin `auctionend`. */
+ok(await until(() => drv.page.locator('.bid-table .bid-row.win').isVisible(), 25000),
+  'máy cầm lái thấy bảng giá, hàng người thắng được tô sáng');
+await other.bringToFront();
+ok(await until(() => other.locator('.bid-table .bid-row.win').isVisible(), 25000),
+  'máy ngồi xem cũng nhận được bảng giá');
+const board = await other.evaluate(() => {
+  const rows = [...document.querySelectorAll('.bid-table .bid-row')];
+  return {
+    n: rows.length,
+    money: rows.map((r) => +r.querySelector('.bid-money').textContent.replace(/\D/g, '') || 0),
+    winAt: rows.findIndex((r) => r.classList.contains('win')),
+  };
+});
+ok(board.n === 2 && board.money[0] === 300 && board.money[1] === 40,
+  'bảng xếp từ giá cao xuống thấp', JSON.stringify(board.money));
+ok(board.winAt === 0, 'hàng tô sáng đúng là người trả cao nhất', String(board.winAt));
+
+// Dọn bảng đi rồi mới đọc tiếp, để mấy phép đo sau không vướng hộp thoại
+for (const pg of [other, drv.page]) {
+  await pg.bringToFront();
+  await pg.locator('.scrim.show button.btn', { hasText: 'Đã rõ' }).click().catch(() => {});
+}
+await drv.page.bringToFront();
+
 const winner = await until(async () => drv.page.evaluate(() => {
   const c = window.__monopoly.controller;
   const seat = c.net.mySeat;

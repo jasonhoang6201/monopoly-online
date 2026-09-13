@@ -17,7 +17,7 @@ import { BOARD, GROUPS, GROUP_TILES, money, tileLabel, tileShortLabel } from '..
 import { drawEvent, planEvent, autoRaise } from '../core/events.js';
 import { handoff } from '../ui/modal.js';
 import {
-  bracePromptModal, firePromptModal, auctionBidModal,
+  bracePromptModal, firePromptModal, auctionBidModal, auctionResultModal,
 } from '../ui/eventModals.js';
 import { litTiles } from '../ui/tilePicker.js';
 import { audio } from '../audio/audio.js';
@@ -37,6 +37,14 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
  * đi — xem `yieldToNext` trong `ui/modal.js`.
  */
 const ALERT_MS = 2000;
+
+/**
+ * Bảng giá chốt phiên đấu giá nằm bao lâu trước khi mạch sự kiện đi tiếp.
+ *
+ * Dài hơn dòng thông báo cũ (900ms) vì giờ có một bảng để đọc, nhưng vẫn không
+ * chờ người chơi bấm: máy cầm lái mà đứng chờ thì cả bàn chờ theo.
+ */
+const RESULT_MS = 3200;
 
 export class EventRunner {
   /** @param {import('./controller.js').Game} game */
@@ -535,12 +543,19 @@ export class EventRunner {
     })));
 
     /* Xếp theo giá, hoà thì người đi trước trong vòng lượt thắng — một luật rõ
-       ràng, khỏi phải mở thêm một vòng đấu nữa giữa hai người bằng điểm. */
+       ràng, khỏi phải mở thêm một vòng đấu nữa giữa hai người bằng điểm.
+
+       Giữ cả người ghi 0 lại trong `rows`: bảng giá lúc chốt phiên có tên đủ
+       mặt người được hỏi thì mới đọc ra được ai bỏ qua, ai đua tới cùng. */
     const order = st.playOrder;
-    const bids = bidders
-      .map((seat) => ({ seat, bid: Math.min(Math.floor(answers.get(seat) ?? 0), st.players[seat].money) }))
-      .filter((b) => b.bid > 0 && !st.players[b.seat].bankrupt)
+    const rows = bidders
+      .filter((seat) => !st.players[seat].bankrupt)
+      .map((seat) => {
+        const n = Math.floor(answers.get(seat) ?? 0);
+        return { seat, bid: Math.min(Number.isFinite(n) ? Math.max(n, 0) : 0, st.players[seat].money) };
+      })
       .sort((a, b) => b.bid - a.bid || order.indexOf(a.seat) - order.indexOf(b.seat));
+    const bids = rows.filter((b) => b.bid > 0);
 
     if (bids.length === 0) {
       await this.g.bc.show('PHIÊN ĐẤU GIÁ Ế',
@@ -568,11 +583,15 @@ export class EventRunner {
     this.g.scene.refresh(st);
     this.g.sync();
 
-    const runnerUp = bids[1] ? ` (người trả kế tiếp: ${money(bids[1].bid)})` : '';
-    await this.g.bc.show('CHỐT GIÁ',
-      `<b style="color:${winner.token.css}">${winner.name}</b> lấy <b>${tileLabel(tileId)}</b>
-       với <span class="down">${money(win.bid)}</span>${runnerUp}.`,
-      { kind: 'trade', ms: 5200 });
+    /* Bảng giá thay cho dòng thông báo cũ, và mở ở mọi máy chứ không riêng máy
+       cầm lái. Không `await`: hộp cứ đứng đó tới lúc người chơi bấm, mỗi máy
+       một nhịp, còn mạch sự kiện đi tiếp sau `RESULT_MS` — y như tấm thẻ Thời
+       Cuộc. Hộp hỏi của nước kế tiếp sẽ đẩy nó đi (`yieldToNext`). */
+    const sellerName = o.seller === null || st.players[o.seller].bankrupt
+      ? null : st.players[o.seller].name;
+    this.g.netEmit('auctionend', { tileId, rows, winner: win.seat, sellerName });
+    auctionResultModal(st, tileId, rows, { winner: win.seat, sellerName });
+    await wait(RESULT_MS);
   }
 
   /* ================================================================
