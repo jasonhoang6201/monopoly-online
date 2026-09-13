@@ -9,6 +9,7 @@
 import { openModal } from './modal.js';
 import { attachTimer } from './modals.js';
 import { BOARD, money, tileShortLabel } from '../data/board.js';
+import { effectLines } from '../data/events.js';
 import { tileCardUrl } from './deed.js';
 import { PEEK_HINT } from './tilePicker.js';
 
@@ -36,22 +37,35 @@ function tileRow(id, meta, extra = '') {
 }
 
 /**
- * Mặt thẻ Thời Cuộc.
+ * Mặt thẻ Thời Cuộc — ba tầng chữ, đọc từ trên xuống là đủ biết phải làm gì.
+ *
+ * Trên cùng là lời văn (`card.text`): chuyện ngoài phố, đọc cho có không khí.
+ * Giữa là **luật sẽ áp dụng** (`card.effect`), gạch đầu dòng từng ý, giữ nguyên
+ * con số của thẻ — trước đây phần này nằm lẫn trong lời văn nên người chơi đọc
+ * xong vẫn không biết mình sắp mất bao nhiêu. Dưới cùng là `detail`: lần nổ
+ * này rơi vào khu nào, vào ai — chỗ duy nhất phụ thuộc thế cờ lúc ấy.
  *
  * Tách khỏi hộp thoại vì băng chuyền bóc thẻ (`ui/caseOpen.js`) dựng lại đúng
  * mặt thẻ này sau khi dải dừng.
  *
  * @param {object} card thẻ trong `data/events.js`
- * @param {string} detail dòng nói rõ sự kiện này rơi vào đâu, vào ai
+ * @param {string} detail dòng nói rõ sự kiện này rơi vào đâu, vào ai (cho HTML)
  */
 export function eventCardBody(card, detail = '') {
   const tone = TONE[card.kind] ?? TONE.chaos;
+  const lines = effectLines(card);
   return `
     <div class="fate-card event-card" style="--ev:${tone.accent}">
       <div class="event-kind">THỜI CUỘC · ${tone.label}</div>
       <div class="fate-sigil" style="color:${tone.accent}">${card.sigil}</div>
       <div class="event-title">${esc(card.title)}</div>
       <div class="fate-text">${esc(card.text.replace(/\s+/g, ' ').trim())}</div>
+      ${lines.length ? `<div class="event-effect">
+        <div class="event-effect-head">Áp dụng</div>
+        <ul class="event-effect-list">
+          ${lines.map((l) => `<li>${esc(l)}</li>`).join('')}
+        </ul>
+      </div>` : ''}
       ${detail ? `<div class="event-detail">${detail}</div>` : ''}
     </div>`;
 }

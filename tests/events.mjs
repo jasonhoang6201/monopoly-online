@@ -189,8 +189,15 @@ const cardSeen = await page.locator('.event-card')
 ok('thẻ Thời Cuộc hiện ra khi thanh đầy', cardSeen);
 if (cardSeen) {
   ok('thẻ ghi rõ sự kiện rơi vào ai', (await page.locator('.event-detail').innerText()).length > 0);
-  await page.locator('.scrim.show button.btn').first().click();
-  await page.waitForTimeout(2500);
+  // Nửa dưới mặt thẻ phải in luật sẽ áp dụng, không để người chơi đoán theo lời văn
+  const effect = await page.locator('.event-effect-list li').allInnerTexts().catch(() => []);
+  ok('thẻ in rõ phần áp dụng', effect.length > 0, effect.join(' | '));
+  /* Hộp tự đóng sau `EVENT_CARD_MS`, nên cú bấm này có thể rơi vào chỗ trống —
+     kiểm cái cần kiểm là hộp **có biến mất**, chứ không phải ai đóng nó. */
+  await page.locator('.scrim.show button.btn').first().click({ timeout: 2000 }).catch(() => {});
+  ok('hộp thẻ tự đóng, không chờ ai bấm', await page.locator('.event-card')
+    .waitFor({ state: 'detached', timeout: 6000 }).then(() => true).catch(() => false));
+  await page.waitForTimeout(1500);
 }
 
 const after = await page.evaluate(() => {

@@ -68,7 +68,12 @@ export class EventRunner {
 
     const detail = this.detailOf(card, plan);
     /* Tiếng bóc thẻ do băng chuyền phát lúc mặt thẻ hiện ra, không phát ở đây
-       nữa. Seed gửi kèm để máy ngồi xem dựng đúng dải ấy và dừng đúng ô ấy. */
+       nữa. Seed gửi kèm để máy ngồi xem dựng đúng dải ấy và dừng đúng ô ấy.
+
+       Hộp thẻ tự đóng sau `EVENT_CARD_MS` ở **mọi** máy, kể cả máy này: chờ
+       người cầm lái bấm thì cả bàn treo theo một người đã rời máy, mà mấy máy
+       kia đã đóng từ lâu. Đóng xong `apply()` mới chạy, nên mọi dòng thông báo
+       "đã áp dụng" đều nổi lên sau khi bàn nào cũng đọc xong thẻ. */
     const seed = newSeed();
     this.g.netEmit('eventcard', { id: card.id, detail, seed });
     this.bumpClock('thời cuộc');

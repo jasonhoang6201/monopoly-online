@@ -124,9 +124,18 @@ ok(tile, 'đã ép thanh áp lực đầy ở máy cầm lái');
 ok(await until(() => drv.page.locator('.event-card').isVisible()), 'thẻ hiện ở máy cầm lái');
 await other.bringToFront();
 ok(await until(() => other.locator('.event-card').isVisible()), 'thẻ hiện luôn ở máy ngồi xem');
+/* Máy ngồi xem cũng phải có nút đóng: trước đây chỉ người cầm lái tắt được hộp,
+   ai xem thì ngồi nhìn cho tới lúc nó tự biến mất. */
+ok(await until(() => other.locator('.scrim.show .modal-foot:not(.co-foot-hidden) button.btn')
+  .isVisible()), 'máy ngồi xem cũng có nút đóng thẻ');
+ok(await until(() => other.locator('.event-effect-list li').first().isVisible()),
+  'mặt thẻ in phần áp dụng');
 
+// Hộp tự đóng ở cả hai máy — không máy nào chặn đường sự kiện chạy tiếp
 await drv.page.bringToFront();
-await drv.page.locator('.scrim.show button.btn').first().click();
+await drv.page.locator('.scrim.show button.btn').first().click({ timeout: 2000 }).catch(() => {});
+ok(await until(() => other.locator('.event-card').count().then((n) => n === 0), 8000),
+  'thẻ tự đóng ở máy ngồi xem');
 
 // Cả hai máy phải nhận được hộp ghi giá
 ok(await until(() => drv.page.locator('.bid-box input').isVisible(), 20000),

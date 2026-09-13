@@ -446,9 +446,10 @@ export class Game {
     } else if (name === 'eventcard') {
       /* Thẻ Thời Cuộc là chuyện của cả bàn, nên máy nào cũng phải thấy mặt thẻ.
          Cùng `seed` thì dải xếp y hệt và dừng đúng ô ấy, cả bàn hồi hộp cùng
-         nhau. Máy ngồi xem không có gì để bấm — hộp tự đóng sau khi lật. */
+         nhau. Hạn đứng của hộp cũng để mặc định như máy cầm lái (`EVENT_CARD_MS`):
+         cả bàn rời khỏi mặt thẻ cùng một nhịp, rồi mới tới thông báo áp dụng. */
       const card = EVENT_BY_ID[data.id];
-      if (card) await eventCase(card, { detail: data.detail, seed: data.seed, autoMs: 1800 });
+      if (card) await eventCase(card, { detail: data.detail, seed: data.seed });
     } else if (name === 'fatecard') {
       /* Cơ Hội / Khí Vận vốn là chuyện riêng của người vừa đáp xuống ô, trước
          đây máy khác không thấy gì. Nay dải chạy nên cả bàn cùng xem, chỉ khác

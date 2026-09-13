@@ -365,9 +365,35 @@ export function caseOpenModal(kind, card, pool, o = {}) {
         const scrim = modal.parentElement;
         if (scrim) { scrim._dismissible = true; scrim._autoValue = true; }
       }
-      if (o.autoMs) setTimeout(() => close(null), o.autoMs);
+      if (o.autoMs) {
+        setTimeout(() => close(null), o.autoMs);
+        countdown(btn, o.autoMs);
+      }
     },
   });
+}
+
+/**
+ * Đếm ngược in ngay trên nút đóng.
+ *
+ * Hộp tự đóng mà nút không nói gì thì người chơi vừa đưa chuột tới đã thấy nó
+ * biến mất, tưởng mình bấm nhầm. Con số chạy cho biết còn bao lâu, ai đọc xong
+ * trước thì bấm luôn khỏi chờ.
+ */
+function countdown(btn, ms) {
+  if (!btn) return;
+  const tag = document.createElement('span');
+  tag.className = 'co-count';
+  btn.appendChild(tag);
+  const t0 = performance.now();
+  const tick = () => {
+    if (!btn.isConnected) return;
+    const left = Math.ceil((ms - (performance.now() - t0)) / 1000);
+    if (left <= 0) { tag.remove(); return; }
+    tag.textContent = String(left);
+    setTimeout(tick, 200);
+  };
+  tick();
 }
 
 /* ------------------------------------------------------------------- lật thẻ */
@@ -435,16 +461,30 @@ export function fateCase(kind, card, o = {}) {
 }
 
 /**
+ * Hộp thẻ Thời Cuộc đứng bao lâu sau khi lật, trước khi tự đóng.
+ *
+ * Thẻ Thời Cuộc là chuyện của **cả bàn**, nên máy nào cũng bày cùng một mặt
+ * thẻ và cũng phải rời khỏi nó cùng một nhịp: người cầm lái đóng chậm thì mấy
+ * máy kia ngồi nhìn màn hình trống, mà chờ họ bấm thì cả bàn treo theo một
+ * người đã rời máy. Hết bấy nhiêu đây là hộp tự đóng ở mọi máy, rồi thông báo
+ * "đã áp dụng" mới nổi lên.
+ */
+export const EVENT_CARD_MS = 2000;
+
+/**
  * Bóc một thẻ Thời Cuộc. Thay chỗ `eventCardModal` cũ.
  *
- * Máy ngồi xem truyền `autoMs`: xem xong hộp tự đóng, họ không phải bấm gì.
+ * Máy nào cũng có nút đóng — kể cả máy đang ngồi xem: đọc xong sớm thì tắt đi
+ * ngó bàn cờ, không phải ngồi đợi hết giờ. Bấm hay không bấm thì sau `autoMs`
+ * hộp cũng tự đóng, nên không máy nào chặn đường sự kiện chạy tiếp.
  *
  * @param {{detail?:string, label?:string, seed?:number, autoMs?:number}} [o]
  */
 export function eventCase(card, o = {}) {
   return caseOpenModal('event', card, EVENTS, {
+    autoMs: EVENT_CARD_MS,
     ...o,
     faceHtml: eventCardBody(card, o.detail ?? ''),
-    buttons: o.autoMs ? [] : [{ label: o.label ?? 'Đành chịu', value: true, cls: 'btn-gold' }],
+    buttons: [{ label: o.label ?? 'Đã rõ', value: true, cls: 'btn-gold' }],
   });
 }
