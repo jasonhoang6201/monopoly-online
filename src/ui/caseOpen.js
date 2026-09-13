@@ -220,11 +220,19 @@ function spin(track, o) {
  * @param {object} card thẻ trúng — đã rút xong từ trước
  * @param {object[]} pool bộ bài dùng lấp dải
  * @param {object} [o]
- *   - `faceHtml` mặt thẻ đầy đủ hiện ra sau khi dừng (mặc định: dựng sẵn)
- *   - `seed` để mọi máy chạy ra cùng một dải; bỏ trống thì tự bốc
- *   - `ms` thời lượng pha trôi, `label` chữ trên nút
- *   - `autoMs` > 0 thì tự đóng sau khi dừng — dành cho máy ngồi xem
- * @returns {Promise<any>} giá trị nút bấm, như `cardModal`
+ *   - `faceHtml` mặt thẻ hiện ra sau khi dừng; bỏ trống thì dựng từ
+ *     `fateCardBody` / `eventCardBody` như hộp thoại thường.
+ *   - `seed` để mọi máy chạy ra cùng một dải; bỏ trống thì tự bốc.
+ *   - `autoMs` > 0 thì tự đóng sau khi lật — dành cho máy ngồi xem.
+ *   - `dismissAfter` cho phép hết giờ lượt đóng hộp, tính từ lúc thẻ đã lật.
+ *   - `buttons` / `label` thanh nút, dựng như `openModal`.
+ *   - Nhịp: `ms` pha trôi (4000), `holdMs` đứng yên trước khi lật (460),
+ *     `accel` và `cruiseEnd` hai mốc của đường chuyển động (0.15 / 0.72).
+ *   - Dải: `minSpin` + `spinSpread` số ô trôi qua (42 + 0…18), `jitter` phần
+ *     biên an toàn được phép lệch tâm (0.55).
+ *   - Tiếng: `sound` false là im, `revealSfx` tên hiệu ứng lúc thẻ hiện ra
+ *     ('card').
+ * @returns {Promise<any>} giá trị nút bấm
  */
 export function caseOpenModal(kind, card, pool, o = {}) {
   const seed = o.seed ?? newSeed();

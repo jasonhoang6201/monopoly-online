@@ -246,7 +246,8 @@ Các tab chạy trong **cùng một browser context** (bắt buộc, vì Broadca
 chỉ nối các tab dùng chung kho lưu trữ). Bộ lõi chạy: mở phòng, vào bằng đường
 mời, tên chỉ hiện sau khi bấm Sẵn sàng, Khai cuộc khoá tới khi cả phòng sẵn
 sàng, có người rời thì ghế và màu mở lại, mời ra khỏi phòng chờ, khoá lượt theo
-người, trạng thái lan giữa các máy, **giao dịch giữa hai máy**, **đứt mạng giữa
+người, trạng thái lan giữa các máy, **giao dịch giữa hai máy**, **băng chuyền
+bóc thẻ dừng cùng một ô trên hai máy**, **đứt mạng giữa
 ván rồi tự nối lại**, rớt mạng rồi vào lại đúng ghế, đi luôn quá hạn thì đất về
 ngân hàng, và **hai kiểu hết giờ**. Cờ `--full` thêm phần đổ đầy 6 người.
 

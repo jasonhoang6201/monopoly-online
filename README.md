@@ -366,6 +366,7 @@ node tests/online.mjs --full     # thêm phần đổ đầy phòng 6 người, 
 | `tests/endgame.mjs` | Đổ đôi 3 lần vào tù, các cách ra tù, phá sản trả tài sản về ngân hàng, thắng cuộc |
 | `tests/jail-debt.mjs` | Đáp xuống ô Vào Tù là hết lượt, ở tù cầu đôi từng lượt một (hụt lần 3 nộp 50$), vỡ nợ ngay khi tổng tài sản không đủ trả |
 | `tests/audio.mjs` | Đo biên độ RMS thật: nhạc có tiếng ở màn hình chờ, **im hẳn sau khi khai cuộc**, 11 hiệu ứng đều kêu; kiểm tra hai công tắc độc lập |
+| `tests/cards-online.mjs` | Băng chuyền bóc thẻ hai máy: cùng `seed` thì hai máy dựng cùng số ô, dừng cùng một ô, lật cùng một mặt thẻ; hộp ở máy ngồi xem tự đóng |
 | `tests/events.mjs` | Thẻ Thời Cuộc: thanh áp lực chỉ chạy khi bàn đã bão hoà, ngưỡng hạ dần, hệ số tiền thuê / giá xây / lương, ô mất giấy tờ, cấn nợ tự động, ảnh chụp mang đủ phần mới (kể cả ảnh chụp cũ thiếu trường), và **cả tám thẻ Kỳ 2 chạy thật từ đầu tới cuối** |
 | `tests/events-online.mjs` | Nấc luật đồng bộ trong phòng chờ, thẻ hiện ở mọi máy, và một **phiên đấu giá kín hai máy** chạy trọn: ai trả cao thì lấy đất, tiền trừ đúng, sổ chủ đất khớp nhau |
 | `tests/ui-v2.mjs` | Độ nét theo DPR, bàn cờ chiếm hết khoảng trống và dựng lại khi đổi cỡ cửa sổ, bảng tài sản người chơi, chi tiết ô khi bấm vào bàn cờ, thẻ đất trong danh sách |
