@@ -168,6 +168,7 @@ dòng cảnh báo rõ khi đang chạy đường nội bộ.
 | `src/ui/lobby.js` | Phòng chờ, chọn nấc thẻ Thời Cuộc, các hộp thoại bị mời ra / phòng đầy. |
 | `src/core/events.js` | Luật thẻ Thời Cuộc: thanh áp lực, rút thẻ, **kế hoạch** của mỗi sự kiện, cấn nợ tự động. Thuần dữ liệu như `state.js`. |
 | `src/game/eventRunner.js` | Thi hành một sự kiện: bày thẻ cho cả bàn, hỏi nhiều người **cùng lúc**, đấu giá kín. |
+| `src/ui/caseOpen.js` | Băng chuyền bóc thẻ. Thẻ vẫn do `Deck.draw()` chọn; gói tin chỉ mang chỉ số thẻ và một `seed`, mỗi máy tự dựng lại dải từ seed ấy nên cả bàn dừng đúng một ô. |
 
 Trong `controller.js`, phần online gói gọn ở `startOnline()`, `isDriver()`,
 `sync()`, `onSync()`, `onEvent()`, `onAsk()`, `onLink()`, `onRoomChange()`,

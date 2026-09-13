@@ -17,10 +17,11 @@ import { BOARD, GROUPS, GROUP_TILES, money, tileLabel, tileShortLabel } from '..
 import { drawEvent, planEvent, autoRaise } from '../core/events.js';
 import { handoff } from '../ui/modal.js';
 import {
-  eventCardModal, bracePromptModal, firePromptModal, auctionBidModal,
+  bracePromptModal, firePromptModal, auctionBidModal,
 } from '../ui/eventModals.js';
 import { litTiles } from '../ui/tilePicker.js';
 import { audio } from '../audio/audio.js';
+import { eventCase, newSeed } from '../ui/caseOpen.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -66,10 +67,12 @@ export class EventRunner {
     this.g.sync();
 
     const detail = this.detailOf(card, plan);
-    audio.sfx('card');
-    this.g.netEmit('eventcard', { id: card.id, detail });
+    /* Tiếng bóc thẻ do băng chuyền phát lúc mặt thẻ hiện ra, không phát ở đây
+       nữa. Seed gửi kèm để máy ngồi xem dựng đúng dải ấy và dừng đúng ô ấy. */
+    const seed = newSeed();
+    this.g.netEmit('eventcard', { id: card.id, detail, seed });
     this.bumpClock('thời cuộc');
-    await eventCardModal(card, detail);
+    await eventCase(card, { detail, seed });
 
     await this.apply(card, plan);
 

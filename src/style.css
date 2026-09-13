@@ -2579,3 +2579,156 @@ html, body {
   from { opacity: 0; transform: translate(-50%, -16%) scale(.62); }
   to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
+
+/* ------------------------------------------------------------
+   Băng chuyền bóc thẻ (ui/caseOpen.js)
+   Dải thẻ trôi qua vạch rồi hãm lại ở thẻ trúng, xong thẻ ấy nở ra
+   thành mặt thẻ đầy đủ.
+   ------------------------------------------------------------ */
+
+.co-modal {
+  width: min(720px, 94vw);
+  transition: opacity .38s var(--ease-soft), transform .44s var(--ease-out-back),
+              width .42s var(--ease-soft);
+}
+/* Lật xong thì khung hẹp lại quanh mặt thẻ */
+.co-modal.co-slim { width: min(460px, 92vw); }
+
+/* Khung đổi chiều cao hai lần: lúc mở là chiều cao dải, lúc lật là chiều cao
+   mặt thẻ. Cho nó tự chuyển thì modal giãn ra từ từ thay vì nảy một cái. */
+.co-stage {
+  position: relative;
+  margin: 0 -26px;                       /* tràn hết bề ngang, ăn cả padding của .modal-body */
+  transition: height .42s var(--ease-soft);
+}
+
+.co-reel {
+  position: absolute; inset: 0;
+  height: 176px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(200, 160, 72, .10), transparent 70%),
+    linear-gradient(180deg, rgba(10, 6, 4, .55), rgba(10, 6, 4, .25));
+  border-top: 1px solid rgba(200, 160, 72, .22);
+  border-bottom: 1px solid rgba(200, 160, 72, .22);
+  /* Hai mép mờ dần: dải như chạy ra từ trong bóng tối chứ không bị cắt cụt */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  transition: opacity .34s var(--ease-soft), filter .34s var(--ease-soft);
+}
+.co-reel.fade { opacity: 0; filter: blur(3px); }
+
+.co-track {
+  position: absolute; top: 13px; left: 0;
+  display: flex; gap: 8px;
+  will-change: transform;
+}
+
+/* ---- một ô trong dải ---- */
+.co-cell {
+  flex: 0 0 auto;
+  width: 104px; height: 150px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border-radius: 9px;
+  text-align: center;
+  color: var(--ink);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .18), transparent 45%),
+    linear-gradient(170deg, #F3E6C9, #DCC69A);
+  border: 1px solid rgba(94, 20, 14, .35);
+  /* Vạch màu dưới đáy chính là hạng thẻ — lướt qua vẫn đọc được màu */
+  box-shadow: inset 0 -5px 0 var(--r, #8C8471), 0 4px 12px rgba(0, 0, 0, .35);
+}
+.co-cell-top {
+  font-family: var(--display); font-size: 8px; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--lac); opacity: .85;
+}
+.co-cell-sigil { font-size: 34px; line-height: 1; color: var(--r, var(--lac)); }
+.co-cell-label {
+  font-family: var(--serif); font-size: 12px; font-weight: 700; line-height: 1.25;
+  color: var(--ink-soft);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.co-cell.r-hiem { box-shadow: inset 0 -5px 0 var(--r), 0 0 16px rgba(200, 160, 72, .45), 0 4px 12px rgba(0, 0, 0, .35); }
+
+/* Dải đứng lại: mọi ô lùi xuống, chỉ ô trúng còn sáng */
+.co-track.done .co-cell {
+  opacity: .34; filter: grayscale(.55);
+  transition: opacity .22s var(--ease-soft), filter .22s var(--ease-soft);
+}
+.co-track.done .co-cell.won {
+  opacity: 1; filter: none;
+  animation: co-pop .34s var(--ease-out-back);
+  box-shadow: inset 0 -5px 0 var(--r), 0 0 0 2px var(--r), 0 0 22px var(--r), 0 6px 16px rgba(0, 0, 0, .45);
+}
+@keyframes co-pop {
+  0%   { transform: scale(1); }
+  55%  { transform: scale(1.12); }
+  100% { transform: scale(1.06); }
+}
+.co-track.done .co-cell.won { transform: scale(1.06); }
+
+/* ---- vạch ngắm ---- */
+.co-mark {
+  position: absolute; top: 0; bottom: 0; left: 50%;
+  width: 2px; margin-left: -1px;
+  background: linear-gradient(180deg, var(--gold-light), var(--lac-light), var(--gold-light));
+  box-shadow: 0 0 10px rgba(233, 206, 133, .8);
+  pointer-events: none;
+}
+.co-mark::before, .co-mark::after {
+  content: ''; position: absolute; left: 50%; margin-left: -6px;
+  border-left: 6px solid transparent; border-right: 6px solid transparent;
+}
+.co-mark::before { top: 0; border-top: 8px solid var(--gold-light); }
+.co-mark::after  { bottom: 0; border-bottom: 8px solid var(--gold-light); }
+
+/* ---- mặt thẻ hiện ra sau khi dừng ---- */
+.co-face {
+  position: absolute; left: 0; right: 0; top: 0;
+  display: grid; place-items: center;
+}
+.co-face .fate-card { margin: 0; }
+.co-rank {
+  margin-bottom: 10px;
+  font-family: var(--display); font-size: 10px; letter-spacing: .28em;
+  padding: 4px 12px; border-radius: 999px;
+  color: var(--r, var(--paper-warm));
+  border: 1px solid currentColor;
+  opacity: .9;
+}
+.co-face.r-hiem .fate-card {
+  box-shadow: 0 0 0 1px var(--gold), 0 0 34px rgba(200, 160, 72, .55), var(--shadow-md);
+}
+.co-face.r-quy .fate-card {
+  box-shadow: 0 0 0 1px #6E3E96, 0 0 26px rgba(110, 62, 150, .45), var(--shadow-md);
+}
+
+/* Tia sáng quét ngang mặt thẻ, chỉ hai hạng trên mới có */
+.co-face.r-quy .fate-card::after,
+.co-face.r-hiem .fate-card::after {
+  content: ''; position: absolute; inset: 0; border-radius: 11px;
+  background: linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, .55) 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: co-sheen .85s .12s var(--ease-soft) forwards;
+  pointer-events: none;
+}
+@keyframes co-sheen { to { transform: translateX(120%); } }
+.co-face .fate-card { position: relative; overflow: hidden; }
+
+/* Nút chỉ hiện sau khi dải dừng — bấm sớm thì mất luôn phần đáng xem */
+.co-foot-hidden {
+  opacity: 0; pointer-events: none;
+  transition: opacity .3s var(--ease-soft);
+}
+.modal-foot { transition: opacity .3s var(--ease-soft); }
+
+@media (max-width: 560px) {
+  .co-cell { width: 84px; height: 126px; }
+  .co-cell-sigil { font-size: 27px; }
+  .co-cell-label { font-size: 11px; }
+  .co-reel { height: 152px; }
+}

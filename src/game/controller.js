@@ -17,7 +17,7 @@ import {
   demolishGroups, demolishPicks,
   othersOf, shareEach, repairBill, seizePrice, resumePrice,
 } from '../core/cards.js';
-import { cardOf, CARD_KINDS, cardName, cardEffect } from '../data/cards.js';
+import { cardOf, CARD_KINDS, cardName, cardEffect, DECKS } from '../data/cards.js';
 import { inventoryModal } from '../ui/inventory.js';
 import { EventRunner } from './eventRunner.js';
 import { snapshot, fromSnapshot, applySnapshot } from '../core/serialize.js';
@@ -28,18 +28,19 @@ import {
 } from '../ui/actionIcons.js';
 import { openModal, handoff, dismissTopModal } from '../ui/modal.js';
 import {
-  setupModal, buyModal, cardModal, manageModal, tradePickModal,
+  setupModal, buyModal, manageModal, tradePickModal,
   tradeBuildModal, tradeReviewModal, redeemPromptModal, bankruptModal,
   winnerModal, describe, playerModal, tileModal, rollOffModal, attachTimer,
 } from '../ui/modals.js';
 import {
-  eventCardModal, bracePromptModal, firePromptModal, auctionBidModal,
+  bracePromptModal, firePromptModal, auctionBidModal,
 } from '../ui/eventModals.js';
 import { pickTileOnBoard, litTiles } from '../ui/tilePicker.js';
 import { pickGroupModal } from '../ui/groupPicker.js';
 import { EVENT_BY_ID } from '../data/events.js';
 import { audio } from '../audio/audio.js';
 import { MemeDeck } from '../ui/memes.js';
+import { fateCase, eventCase, newSeed } from '../ui/caseOpen.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -444,11 +445,20 @@ export class Game {
       await sc.spotTiles(data.ids, data.ms);
     } else if (name === 'eventcard') {
       /* Thẻ Thời Cuộc là chuyện của cả bàn, nên máy nào cũng phải thấy mặt thẻ.
-         Máy ngồi xem không có gì để bấm — hộp tự đóng sau mấy giây. */
+         Cùng `seed` thì dải xếp y hệt và dừng đúng ô ấy, cả bàn hồi hộp cùng
+         nhau. Máy ngồi xem không có gì để bấm — hộp tự đóng sau khi lật. */
       const card = EVENT_BY_ID[data.id];
+      if (card) await eventCase(card, { detail: data.detail, seed: data.seed, autoMs: 1800 });
+    } else if (name === 'fatecard') {
+      /* Cơ Hội / Khí Vận vốn là chuyện riêng của người vừa đáp xuống ô, trước
+         đây máy khác không thấy gì. Nay dải chạy nên cả bàn cùng xem, chỉ khác
+         là máy ngồi xem không bấm nút. */
+      const card = DECKS[data.kind]?.[data.index];
       if (card) {
-        audio.sfx('card');
-        await eventCardModal(card, data.detail, { ms: 5200 });
+        await fateCase(data.kind, card, {
+          amount: data.amount ?? null, note: data.note ?? '',
+          seed: data.seed, autoMs: 1800,
+        });
       }
     }
   }
@@ -1196,19 +1206,39 @@ export class Game {
     // Cả bộ không lá nào dùng được: coi như ghé qua, đừng bày một tấm thẻ rỗng
     if (!drawn) return;
 
-    audio.sfx('card');
+    /* Tiếng bóc thẻ nay do băng chuyền phát, đúng lúc mặt thẻ hiện ra — phát
+       ở đây nữa thì kêu hai lần. Seed sinh một lần rồi gửi kèm, để dải trên
+       máy ngồi xem xếp y hệt và dừng đúng ô ấy. */
+    const seed = newSeed();
     const title = kind === 'chance' ? 'CƠ HỘI' : 'KHÍ VẬN';
-    if (isKeepable(drawn.card)) return this.keepCard(p, kind, drawn, title);
+    if (isKeepable(drawn.card)) return this.keepCard(p, kind, drawn, title, seed);
     switch (cardType(drawn.card)) {
-      case 'collect': return this.cardCollect(p, kind, drawn.card, title);
-      case 'repair':  return this.cardRepair(p, kind, drawn.card, title);
-      default:        return this.cardMoney(p, kind, drawn.card, title);
+      case 'collect': return this.cardCollect(p, kind, drawn.card, title, seed);
+      case 'repair':  return this.cardRepair(p, kind, drawn.card, title, seed);
+      default:        return this.cardMoney(p, kind, drawn.card, title, seed);
     }
   }
 
+  /**
+   * Bày thẻ Cơ Hội / Khí Vận bằng băng chuyền, đồng thời cho các máy đang ngồi
+   * xem chạy đúng dải ấy.
+   *
+   * Gói tin chỉ có chỉ số thẻ, seed và mấy dòng in trên mặt thẻ — dải thì mỗi
+   * máy tự dựng lại từ seed, không việc gì phải gửi cả năm chục ô qua đường
+   * truyền.
+   */
+  showFateCard(kind, card, o) {
+    const index = DECKS[kind].indexOf(card);
+    this.netEmit('fatecard', {
+      kind, index, seed: o.seed,
+      amount: o.amount ?? null, note: o.note ?? '',
+    });
+    return fateCase(kind, card, o);
+  }
+
   /** Thẻ cũ: cộng hoặc trừ tiền với ngân hàng. */
-  async cardMoney(p, kind, card, title) {
-    await cardModal(kind, card, { amount: card.amount });
+  async cardMoney(p, kind, card, title, seed) {
+    await this.showFateCard(kind, card, { amount: card.amount, seed });
     if (card.amount > 0) {
       await this.bc.show(title,
         `<b>${p.name}</b>: ${card.text} <span class="up">+${money(card.amount)}</span>`);
@@ -1225,13 +1255,14 @@ export class Game {
    * không bao. Ai không xoay đủ thì đi qua đúng cửa `payPlayer` như trả tiền
    * thuê — bán nhà, thế chấp, cùng lắm là vỡ nợ.
    */
-  async cardCollect(p, kind, card, title) {
+  async cardCollect(p, kind, card, title, seed) {
     const st = this.state;
     const each = shareEach(st, p.id, card.amount);
-    await cardModal(kind, card, {
+    await this.showFateCard(kind, card, {
       amount: card.amount,
       note: `Mỗi người còn lại góp <b>${money(each)}</b>.`,
       label: 'Nhận tiền mừng',
+      seed,
     });
     await this.bc.show(title,
       `<b>${p.name}</b>: ${card.text} — mỗi người góp
@@ -1243,12 +1274,12 @@ export class Game {
   }
 
   /** Thuế nhà cửa: tính đầu nhà, đầu khách sạn trên toàn bộ đất của mình. */
-  async cardRepair(p, kind, card, title) {
+  async cardRepair(p, kind, card, title, seed) {
     const bill = repairBill(this.state, p.id, card);
     const parts = [];
     if (bill.houses) parts.push(`${bill.houses} nhà × ${money(card.perHouse)}`);
     if (bill.hotels) parts.push(`${bill.hotels} khách sạn × ${money(card.perHotel)}`);
-    await cardModal(kind, card, { amount: -bill.amount, note: parts.join(' · ') });
+    await this.showFateCard(kind, card, { amount: -bill.amount, note: parts.join(' · '), seed });
     await this.bc.show(title,
       `<b>${p.name}</b> nộp thuế nhà cửa <span class="down">${money(bill.amount)}</span>
        — ${parts.join(', ')}.`, { kind: 'bad' });
@@ -1263,13 +1294,14 @@ export class Game {
    * Cất một lá vào túi. Lá ấy rời khỏi bộ bài cho tới khi có người xài, nên
    * cả bàn không thể có hai tấm cùng một lá.
    */
-  async keepCard(p, kind, drawn, title) {
+  async keepCard(p, kind, drawn, title, seed) {
     const st = this.state;
     const meta = CARD_KINDS[cardType(drawn.card)];
     const name = cardName(drawn.card);
-    await cardModal(kind, drawn.card, {
+    await this.showFateCard(kind, drawn.card, {
       note: `<b>${meta.sigil} ${name}</b> — ${cardEffect(drawn.card)}`,
       label: 'Cất vào túi',
+      seed,
     });
     st.takeCard(p.id, kind, drawn.index);
     this.hud.refresh();

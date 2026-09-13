@@ -602,7 +602,7 @@ export class Audio {
 
   /**
    * @param {'dice'|'shake'|'diceHit'|'step'|'coin'|'buy'|'build'|'card'|'jail'
-   *        |'bankrupt'|'firework'|'trade'|'turn'|'click'} name
+   *        |'bankrupt'|'firework'|'trade'|'turn'|'click'|'cardTick'} name
    * @param {object} [opts] tham số riêng của từng hiệu ứng (gain, i, …)
    */
   sfx(name, opts = {}) {
@@ -725,6 +725,30 @@ export class Audio {
         n.connect(bp).connect(g).connect(this.sfxGain);
         n.start(t);
       },
+      /**
+       * Một lá bật qua vạch trong lúc băng chuyền bóc thẻ chạy (`ui/caseOpen.js`).
+       *
+       * Tiếng giấy dó bật khỏi ngón tay: nhiễu lọc dải cộng những đỉnh biên độ
+       * rải rác đóng vai mấy sợi bột giấy gãy — chính mấy đỉnh ấy cho ra tiếng
+       * sột soạt, nhiễu lọc suông chỉ nghe như tiếng xì hơi.
+       *
+       * `o.slow` chạy từ 0 lúc dải đang bay tới 1 lúc gần đứng hẳn: chậm thì
+       * tiếng dài hơn, trầm hơn, to hơn, và chồng thêm một lớp trễ vài mili
+       * giây — nghe ra lá giấy cong lên rồi mới bật. Tai biết dải sắp dừng
+       * trước cả khi mắt kịp nhận ra.
+       */
+      cardTick(t, o = {}) {
+        const k = clamp01(o.slow ?? 0);
+        const dur = 0.026 + 0.05 * k;
+        const freq = (2900 - 450 * k) * (0.85 + Math.random() * 0.3);
+        this.paperHit(t, dur, freq, 0.8, 0.055 + 0.08 * k, 0.03 + 0.04 * k);
+
+        if (k > 0.45 && Math.random() < 0.7) {
+          this.paperHit(t + 0.008 + Math.random() * 0.012,
+            dur * 0.7, freq * 1.35, 1.1, 0.03 * k, 0.05, 0.002);
+        }
+      },
+
       /** Vào tù: tiếng chuông chùa trầm. */
       jail(t) {
         for (const [i, f] of [110, 164.8, 220, 293.7].entries()) {
@@ -799,6 +823,47 @@ export class Audio {
     n.connect(bp).connect(g).connect(this.sfxGain);
     g.connect(this.reverb);
     n.start(when);
+  }
+
+  /**
+   * Một mẩu nhiễu hình tiếng giấy.
+   *
+   * @param {number} rough tỉ lệ mẫu bị đẩy biên độ lên — 0 là tiếng hơi trơn,
+   *   0.06 là tờ giấy khô ráp. Quá tay thì hoá tiếng lửa cháy.
+   */
+  paperBuffer(dur, rough = 0.04, attack = 0.004) {
+    const sr = this.ctx.sampleRate;
+    const len = Math.max(1, Math.ceil(sr * dur));
+    const rise = Math.max(1, Math.ceil(sr * attack));
+    const buf = this.ctx.createBuffer(1, len, sr);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      const up = i < rise ? i / rise : 1;
+      const down = (1 - i / len) ** 1.7;
+      let v = Math.random() * 2 - 1;
+      if (Math.random() < rough) v *= 2.8;     // sợi giấy gãy
+      d[i] = v * up * down;
+    }
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    return src;
+  }
+
+  /** Mẩu tiếng giấy ấy đi qua bộ lọc dải rồi ra loa. Cắt đáy vì giấy không có đáy. */
+  paperHit(when, dur, freq, q, gain, rough = 0.04, attack = 0.004) {
+    const src = this.paperBuffer(dur, rough, attack);
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = freq;
+    bp.Q.value = q;
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 420;
+    const g = this.ctx.createGain();
+    g.gain.value = gain;
+    src.connect(bp).connect(hp).connect(g).connect(this.sfxGain);
+    src.start(when);
+    src.stop(when + dur + 0.05);
   }
 
   woodBlock(t, freq, gain, dest = this.sfxGain) {

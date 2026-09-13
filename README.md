@@ -327,6 +327,7 @@ src/
   ui/hud.js                thẻ người chơi, thông báo giữa bàn
   ui/quickview.js          bảng xem nhanh ô đang rê chuột
   ui/modals.js             các hộp thoại (mua, quản lý, giao dịch, chi tiết ô…)
+  ui/caseOpen.js           băng chuyền bóc thẻ: dải thẻ trôi rồi hãm lại ở thẻ trúng
   game/controller.js       điều phối lượt chơi, nối luật ↔ hình ảnh ↔ giao diện
   audio/audio.js           nhạc và âm thanh tổng hợp
   net/supabase.js          nối Supabase Realtime (chỉ có ở bản online)

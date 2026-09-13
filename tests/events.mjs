@@ -182,8 +182,10 @@ await page.evaluate(() => {
   st.pressure = 999;
   c.guard(() => c.endTurn());
 });
-await page.waitForTimeout(1200);
-const cardSeen = await page.locator('.event-card').isVisible().catch(() => false);
+/* Thẻ nay đi qua băng chuyền (`ui/caseOpen.js`): dải chạy 4 giây, dừng lại một
+   nhịp rồi mặt thẻ mới nở ra. Chờ đúng lúc nó hiện chứ đừng đếm giây. */
+const cardSeen = await page.locator('.event-card')
+  .waitFor({ state: 'visible', timeout: 15000 }).then(() => true).catch(() => false);
 ok('thẻ Thời Cuộc hiện ra khi thanh đầy', cardSeen);
 if (cardSeen) {
   ok('thẻ ghi rõ sự kiện rơi vào ai', (await page.locator('.event-detail').innerText()).length > 0);
@@ -225,7 +227,8 @@ async function clearModals(page, ms = 120000) {
       /* Chỉ bấm nút ở **thanh dưới cùng**. Trong thân hộp thoại còn những nút
          phụ không đóng gì cả (mấy mức giá gợi ý trong hộp đấu giá) — bấm trúng
          chúng thì vòng lặp này quay mãi mà hộp vẫn đứng đó. */
-      const foot = page.locator('.scrim.show .modal-foot button.btn:not([disabled])').first();
+      const foot = page.locator(
+        '.scrim.show .modal-foot:not(.co-foot-hidden) button.btn:not([disabled])').first();
       const btn = (await foot.count())
         ? foot
         : page.locator('.scrim.show button.btn:not([disabled])').first();
@@ -275,8 +278,8 @@ for (const id of ERA2) {
     c.guard(() => c.endTurn());
   }, id);
 
-  await page.waitForTimeout(1100);
-  const shown = await page.locator('.event-card').isVisible().catch(() => false);
+  const shown = await page.locator('.event-card')
+    .waitFor({ state: 'visible', timeout: 15000 }).then(() => true).catch(() => false);
   await clearModals(page);
   await page.waitForTimeout(600);
   const state = await page.evaluate(() => {

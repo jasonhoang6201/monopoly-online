@@ -36,16 +36,17 @@ function tileRow(id, meta, extra = '') {
 }
 
 /**
- * Bày thẻ Thời Cuộc ra giữa màn hình.
+ * Mặt thẻ Thời Cuộc.
+ *
+ * Tách khỏi hộp thoại vì băng chuyền bóc thẻ (`ui/caseOpen.js`) dựng lại đúng
+ * mặt thẻ này sau khi dải dừng.
  *
  * @param {object} card thẻ trong `data/events.js`
  * @param {string} detail dòng nói rõ sự kiện này rơi vào đâu, vào ai
- * @param {{ms?:number, label?:string}} [o] `ms` > 0 thì hộp tự đóng — dùng cho
- *   các máy đang ngồi xem, họ không phải bấm gì cả.
  */
-export function eventCardModal(card, detail = '', o = {}) {
+export function eventCardBody(card, detail = '') {
   const tone = TONE[card.kind] ?? TONE.chaos;
-  const body = `
+  return `
     <div class="fate-card event-card" style="--ev:${tone.accent}">
       <div class="event-kind">THỜI CUỘC · ${tone.label}</div>
       <div class="fate-sigil" style="color:${tone.accent}">${card.sigil}</div>
@@ -53,21 +54,6 @@ export function eventCardModal(card, detail = '', o = {}) {
       <div class="fate-text">${esc(card.text.replace(/\s+/g, ' ').trim())}</div>
       ${detail ? `<div class="event-detail">${detail}</div>` : ''}
     </div>`;
-
-  if (o.ms) {
-    // Máy ngồi xem: hộp tự tắt, khỏi phải bấm — nhưng vẫn thấy đủ nội dung thẻ
-    return openModal({
-      eyebrow: 'BIẾN CỐ', title: 'Thời Cuộc', body,
-      dismissible: false, peekable: false, buttons: [],
-      onMount: (_body, close) => setTimeout(() => close(null), o.ms),
-    });
-  }
-
-  return openModal({
-    eyebrow: 'BIẾN CỐ', title: 'Thời Cuộc', body,
-    dismissible: false,
-    buttons: [{ label: o.label ?? 'Đành chịu', value: true, cls: 'btn-gold' }],
-  });
 }
 
 /**

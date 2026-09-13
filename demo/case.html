@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bóc thẻ — băng chuyền (bản mẫu)</title>
+  <link rel="stylesheet" href="/fonts/fonts.css" />
+  <link rel="stylesheet" href="/src/style.css" />
+  <link rel="stylesheet" href="/demo/demo.css" />
+</head>
+<body>
+  <div id="app">
+    <main id="lab">
+      <header class="lab-head">
+        <div class="lab-title">BÓC THẺ — BĂNG CHUYỀN</div>
+        <p class="lab-sub">
+          Bàn thử của <code>src/ui/caseOpen.js</code> — đúng mã đang chạy trong game.
+          Thẻ do <code>Deck.draw()</code> chọn trước; dải chỉ là phần diễn, sinh lại
+          được từ <b>seed</b>. Chỉnh tham số rồi bấm Bóc thẻ.
+        </p>
+      </header>
+
+      <section class="lab-grid">
+        <label class="lab-row">
+          <span>Bộ bài</span>
+          <select id="f-kind">
+            <option value="chance">Cơ Hội</option>
+            <option value="chest">Khí Vận</option>
+            <option value="event">Thời Cuộc</option>
+          </select>
+        </label>
+
+        <label class="lab-row">
+          <span>Thẻ trúng</span>
+          <select id="f-card"></select>
+        </label>
+
+        <label class="lab-row">
+          <span>Thời lượng <b id="v-ms">4000</b> ms</span>
+          <input id="f-ms" type="range" min="1800" max="7000" step="100" value="4000" />
+        </label>
+
+        <label class="lab-row">
+          <span>Tăng tốc tới <b id="v-accel">0.15</b> của pha</span>
+          <input id="f-accel" type="range" min="0.04" max="0.35" step="0.01" value="0.15" />
+        </label>
+
+        <label class="lab-row">
+          <span>Bắt đầu hãm ở <b id="v-cruise">0.72</b></span>
+          <input id="f-cruise" type="range" min="0.45" max="0.92" step="0.01" value="0.72" />
+        </label>
+
+        <label class="lab-row">
+          <span>Số ô trôi qua <b id="v-spin">42</b>–<b id="v-spin2">60</b></span>
+          <input id="f-spin" type="range" min="14" max="80" step="1" value="42" />
+        </label>
+
+        <label class="lab-row">
+          <span>Lệch tâm tối đa <b id="v-jit">0.55</b> của biên an toàn</span>
+          <input id="f-jit" type="range" min="0" max="1" step="0.05" value="0.55" />
+        </label>
+
+        <label class="lab-row">
+          <span>Dừng rồi mới lật sau <b id="v-hold">460</b> ms</span>
+          <input id="f-hold" type="range" min="0" max="1400" step="20" value="460" />
+        </label>
+
+        <label class="lab-row">
+          <span>Seed (để trống = bốc mới)</span>
+          <input id="f-seed" type="text" inputmode="numeric" placeholder="vd. 123456" />
+        </label>
+
+        <label class="lab-row">
+          <span>Tiếng lúc thẻ trúng hiện ra</span>
+          <span class="lab-pair">
+            <select id="f-reveal">
+              <option value="card">card — lá bài quét lên (tiếng đang dùng)</option>
+              <option value="coin">coin — chuông nhỏ leng keng</option>
+              <option value="turn">turn — chuông gọi tới lượt</option>
+              <option value="trade">trade — hợp âm rải đi lên</option>
+              <option value="firework">firework — pháo bông</option>
+              <option value="build">build — hai tiếng gõ gỗ</option>
+              <option value="click">click — một tiếng mõ</option>
+            </select>
+            <button type="button" class="btn btn-ghost btn-mini" id="try-sfx">Nghe thử</button>
+          </span>
+        </label>
+
+        <label class="lab-row lab-check">
+          <input id="f-sound" type="checkbox" checked />
+          <span>Âm thanh (tiếng giấy lúc quay · tiếng game lúc hiện thẻ)</span>
+        </label>
+      </section>
+
+      <div class="lab-foot">
+        <button class="btn btn-gold" id="go">Bóc thẻ</button>
+        <button class="btn btn-ghost" id="go-rare">Bóc trúng hạng hiếm</button>
+        <button class="btn btn-ghost" id="go-replay" disabled>Chạy lại seed vừa rồi</button>
+      </div>
+
+      <div class="lab-log" id="log">Chưa bóc lần nào.</div>
+
+      <div class="lab-legend">
+        <span class="lg" style="--c:#8C8471">Thường — tiền lẻ</span>
+        <span class="lg" style="--c:#2F5E93">Khá — từ 150$</span>
+        <span class="lg" style="--c:#6E3E96">Quý — thuế nhà, tiền mừng, đảo luật</span>
+        <span class="lg" style="--c:#C8A048">Hiếm — thẻ giữ túi, Thời Cuộc kỳ 2</span>
+      </div>
+    </main>
+
+    <div id="modal-root"></div>
+  </div>
+
+  <script type="module" src="/demo/demo.js"></script>
+</body>
+</html>
