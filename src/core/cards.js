@@ -56,6 +56,18 @@ export function repairBill(st, seat, card) {
 }
 
 /**
+ * Khu màu chứa ô này có căn nhà nào chưa — nhà trên ô nào trong khu cũng tính.
+ *
+ * Ô không thuộc khu màu (ga tàu, dịch vụ) thì chỉ xét chính nó, vì chúng không
+ * có bộ để mà phá.
+ */
+function groupHasHouses(st, tileId) {
+  const group = BOARD[tileId].color_group;
+  const ids = group ? GROUP_TILES[group] : [tileId];
+  return ids.some((id) => st.housesOn(id) > 0);
+}
+
+/**
  * Những ô người rút được nhắm tới, theo từng loại thẻ.
  *
  * Luật chung cho cả ba thẻ đụng nhà đất: **chỉ nhắm được vào người khác**, và
@@ -74,10 +86,16 @@ export function cardTargets(st, card, seat) {
 
     /* Cưỡng chế mua: chỉ lô đất trống (nhà cửa không sang tên theo, y như luật
        giao dịch), và chỉ lô mà người rút **trả nổi tiền đền** bằng tiền mặt —
-       thẻ may mắn mà đẩy chính người rút tới chỗ phá sản thì hỏng. */
+       thẻ may mắn mà đẩy chính người rút tới chỗ phá sản thì hỏng.
+
+       Xây nhà rồi thì cả khu màu ấy miễn nhiễm, không riêng ô có nhà. Chủ khu
+       đã gom đủ bộ rồi đổ tiền xây thì mất một lô trống bên cạnh là mất luôn
+       bộ: mấy căn vừa cất tụt về giá thuê đất trống, coi như tiền xây đổ sông.
+       Muốn phá bộ người ta thì đã có thẻ dỡ nhà, và thẻ ấy bắt dỡ từng cấp
+       chứ không giật cả bộ trong một nước. */
     case 'seize':
       return foreign
-        .filter((id) => st.housesOn(id) === 0 && st.players[seat].money >= seizePrice(id))
+        .filter((id) => !groupHasHouses(st, id) && st.players[seat].money >= seizePrice(id))
         .sort((a, b) => a - b);
 
     /* Giải toả nhắm được vào **mọi** lô đang có chủ, kể cả đất của chính người
@@ -198,7 +216,7 @@ export function useReason(st, card, seat) {
     case 'demolish':
       return noTarget('Chưa có khu nào của người khác có nhà để dỡ.');
     case 'seize':
-      return noTarget('Không có lô đất trống nào bạn đủ tiền mặt trả giá gốc +25%.');
+      return noTarget('Không có lô nào vừa trống nhà cả khu, vừa trong tầm tiền mặt của bạn (giá gốc +25%).');
     case 'resume':
     case 'resume-random':
       return noTarget('Trên bàn chưa có lô đất trống nào có chủ.');

@@ -112,6 +112,12 @@ const r = await page.evaluate(async () => {
   out.seizeTargets = seize.includes(light[1]) && !seize.includes(light[0])
     && !seize.includes(brown[0]);
   out.seizePrice = cr.seizePrice(light[1]) === Math.round(BOARD[light[1]].price * 1.25);
+  // Xây một căn trong khu là cả khu miễn nhiễm, không riêng ô đang có nhà
+  st.houses.set(light[1], 1);
+  const seizeBuilt = cr.cardTargets(st, { type: 'seize' }, 0);
+  out.seizeSkipsBuiltGroup = !seizeBuilt.includes(light[1]) && !seizeBuilt.includes(light[2]);
+  st.houses.delete(light[1]);
+  out.seizeAfterDemolish = cr.cardTargets(st, { type: 'seize' }, 0).includes(light[2]);
 
   // Giải toả: nhắm được cả đất của chính mình, đền giá gốc +20%
   st.owner.set(GROUP_TILES.orange[0], 0);
@@ -218,6 +224,9 @@ ok('đủ đúng giá đền thì cưỡng chế mua được, thiếu một đ�
   r.seizeNeedsFullPrice && r.seizeShortOfCash);
 ok('cưỡng chế mua chỉ lô trống, chưa thế chấp', r.seizeTargets);
 ok('tiền đền cưỡng chế mua bằng giá gốc +25%', r.seizePrice);
+ok('khu đã xây nhà thì cưỡng chế mua không đụng được ô nào trong khu',
+  r.seizeSkipsBuiltGroup);
+ok('bán hết nhà trong khu thì khu ấy lại cưỡng chế mua được', r.seizeAfterDemolish);
 ok('thẻ dỡ nhà nhắm được vào khu có nhà của người khác',
   r.demolishGroups.includes('brown'), r.demolishGroups.join());
 ok('thẻ dỡ 2 nhà rải vào hai ô khác nhau trong khu', r.demolishTwoTiles);

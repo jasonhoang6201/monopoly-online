@@ -44,6 +44,14 @@ import { fateCase, eventCase, newSeed } from '../ui/caseOpen.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Mọi ô đất có mặt trong một đề nghị giao dịch, gộp cả hai vế.
+ *
+ * Dùng để bật sáng chúng dưới bàn trong lúc bên nhận xét duyệt: đề nghị do bên
+ * kia dựng nên người bấm đồng ý chưa từng thấy mấy lô ấy nằm đâu trên bàn.
+ */
+const offerTiles = (offer) => [...(offer?.give ?? []), ...(offer?.get ?? [])];
+
 export class Game {
   constructor(scene) {
     this.scene = scene;
@@ -488,7 +496,8 @@ export class Game {
       audio.sfx('turn');
       /* Trả nguyên giá trị chứ không ép về true/false: `'timeout'` cho bên hỏi
          biết đây là bỏ bàn, không phải một câu từ chối. */
-      return tradeReviewModal(this.state, data.offer, this.tradeMs);
+      return litTiles(this.scene, offerTiles(data.offer),
+        () => tradeReviewModal(this.state, data.offer, this.tradeMs));
     }
     if (name === 'rolloff') {
       audio.sfx('turn');
@@ -1427,7 +1436,7 @@ export class Game {
         eyebrow: 'CƯỠNG CHẾ MUA ĐẤT',
         title: 'Lấy lô đất nào?',
         sub: 'Lô bạn chọn <b>sang tên cho bạn</b> ngay, chủ cũ nhận <b>giá gốc +25%</b>.',
-        note: 'Chỉ lô đất trống, chưa thế chấp, và bạn phải đủ tiền mặt trả tiền đền.',
+        note: 'Chỉ lô chưa thế chấp, nằm trong khu chưa có căn nhà nào, và bạn phải đủ tiền mặt trả tiền đền.',
         confirm: 'Lấy lô này',
       },
       resume: {
@@ -2192,7 +2201,13 @@ export class Game {
       `<b style="color:${A.token.css}">${A.name}</b> đưa: ${describe(st, offer.give, offer.giveMoney)}
        <br><b style="color:${B.token.css}">${B.name}</b> đưa: ${describe(st, offer.get, offer.getMoney)}`,
       { kind: 'trade', ms: 5200 });
-    await wait(700);
+
+    /* Rồi chỉ thẳng lên bàn mấy lô đang đem đổi, y như lúc mở phiên đấu giá:
+       cả bàn đọc tên lô trong hộp thoại thì vẫn chưa biết nó nằm cạnh nào, có
+       chắn mất bộ ai đang gom hay không. `spot` phát sang cả máy khác. */
+    const tiles = offerTiles(offer);
+    if (tiles.length) await this.spot(tiles, 2200);
+    else await wait(700);
 
     /* Ai duyệt đề nghị: chơi một máy thì chuyền máy tay này sang tay kia; chơi
        online thì bên B ngồi máy khác, phải hỏi sang đó rồi chờ họ bấm. Bên B
@@ -2221,7 +2236,8 @@ export class Game {
       }
     } else {
       await handoff(B.name, B.token.css, `${A.name} gửi một đề nghị giao dịch. Chuyền máy cho ${B.name} xem xét.`);
-      accepted = await tradeReviewModal(st, offer);
+      accepted = await litTiles(this.scene, offerTiles(offer),
+        () => tradeReviewModal(st, offer));
     }
 
     if (!accepted) {

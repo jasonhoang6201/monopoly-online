@@ -663,6 +663,11 @@ export function describe(state, ids, cash) {
 
 /** Bước 3 — người nhận xem xét và quyết định. */
 /**
+ * Người bấm đồng ý là người chưa từng nhìn thấy đề nghị này thành hình, nên
+ * mấy ô đem đổi được `litTiles` bật sáng sẵn dưới bàn (xem chỗ gọi ở
+ * `controller.trade` và `controller.onAsk`): đọc tên lô trong danh sách thì
+ * chưa biết nó nằm cạnh nào, có chắn mất bộ mình đang gom hay không.
+ *
  * @param {GameState} state
  * @param {object} offer
  * @param {number} [ms] bản online: hạn trả lời. Quá hạn thì hộp thoại tự đóng
@@ -701,7 +706,8 @@ export function tradeReviewModal(state, offer, ms = 0) {
       ${mortIn.length ? `<div class="trade-summary" style="background:rgba(179,50,42,.15);border-color:rgba(179,50,42,.45)">
           Bạn sẽ nhận <b>${mortIn.length}</b> ô đang thế chấp. Sau khi nhận, bạn được mời chuộc lại
           với phí <b>tiền thế chấp + 10%</b> (có thể chuộc sau trong mục Quản lý tài sản).
-        </div>` : ''}`,
+        </div>` : ''}
+      ${offer.give.length + offer.get.length ? PEEK_HINT : ''}`,
     buttons: [
       { label: 'Đồng ý giao dịch', value: true, cls: 'btn-jade' },
       { label: 'Từ chối', value: false, cls: 'btn-danger' },

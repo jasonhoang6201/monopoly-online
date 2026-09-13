@@ -15,8 +15,8 @@
  *   · `demolish`  — chọn một **khu màu** của người khác rồi bốc thăm ô trong khu
  *                   ấy: `levels` ô mỗi ô mất một cấp nhà (khu chỉ có một ô có
  *                   nhà thì ô ấy chịu cả `levels` cấp), không đền một đồng.
- *   · `seize`     — cưỡng chế mua một lô đất trống của người khác, trả cho họ
- *                   **giá gốc +25%**.
+ *   · `seize`     — cưỡng chế mua một lô đất của người khác, trả cho họ
+ *                   **giá gốc +25%**; chỉ nhắm được vào khu màu chưa xây nhà.
  *   · `resume`    — giải toả: chọn một lô đất trống đang có chủ (kể cả của
  *                   mình), đền thiệt hại **giá gốc +20%**, rồi lô ấy đem
  *                   **đấu giá kín** cho cả bàn tranh nhau.
@@ -238,7 +238,8 @@ export const CARD_KINDS = {
   },
   seize: {
     name: 'Cưỡng chế mua đất', sigil: '⚑',
-    effect: 'Lấy một lô đất trống của người khác, trả cho họ giá gốc +25%.',
+    effect: `Lấy một lô đất của người khác, trả cho họ giá gốc +25%. Chỉ nhắm được
+             vào khu màu chưa có căn nhà nào — xây rồi thì cả khu ấy miễn nhiễm.`,
   },
   resume: {
     name: 'Giải toả chọn lô', sigil: '⌁',
