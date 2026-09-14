@@ -78,6 +78,16 @@ async function boot() {
   };
 
   window.addEventListener('resize', fitCanvas);
+  /* iOS bắn `orientationchange` trước khi cập nhật innerWidth/innerHeight, nên
+     đo ngay lúc ấy sẽ ra cỡ của chiều cũ. Đo lại vài nhịp sau cho chắc.
+     `visualViewport` là chỗ duy nhất báo đúng khi thanh công cụ nổi của Safari
+     thu vào hay bung ra — lúc ấy `resize` của window không nổ. */
+  window.addEventListener('orientationchange', () => {
+    fitCanvas();
+    setTimeout(fitCanvas, 120);
+    setTimeout(fitCanvas, 420);
+  });
+  window.visualViewport?.addEventListener('resize', fitCanvas);
   // Trình duyệt cần vài khung hình để chốt kích thước sau khi đổi chế độ
   document.addEventListener('fullscreenchange', () => {
     fitCanvas();

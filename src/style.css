@@ -67,13 +67,22 @@
 html, body {
   width: 100%; height: 100%;
   overflow: hidden;
+  /* Chạm rồi nhả trên iOS để lại vệt xám trên mọi nút — tắt đi vì nút nào
+     cũng đã có sẵn trạng thái :active riêng. */
+  -webkit-tap-highlight-color: transparent;
   background: var(--ground-night);
   font-family: var(--sans);
   color: var(--paper);
   -webkit-font-smoothing: antialiased;
 }
 
-#app { position: relative; width: 100vw; height: 100vh; }
+/* 100dvh chứ không 100vh: Safari trên iPhone tính 100vh theo lúc thanh công cụ
+   đã thu hết, nên phần dưới màn hình bị đẩy khuất. */
+#app { position: relative; width: 100vw; height: 100vh; height: 100dvh; }
+
+/* Cột phải — chỉ có bề ngang khi điện thoại nằm ngang (xem khối cuối tệp).
+   Màn hình rộng thì nó biến mất hẳn để bàn cờ ăn luôn chỗ ấy. */
+#right-rail { display: none; }
 
 #game-canvas { position: absolute; inset: 0; }
 #game-canvas canvas { display: block; }
@@ -2787,4 +2796,346 @@ html, body {
   .co-cell-sigil { font-size: 27px; }
   .co-cell-label { font-size: 11px; }
   .co-reel { height: 152px; }
+}
+
+/* ============================================================
+   ĐIỆN THOẠI NẰM NGANG — iPhone 16 Pro: 874 × 402 điểm ảnh CSS
+   ============================================================
+   Ở đây chiều cao mới là cạnh chặn: bàn cờ vuông chỉ to bằng chiều cao
+   màn hình trừ hai khoảng thở, nên bề ngang còn thừa chừng 470px. Chỗ
+   thừa ấy chia cho hai cột đứng hai bên bàn cờ:
+
+     cột trái  #sidebar     hiệu bài · người chơi · xem nhanh · tiện ích
+     cột phải  #right-rail  chỗ đứng của #actions và .tile-pick
+
+   Thanh nút dạt sang cột phải nên không còn nằm đè lên lòng bàn cờ như
+   trên màn hình rộng — trên màn 402px cao thì tấm bảng ấy che mất gần
+   nửa bàn. BoardScene.layout() đo bề ngang hai cột rồi đặt bàn cờ vào
+   giữa, nên toàn bộ phép chia này nằm trong CSS.
+   ============================================================ */
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --safe-l: env(safe-area-inset-left, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    /* Bề ngang còn lại sau khi trừ ô vuông bàn cờ (cạnh = 100dvh trừ hai
+       khoảng thở 12px của BoardScene) và trừ hai vùng tai thỏ / vạch Home. */
+    --cols: calc(100vw - 100dvh - var(--safe-l) - var(--safe-r));
+    /* Hai cột cộng thêm đúng phần bị tai thỏ ăn, để chữ nghĩa bên trong
+       vẫn nằm trọn trong vùng nhìn được. */
+    --rail: calc(clamp(168px, var(--cols) * .55, 312px) + var(--safe-l));
+    --act:  calc(clamp(146px, var(--cols) * .45, 268px) + var(--safe-r));
+    /* Bề ngang tối đa của hộp thoại: trừ đệm 8px hai bên của .scrim */
+    --modal-w: calc(100vw - 16px - var(--safe-l) - var(--safe-r));
+  }
+
+  #right-rail {
+    display: block;
+    flex: 0 0 var(--act); width: var(--act); height: 100%;
+    margin-left: auto;      /* đẩy sát mép phải; ở giữa là bàn cờ */
+    pointer-events: none;
+  }
+
+  /* ---- cột trái: bóp mọi tầng lại cho 402px chiều cao chứa đủ ---- */
+  #sidebar {
+    gap: 6px;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 10px
+             calc(8px + var(--safe-b)) calc(10px + var(--safe-l));
+    /* Chừa đường thoát: bàn 6 người hay tên dài vẫn có thể vượt 402px */
+    overflow-y: auto; overflow-x: hidden;
+  }
+  .brand { gap: 7px; padding-bottom: 6px; }
+  .brand-mark { font-size: 15px; }
+  .brand-text b { font-size: 13px; letter-spacing: .1em; }
+  .brand-text i { font-size: 8px; letter-spacing: .18em; }
+
+  #turn-panel { gap: 4px; }
+  .pcard { gap: 7px; padding: 6px 8px; border-radius: 9px; }
+  .pcard-token { width: 26px; height: 30px; }
+  .pcard-name { font-size: 11.5px; gap: 5px; }
+  .pcard-turn { font-size: 7.5px; padding: 1px 5px; }
+  .pcard-where { font-size: 8.5px; letter-spacing: .06em; }
+  .pcard-money { font-size: 15px; }
+  .pcard-meta { font-size: 9px; gap: 5px; margin-top: 0; }
+  .pcard-jail, .pcard-ticket { font-size: 8.5px; padding: 1px 5px; }
+
+  #roster { gap: 4px; padding: 4px 2px 5px; }
+  .rchip { flex-basis: 44px; min-width: 40px; padding: 4px 3px; border-radius: 7px; }
+  .rchip-token { width: 18px; height: 21px; }
+  .rchip-name { font-size: 8px; }
+  .rchip-money { font-size: 9.5px; }
+  #roster.dense .rchip { flex-basis: 38px; min-width: 36px; }
+  #roster.dense .rchip-token { width: 16px; height: 19px; }
+
+  /* Bảng xem nhanh nhận phần chỗ còn thừa của cột, mà phần ấy chỉ còn chừng
+     100px — cho nó tự cuộn, không thì mấy dòng cuối tràn xuống đè lên thanh
+     Thời Cuộc bên dưới. */
+  #quickview {
+    margin-top: 2px; padding-top: 6px;
+    overflow-y: auto; overflow-x: hidden;
+    scrollbar-width: thin; scrollbar-color: var(--gold-deep) transparent;
+  }
+  /* Dải màu khu đã nằm sẵn trên đầu ảnh thẻ, dòng chữ nhắc lại là thừa */
+  .qv-kind { display: none; }
+  .qv-head { font-size: 8px; letter-spacing: .14em; margin-bottom: 2px; }
+  .qv-thumb { min-height: 22px; max-height: 132px; margin-bottom: 4px; }
+  .qv-name { font-size: 11px; line-height: 1.2; }
+  /* Tên đường bản hiện nay đã in sẵn trên ảnh thẻ ngay phía trên, nhắc lại
+     thành ra tốn một dòng mà dòng tiền bên dưới lại bị đẩy khuất. */
+  .qv-modern { display: none; }
+  /* Tên chủ và huy hiệu nhà nằm chung một dòng — bớt được một dòng để dòng
+     tiền thuê lọt vào tầm nhìn mà không phải cuộn. */
+  .qv-owner, .qv-badges { display: inline-flex; vertical-align: middle; }
+  .qv-owner { font-size: 9.5px; margin-top: 3px; }
+  .qv-badges { margin-top: 3px; margin-left: 6px; }
+  .qv-rows { margin-top: 4px; }
+  .qv-row { font-size: 9.5px; padding: 2.5px 5px; }
+  .qv-row b { font-size: 10.5px; }
+  .qv-row.now b { font-size: 11.5px; }
+  .qv-idle { font-size: 9.5px; padding: 8px 6px; }
+  /* Dòng chú thích là thứ đầu tiên bỏ được: giá thuê đã nằm ngay trên nó */
+  .qv-note { display: none; }
+
+  #fate-meter { margin-top: 6px; padding: 6px 8px 7px; }
+  .fm-label { font-size: 8px; }
+  .fm-state { font-size: 9px; }
+  .fm-note { margin-top: 4px; font-size: 8.5px; line-height: 1.4; }
+
+  .side-foot { gap: 6px; padding-top: 6px; }
+  .side-tools { gap: 5px; }
+  .icon-btn { width: 26px; height: 26px; font-size: 12px; }
+  .icon-btn.off::after { width: 20px; }
+  .bank-label { font-size: 8px; }
+  #bank-houses { font-size: 10px; }
+  /* Cột hẹp lại thì bảng meme cũng phải hẹp theo — trừ luôn phần tai thỏ,
+     vì phần ấy nằm ngoài vùng nhìn được của cột. */
+  #meme-pop { --meme-w: min(206px, calc(var(--rail) - var(--safe-l) - 22px)); }
+  /* Ba hàng meme cao hơn nửa cột 402px — hạ xuống hai hàng rưỡi, phần còn lại
+     vẫn cuộn như cũ. */
+  .meme-grid { max-height: calc(var(--meme-cell) * 2 + var(--meme-gap) + 14px); }
+
+  /* ---- cột phải: thanh nút hành động ---- */
+  /* `position: fixed` để thoát khỏi #board-hud — khung ấy trùng khít ô vuông
+     bàn cờ, mà nút giờ phải đứng ngoài bàn. */
+  #actions, .tile-pick {
+    position: fixed;
+    left: auto; right: calc(10px + var(--safe-r));
+    top: 50%;
+    transform: translateY(-50%);
+    width: calc(var(--act) - var(--safe-r) - 20px);
+    max-height: calc(100dvh - 16px);
+    overflow-y: auto; overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: var(--gold-deep) transparent;
+  }
+  /* Bộ hoạt cảnh gốc kéo ngang -50% để tự canh giữa; ở đây nút neo theo mép
+     phải nên phải thay bằng bộ chỉ kéo dọc, không thì nút nhảy sang trái. */
+  @keyframes actions-in-side {
+    from { opacity: 0; transform: translateY(calc(-50% + 8px)) scale(.97); }
+    to   { opacity: 1; transform: translateY(-50%) scale(1); }
+  }
+  @keyframes tp-out-side {
+    to { opacity: 0; transform: translateY(calc(-50% + 6px)) scale(.97); }
+  }
+  @keyframes tp-nudge-side {
+    0%, 100% { transform: translateY(-50%); }
+    25%  { transform: translate(-7px, -50%); }
+    70%  { transform: translate(5px, -50%); }
+  }
+  #actions, .tile-pick { animation-name: actions-in-side; }
+  .tile-pick.out { animation-name: tp-out-side; }
+  .tile-pick.nudge { animation-name: tp-nudge-side; }
+
+  /* Cột hẹp: mỗi nút chiếm trọn một hàng, xếp dọc từ trên xuống */
+  #actions {
+    flex-direction: column; flex-wrap: nowrap;
+    gap: 6px; padding: 10px; border-radius: 12px;
+  }
+  #actions .btn { flex: 0 0 auto; width: 100%; padding: 8px 10px; }
+  #actions .btn-primary { font-size: 15px; padding: 9px 12px; border-radius: 10px; }
+  #actions .btn-primary .btn-face { gap: 9px; }
+  #actions .btn-primary .ai-dice { height: 24px; }
+  #actions .btn-gold { font-size: 13px; padding: 8px 10px; }
+  #actions .btn-jade,
+  #actions .btn-ghost { font-size: 12px; padding: 7px 9px; justify-content: center; }
+  #actions .btn-danger { font-size: 11.5px; padding: 6px 10px; margin-top: 4px; }
+  #actions .ai { height: 15px; }
+  #actions .btn-key { top: 3px; right: 4px; }
+
+  .tile-pick { padding: 12px 12px 13px; border-radius: 12px; }
+  .tp-eyebrow { font-size: 9px; letter-spacing: .18em; }
+  .tp-title { font-size: 15px; margin-top: 3px; }
+  .tp-sub { font-size: 11px; margin-top: 4px; line-height: 1.4; }
+  .tp-call { margin-top: 8px; padding: 6px 9px; font-size: 11.5px; }
+  .tp-note { margin-top: 6px; font-size: 10px; line-height: 1.4; }
+  .tp-timer { margin-top: 7px; font-size: 11px; }
+  .tp-chip { font-size: 10px; padding: 2px 6px; }
+  .tp-acts { gap: 6px; margin-top: 9px; }
+  .tp-acts .btn { padding: 6px 12px; font-size: 11.5px; }
+
+  /* ---- lớp phủ trong lòng bàn cờ ---- */
+  /* Vành ô đất chiếm chừng 13.5% cạnh bàn — dải thông báo phải nằm dưới mức
+     ấy, không thì nó che mất hàng ô trên cùng. */
+  #broadcast { top: 15%; width: min(320px, 88%); gap: 5px; }
+  .bcast { padding: 8px 12px; border-radius: 9px; }
+  .bcast-title { font-size: 9px; letter-spacing: .18em; margin-bottom: 3px; }
+  .bcast-text { font-size: 12px; line-height: 1.35; }
+
+  #turn-clock { top: 25%; gap: 2px; }
+  .tc-dial { width: 52px; height: 52px; }
+  .tc-num { font-size: 18px; }
+  .tc-who { font-size: 9px; letter-spacing: .06em; }
+
+  /* Dải báo mất mạng dời xuống chân bàn: trên đầu bàn đã có dải thông báo,
+     mà vành ô đất chiếm 13.5% cạnh nên hai thứ không cùng chen được. */
+  #link-warn { top: auto; bottom: 16%; padding: 6px 13px; gap: 7px; }
+  .lw-dot { width: 7px; height: 7px; }
+  .lw-text { font-size: 11px; }
+
+  #pop-card { width: 160px; padding: 8px 9px 7px; }
+  .pop-token { width: 21px; height: 24px; }
+  .pop-who b { font-size: 11px; }
+  .pop-who i { font-size: 12px; }
+  .pop-row { font-size: 9.5px; padding: 1.5px 0; }
+  .pop-row b { font-size: 10.5px; }
+  .pop-foot { display: none; }
+
+  /* ---- hộp thoại: cao 402px nên phần khung phải mỏng hết mức ---- */
+  .scrim {
+    padding: 8px calc(8px + var(--safe-r)) calc(8px + var(--safe-b))
+             calc(8px + var(--safe-l));
+  }
+  /* Đo thẳng theo khung nhìn chứ không theo %: .scrim là lưới canh giữa, hàng
+     lưới lại tự nở theo nội dung, nên `max-height: 100%` sẽ lấy mốc là chính
+     chiều cao đã nở ấy — hộp thoại cao bao nhiêu cũng lọt. */
+  .modal {
+    width: min(560px, var(--modal-w));
+    max-height: calc(100dvh - 16px - var(--safe-b));
+    border-radius: 12px;
+  }
+  .modal.wide { width: min(940px, var(--modal-w)); }
+  .modal::after { inset: 4px; border-radius: 9px; }
+  .modal-head { padding: 10px 16px 8px; }
+  .modal-eyebrow { font-size: 8.5px; letter-spacing: .22em; margin-bottom: 3px; }
+  .modal-title { font-size: 17px; }
+  .modal-sub { font-size: 10.5px; margin-top: 3px; }
+  .modal-body { padding: 10px 16px; }
+  .modal-foot { padding: 8px 16px 10px; gap: 7px; }
+  .modal-peek { width: 26px; height: 26px; top: 7px; right: 7px; font-size: 12px; }
+  .peek-pill { left: 10px; bottom: calc(10px + var(--safe-b)); padding: 7px 12px; font-size: 11px; }
+  .btn { font-size: 12.5px; padding: 7px 15px; }
+
+  /* Bày bàn / phòng chờ: hàng số người và hàng tên phải cùng lọt một màn */
+  .setup-row { gap: 6px; margin-bottom: 10px; }
+  .count-btn { width: 40px; height: 40px; font-size: 17px; border-radius: 8px; }
+  /* Sáu hàng tên xếp dọc thì tràn màn; chia đôi thành hai cột, hộp thoại
+     rộng 560px nên mỗi cột vẫn đủ chỗ cho tên và nhãn màu. */
+  #name-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+  .name-row { gap: 7px; padding: 4px 9px; margin-bottom: 0; }
+  .name-row .dot { width: 18px; height: 18px; }
+  .name-row input { font-size: 13px; }
+  .handoff { padding: 4px 0; }
+  .handoff-eye { font-size: 30px; margin-bottom: 7px; }
+  .handoff-name { font-size: 17px; }
+  .handoff-note { font-size: 11px; }
+  .rules { font-size: 11px; line-height: 1.55; }
+  .crown { font-size: 38px; }
+  .phead { gap: 10px; padding-bottom: 9px; margin-bottom: 10px; }
+  .phead-token { width: 38px; height: 42px; }
+  .phead-name { font-size: 16px; }
+  .phead-sub { font-size: 10.5px; }
+  .pstat-row { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 6px; margin-bottom: 10px; }
+  .pstat { padding: 6px 8px; }
+  .pstat b { font-size: 14px; }
+  .pstat span { font-size: 8px; letter-spacing: .08em; }
+  /* Thẻ đất cao gấp rưỡi bề ngang, mà màn chỉ còn ~250px cho thân hộp thoại —
+     bề ngang do deed.js ghi thẳng vào thuộc tính style nên phải !important
+     mới đè được. Ảnh vẫn vẽ ở 120px rồi thu lại, không vỡ nét. */
+  .deed-grid { gap: 8px; }
+  .deed-grid .deedcard { width: 84px !important; }
+  .deedcard-foot { font-size: 8.5px; margin-top: 3px; }
+  .deed-badge { font-size: 7px; padding: 1px 3px; }
+  .deed-badge .gi { height: 7px; }
+  .deed { width: 176px; }
+  .deed-band { height: 36px; }
+  .deed-band span { font-size: 9px; letter-spacing: .08em; }
+  .deed-name { font-size: 12px; padding: 7px 9px 2px; }
+  .deed-old { font-size: 9px; padding-bottom: 6px; }
+  .deed-rows { padding: 0 10px 9px; font-size: 9.5px; }
+  .deed-row { padding: 2px 0; }
+  .arow-thumb { width: 20px; }
+  /* Quản lý tài sản: hộp thoại rộng 858px mà chỉ cao 386px, nên đổi 2 cột
+     thành 3 và bóp từng thẻ lại — cuộn dọc ít đi hẳn. */
+  .mg-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .mg-card { gap: 6px; padding: 8px 9px 8px; border-radius: 9px; }
+  .mg-head { gap: 7px; }
+  .mg-thumb { width: 22px; }
+  .mg-name { font-size: 11px; }
+  .mg-kind { font-size: 8px; }
+  .mg-flag { font-size: 7.5px; padding: 1px 4px; }
+  .mg-build { font-size: 9px; padding: 3px 7px; gap: 5px; }
+  .mg-build .gi-row { font-size: 12px; }
+  .mg-figs { gap: 4px; padding: 5px 0 0; }
+  .mg-fig span { font-size: 7.5px; }
+  .mg-fig b { font-size: 10.5px; }
+  .mg-acts { gap: 5px; }
+  .mg-btns { gap: 4px; }
+  .btn.btn-ico { width: 30px; height: 25px; }
+  .btn-ico .gi { height: 12px; }
+  .asset-group-head { font-size: 9px; }
+  .mg-grid .asset-group-head { margin: 3px 0 -2px; }
+  /* Bảng đề nghị giao dịch */
+  .trade-grid { gap: 10px; }
+  .trade-side { padding: 8px 9px; border-radius: 9px; }
+  .trade-side-head { gap: 6px; padding-bottom: 6px; margin-bottom: 7px; }
+  .trade-side-head .dot { width: 11px; height: 11px; }
+  .trade-side-head .who { font-size: 12px; }
+  .trade-side-head .cash { font-size: 11px; }
+  .trade-swap { font-size: 20px; padding-top: 24px; }
+  .money-field { gap: 7px; margin-bottom: 7px; padding: 5px 9px; }
+  .money-field label { font-size: 9px; letter-spacing: .1em; }
+  .money-field input { font-size: 13px; }
+  .tcards { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 5px; }
+  .tcard { padding: 5px 7px 5px 11px; gap: 2px; }
+
+  /* Băng chuyền bóc thẻ + mặt thẻ Cơ Hội / Khí Vận: chiều cao ô dải và mặt
+     thẻ do JS đo rồi gán cho .co-stage, nên bóp bằng CSS là đủ. */
+  .co-reel { height: 128px; }
+  .co-cell { width: 76px; height: 108px; gap: 4px; padding: 7px 6px; }
+  .co-cell-top { font-size: 7px; }
+  .co-cell-sigil { font-size: 23px; }
+  .co-cell-label { font-size: 9.5px; -webkit-line-clamp: 3; }
+  .co-rank { margin-bottom: 6px; font-size: 8.5px; padding: 3px 9px; letter-spacing: .2em; }
+  .co-wait { padding: 3px 16px 12px; font-size: 10.5px; }
+  .fate-card { width: 250px; padding: 14px 16px; }
+  .fate-sigil { font-size: 24px; margin-bottom: 5px; }
+  .fate-kind { font-size: 9.5px; letter-spacing: .22em; margin-bottom: 7px; }
+  .fate-text { font-size: 12.5px; line-height: 1.4; }
+  .fate-amount { margin-top: 9px; font-size: 20px; }
+  .bag-row { gap: 9px; padding: 6px 9px; }
+  .bag-sigil { width: 26px; font-size: 18px; }
+  .bag-name { font-size: 11.5px; }
+
+  .event-card { width: 280px; }
+  .trade-timer { margin-top: 8px; padding: 6px 11px; font-size: 12px; }
+}
+
+/* ============================================================
+   Máy chỉ có cảm ứng: :hover dính lại sau cú chạm
+   ============================================================
+   iOS giữ nguyên trạng thái :hover của phần tử vừa chạm cho tới khi chạm
+   chỗ khác, nên nút vừa bấm cứ nằm nhô lên. Bỏ phần nhấc/phóng, giữ lại
+   đổi màu viền — thứ ấy dính lại thì cũng không sai chỗ.
+   ============================================================ */
+@media (hover: none) {
+  .btn:hover:not(:disabled),
+  .rchip:hover,
+  .icon-btn:hover,
+  .count-btn:hover,
+  .pick:hover,
+  .name-row .dot:hover,
+  .deedcard.clickable:hover,
+  .modal-peek:hover { transform: none; }
+  .btn:hover:not(:disabled) { filter: none; }
+  .rchip:hover { box-shadow: none; }
 }

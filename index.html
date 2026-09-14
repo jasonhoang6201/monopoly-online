@@ -2,7 +2,10 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- viewport-fit=cover: iPhone nằm ngang mới trả về env(safe-area-inset-*) khác 0,
+       nhờ đó cột hai bên né được tai thỏ và vạch Home. -->
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <title>Cờ Tỷ Phú — Sài Gòn · Gia Định</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%237C1E14'/%3E%3Cpath d='M16 5l2.6 7.4H26l-6 4.6 2.3 7.4L16 20l-6.3 4.4L12 17l-6-4.6h7.4z' fill='%23E9CE85'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/fonts/fonts.css" />
@@ -82,6 +85,11 @@
         <div id="broadcast"></div>
         <footer id="actions"></footer>
       </div>
+
+      <!-- Cột phải: chỗ đứng của thanh nút hành động khi điện thoại nằm ngang.
+           Màn hình rộng thì phần tử này rộng 0 nên bàn cờ ăn luôn chỗ ấy;
+           BoardScene.layout() đo bề ngang của nó để chừa chỗ. -->
+      <div id="right-rail" aria-hidden="true"></div>
     </div>
 
     <!-- Bong bóng meme neo theo quân cờ — toạ độ do ui/memes.js bơm vào,

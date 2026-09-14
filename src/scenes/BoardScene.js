@@ -32,6 +32,16 @@ function railWidthCss() {
 }
 
 /**
+ * Bề ngang cột phải — chỗ thanh nút hành động dạt ra khi điện thoại nằm ngang.
+ * Màn hình rộng thì `#right-rail` rộng 0 (CSS để `display:none`), nên bàn cờ
+ * vẫn ăn hết phần bên phải như cũ.
+ */
+function actRailWidthCss() {
+  const el = document.getElementById('right-rail');
+  return el ? el.getBoundingClientRect().width : 0;
+}
+
+/**
  * Xí ngầu: cạnh texture, và hệ số nới ảnh cho khối quay tự do.
  * Khối chiếm chừng 57% bề ngang khung vẽ khi một mặt ngửa thẳng lên,
  * nên ảnh phải to hơn cạnh nhìn thấy đúng chừng ấy lần.
@@ -247,14 +257,15 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   /**
-   * Bàn cờ ăn hết khoảng trống bên phải cột điều khiển — cạnh của nó
-   * chỉ bị giới hạn bởi chiều cao màn hình hoặc bề ngang còn lại.
+   * Bàn cờ ăn hết khoảng trống giữa hai cột — cạnh của nó chỉ bị giới hạn
+   * bởi chiều cao màn hình hoặc bề ngang còn lại sau khi trừ hai cột.
    */
   layout() {
     const W = this.scale.width, H = this.scale.height;
     const railW = px(railWidthCss());
+    const actW = px(actRailWidthCss());
     const g = px(GUTTER);
-    const availW = Math.max(px(240), W - railW - g * 2);
+    const availW = Math.max(px(240), W - railW - actW - g * 2);
     const availH = Math.max(px(240), H - g * 2);
     this.size = Math.max(px(300), Math.min(availW, availH));
     this.scaleF = this.size / TEX;
