@@ -197,6 +197,14 @@ export default class BoardScene extends Phaser.Scene {
     this.marked = null;
     this.markSet = null;
     this.markGuard = null;
+    /* Ngăn xếp người nhận cú bấm ô. Trước đây mỗi phiên chọn ô tự cất
+       `onTileClick` cũ rồi ghi đè, xong việc thì ghi trả — cách ấy chỉ đúng khi
+       các phiên đóng ngược thứ tự mở. Mà `onAsk('ev-pick')` mở phiên thẳng từ
+       tin mạng, chồng lên phiên đang mở tại máy, rồi phiên mở trước hết giờ
+       trước: lúc ấy phiên sau ghi trả một hàm đã chết (`done` đã true) và bàn
+       cờ ngừng nhận bấm tới hết ván. Xếp chồng ở đây thì gỡ ai ra cũng được. */
+    this.clickStack = [];
+    this.baseTileClick = null;
     this.overlay = this.add.container(0, 0).setDepth(2);
     /* Vệt đèn báo ô đã có nhà — nằm trên nước màu chủ đất, dưới quân cờ */
     this.glowLayer = this.add.container(0, 0).setDepth(3);
@@ -373,6 +381,44 @@ export default class BoardScene extends Phaser.Scene {
       const id = this.tileAt(p.x, p.y);
       if (id != null) this.onTileClick?.(id);
     });
+  }
+
+  /**
+   * Đặt người nhận cú bấm ô lúc không có phiên chọn nào, và bỏ mọi phiên còn
+   * treo lại. Controller gọi ở đầu mỗi ván: ván trước có thể tàn lúc một phiên
+   * chọn đang mở, phiên ấy không bao giờ gọi `popTileClick` nữa.
+   *
+   * @param {(id:number)=>void} fn
+   */
+  setBaseTileClick(fn) {
+    this.clickStack.length = 0;
+    this.baseTileClick = fn;
+    this.onTileClick = fn;
+  }
+
+  /**
+   * Giao cú bấm ô cho một phiên chọn.
+   *
+   * @param {(id:number)=>void} fn
+   * @returns {(id:number)=>void} chính `fn` — cầm lấy mà trả ở `popTileClick`
+   */
+  pushTileClick(fn) {
+    this.clickStack.push(fn);
+    this.onTileClick = fn;
+    return fn;
+  }
+
+  /**
+   * Phiên chọn trả lại cú bấm ô.
+   *
+   * Gỡ đúng `fn` khỏi ngăn xếp rồi trao cho phiên còn lại trên cùng; hết phiên
+   * thì về `baseTileClick` (controller đặt: bấm ô là mở bảng xem ô). Gỡ một
+   * phiên nằm giữa cũng không đụng tới phiên đang cầm.
+   */
+  popTileClick(fn) {
+    const i = this.clickStack.lastIndexOf(fn);
+    if (i >= 0) this.clickStack.splice(i, 1);
+    this.onTileClick = this.clickStack[this.clickStack.length - 1] ?? this.baseTileClick;
   }
 
   drawHover(id) {

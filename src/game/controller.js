@@ -162,7 +162,9 @@ export class Game {
     this.state = new GameState(names, tokens ?? null, settings);
     this.quick.setState(this.state);
     this.hud = new Hud(this.state, (id) => this.showPlayer(id), this.quick);
-    this.scene.onTileClick = (id) => this.showTile(id);
+    /* Đáy ngăn xếp người nhận cú bấm ô: hết phiên chọn thì bấm ô là mở bảng
+       xem ô. `BoardScene.popTileClick` quay về đây khi ngăn xếp rỗng. */
+    this.scene.setBaseTileClick((id) => this.showTile(id));
     this.scene.setPlayers(this.state.players);
     this.scene.refresh(this.state);
     this.memes.setState(this.state);
@@ -188,7 +190,9 @@ export class Game {
     this.state = fromSnapshot(snap);
     this.quick.setState(this.state);
     this.hud = new Hud(this.state, (id) => this.showPlayer(id), this.quick);
-    this.scene.onTileClick = (id) => this.showTile(id);
+    /* Đáy ngăn xếp người nhận cú bấm ô: hết phiên chọn thì bấm ô là mở bảng
+       xem ô. `BoardScene.popTileClick` quay về đây khi ngăn xếp rỗng. */
+    this.scene.setBaseTileClick((id) => this.showTile(id));
     this.scene.setPlayers(this.state.players);
     this.scene.refresh(this.state);
     this.memes.setState(this.state);

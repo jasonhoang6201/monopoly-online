@@ -80,24 +80,29 @@ export function pickGroupOnBoard(scene, state, data, ms = 0) {
     // Thanh nút hành động nằm đúng chỗ này; cất đi trong lúc chọn
     hud.classList.add('picking');
 
-    const prevClick = scene.onTileClick;
     scene.markTiles(ids);
 
     let done = false;
     let asking = false;
     let closeAsk = null;
     let ticker = 0;
+    let myClick = null;      // đặt ở dưới; `finish` chỉ gỡ đúng phiên này ra
 
     const finish = (key) => {
       if (done) return;
       done = true;
       clearInterval(ticker);
       closeAsk?.(false);
-      scene.onTileClick = prevClick;
+      scene.popTileClick(myClick);
       scene.clearMarks();
-      hud.classList.remove('picking');
       panel.classList.add('out');
       setTimeout(() => panel.remove(), 260);
+      /* Còn phiên khác đang mở thì giữ nguyên `picking`: bỏ ra ở đây là thanh
+         nút hành động hiện lại đè lên bảng của phiên ấy. `panel` vẫn còn trong
+         DOM tới hết hoạt cảnh nên phải trừ chính nó ra. */
+      if (hud.querySelectorAll('.tile-pick:not(.out)').length === 0) {
+        hud.classList.remove('picking');
+      }
       resolve(key);
     };
 
@@ -109,7 +114,7 @@ export function pickGroupOnBoard(scene, state, data, ms = 0) {
       panel.classList.add('nudge');
     };
 
-    scene.onTileClick = async (id) => {
+    myClick = scene.pushTileClick(async (id) => {
       if (done || asking) return;
       if (!ids.includes(id)) { refuse(); return; }
       const key = BOARD[id].color_group;
@@ -149,7 +154,7 @@ export function pickGroupOnBoard(scene, state, data, ms = 0) {
       if (done) return;
       if (ok) finish(key);
       else scene.markTiles(ids);   // quay lại chọn, tắt vệt xanh của khu vừa ngó
-    };
+    });
 
     panel.querySelector('.tp-cancel')?.addEventListener('click', () => {
       audio.sfx('click');
