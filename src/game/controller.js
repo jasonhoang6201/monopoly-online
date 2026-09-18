@@ -562,7 +562,7 @@ export class Game {
       audio.sfx('turn');
       return litTiles(this.scene, [data.tileId],
         () => auctionBidModal(this.state, this.net.mySeat, data.tileId,
-          { reason: data.reason, ms }));
+          { reason: data.reason, ms, bidders: data.bidders, barred: data.barred }));
     }
     return null;
   }

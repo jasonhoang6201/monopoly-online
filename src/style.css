@@ -2347,6 +2347,42 @@ html, body {
 .bid-quick { display: flex; gap: 6px; margin-top: 8px; }
 .bid-quick .btn { flex: 1; padding: 6px 4px; font-size: 11.5px; }
 
+/* --- danh sách người trong phiên -------------------------------------
+   Thẻ tên xuống dòng tự do thay vì một hàng cuộn ngang: bàn sáu người mà
+   tên dài thì hàng ngang đẩy mất người cuối, còn đây thì thấy đủ mặt. */
+.bid-roster { margin-top: 12px; text-align: left; }
+.roster-head {
+  font-size: 9.5px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--gold); opacity: .8; margin-bottom: 6px;
+}
+.roster-head.out { margin-top: 9px; color: var(--paper-deep); opacity: .7; }
+.roster-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.roster-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 9px 4px 6px; border-radius: 999px;
+  background: rgba(239, 226, 198, .05);
+  border: 1px solid rgba(200, 160, 72, .2);
+}
+.roster-chip i { width: 8px; height: 14px; border-radius: 2px; border: 1px solid rgba(0, 0, 0, .45); }
+.roster-chip b {
+  font-family: var(--serif); font-weight: 400;
+  font-size: 12.5px; color: var(--paper);
+}
+.roster-chip u {
+  text-decoration: none; font-size: 10.5px;
+  color: var(--paper-deep); font-variant-numeric: tabular-nums;
+}
+/* Hàng của chính mình tô vàng — đọc lướt là biết mình đứng đâu trong danh sách */
+.roster-chip.me {
+  background: rgba(200, 160, 72, .14); border-color: var(--gold-light);
+}
+.roster-chip.me b { color: var(--gold-pale); }
+/* Người bị gạt khỏi phiên: mờ và gạch tên, cùng lối tô với ô đã thế chấp */
+.roster-head.out + .roster-chips .roster-chip { opacity: .5; }
+.roster-head.out + .roster-chips .roster-chip b {
+  text-decoration: line-through; text-decoration-color: rgba(179, 50, 42, .8);
+}
+
 /* --- bảng giá lúc chốt phiên -----------------------------------------
    Bốn cột: hạng, màu quân, tên, giá. Cột hạng và cột giá cố định bề ngang
    để con số của các hàng thẳng nhau, đọc dọc là so được ngay ai hơn ai. */

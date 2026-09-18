@@ -524,9 +524,16 @@ export class EventRunner {
     const exclude = new Set(o.exclude ?? []);
     const bidders = st.alive().map((p) => p.id).filter((seat) => !exclude.has(seat));
     if (bidders.length === 0) return;
+    /* Người bị luật gạt khỏi phiên (chủ cũ lúc phát mãi) không nhận hộp ghi giá,
+       nên chỉ còn băng thông báo này nói cho họ biết vì sao mình không được hỏi. */
+    const barred = st.alive().map((p) => p.id).filter((seat) => exclude.has(seat));
+    const named = (seat) =>
+      `<b style="color:${st.players[seat].token.css}">${st.players[seat].name}</b>`;
 
     await this.g.bc.show('MỞ PHIÊN ĐẤU GIÁ',
-      `<b>${tileLabel(tileId)}</b> — mọi người ghi giá kín, cao nhất thì lấy đất.`,
+      `<b>${tileLabel(tileId)}</b> — ghi giá kín, cao nhất thì lấy đất.<br>
+       Tham gia: ${bidders.map(named).join(', ')}
+       ${barred.length ? `<br>Đứng ngoài: ${barred.map(named).join(', ')}` : ''}`,
       { kind: 'trade', ms: 3000 });
     /* Ghi giá kín là lúc ai cũng phải biết mình đang trả giá cho lô nào — hộp
        ghi giá chỉ hiện tên lô, mà giá trị của nó nằm ở chỗ nó đứng trên bàn. */
@@ -535,9 +542,10 @@ export class EventRunner {
     const answers = await this.askMany(bidders.map((seat) => ({
       seat,
       name: 'ev-bid',
-      data: { tileId, reason: o.reason },
+      data: { tileId, reason: o.reason, bidders, barred },
       local: () => litTiles(this.g.scene, [tileId],
-        () => auctionBidModal(st, seat, tileId, { reason: o.reason, ms: this.localMs })),
+        () => auctionBidModal(st, seat, tileId,
+          { reason: o.reason, ms: this.localMs, bidders, barred })),
       fallback: 0,
       note: 'đang có phiên đấu giá',
     })));

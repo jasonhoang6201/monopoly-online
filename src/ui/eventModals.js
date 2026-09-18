@@ -139,6 +139,43 @@ export function firePromptModal(state, playerId, lots, ms = 0) {
 }
 
 /**
+ * Dãy tên những người đang được hỏi giá trong phiên, kèm tiền mặt của họ.
+ *
+ * Giá ghi kín nên nhìn màn hình mình không biết đang tranh với ai; mà luật phát
+ * mãi còn gạt chủ cũ ra ngoài, nên câu "cả bàn cùng tranh" không còn đúng cho
+ * mọi phiên. Nêu thẳng hai danh sách: ai được ghi giá, ai bị gạt.
+ *
+ * Tiền mặt là trần giá của từng người — số này HUD vẫn bày công khai, đưa vào
+ * đây chỉ đỡ phải nhớ sang bảng khác trong lúc đồng hồ đang chạy.
+ *
+ * @param {object} state
+ * @param {number[]} bidders ghế được ghi giá
+ * @param {number[]} barred ghế bị luật gạt khỏi phiên (rỗng thì bỏ dòng ấy)
+ * @param {number} me ghế của máy đang xem — tô riêng cho dễ nhận
+ */
+function bidderRoster(state, bidders, barred, me) {
+  const chip = (seat, out) => {
+    const p = state.players[seat];
+    if (!p) return '';
+    return `
+      <span class="roster-chip${seat === me ? ' me' : ''}">
+        <i style="background:${p.token.css}"></i>
+        <b>${esc(p.name)}${seat === me ? ' (bạn)' : ''}</b>
+        <u>${out ? 'đứng ngoài' : money(p.money)}</u>
+      </span>`;
+  };
+
+  return `
+    <div class="bid-roster">
+      <div class="roster-head">Cùng tranh lô này · ${bidders.length} người</div>
+      <div class="roster-chips">${bidders.map((s) => chip(s, false)).join('')}</div>
+      ${barred.length ? `
+        <div class="roster-head out">Không được ghi giá</div>
+        <div class="roster-chips">${barred.map((s) => chip(s, true)).join('')}</div>` : ''}
+    </div>`;
+}
+
+/**
  * Đấu giá kín một vòng: mỗi người ghi một con số, cao nhất lấy đất.
  *
  * Kín và một vòng là cố ý. Đấu giá nhiều vòng kiểu nhà hàng thì vui hơn thật,
@@ -162,6 +199,7 @@ export function auctionBidModal(state, playerId, tileId, o = {}) {
     dismissible: false,
     body: `
       ${tileRow(tileId, `Giá gốc ${money(t.price)} · thế chấp ${money(t.mortgage)}`)}
+      ${bidderRoster(state, o.bidders ?? [playerId], o.barred ?? [], playerId)}
       <div class="bid-box">
         <label for="bid-input">Giá bạn trả</label>
         <input id="bid-input" type="number" min="0" max="${max}" step="10" value="0"
