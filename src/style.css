@@ -70,6 +70,9 @@ html, body {
   /* Chạm rồi nhả trên iOS để lại vệt xám trên mọi nút — tắt đi vì nút nào
      cũng đã có sẵn trạng thái :active riêng. */
   -webkit-tap-highlight-color: transparent;
+  /* Kéo quá mép trên iOS làm cả trang trượt theo rồi nảy lại; toạ độ ô cờ
+     tính theo khung nhìn nên trong lúc trang còn trượt, cú chạm rơi lệch ô. */
+  overscroll-behavior: none;
   background: var(--ground-night);
   font-family: var(--sans);
   color: var(--paper);
@@ -85,7 +88,19 @@ html, body {
 #right-rail { display: none; }
 
 #game-canvas { position: absolute; inset: 0; }
-#game-canvas canvas { display: block; }
+/* touch-action: none — Phaser không tự đặt thuộc tính này, mà Safari trên iOS
+   bỏ qua `user-scalable=no` từ iOS 10. Để mặc định thì hai cú chạm liền nhau
+   vào hai ô cạnh nhau bị hiểu là chạm đôi phóng to: cú thứ hai mất, và trang
+   phóng rồi thì khung nhìn lệch khỏi khung bố cục mà `tileAt` đang dựa vào.
+   Bàn cờ không có gì để cuộn hay phóng nên chặn cả cụm cử chỉ.
+   user-select / touch-callout: giữ lâu trên canvas ở iOS bật kính lúp chọn
+   chữ, che mất ô đang định bấm. */
+#game-canvas canvas {
+  display: block;
+  touch-action: none;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+}
 
 /* Lớp phủ chia đôi màn hình: cột điều khiển bên trái, mặt bàn cờ bên phải.
    Lớp phủ không ăn sự kiện chuột; con nào cần thì tự bật. */
