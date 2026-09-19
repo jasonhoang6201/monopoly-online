@@ -25,8 +25,25 @@ import { DPR, px } from '../dpr.js';
 /* Khoảng thở quanh bàn cờ, tính bằng điểm ảnh CSS */
 const GUTTER = 12;
 
-/** Bề ngang cột điều khiển — đọc thẳng từ DOM để CSS là nguồn duy nhất. */
+/**
+ * Khoảng thở trên màn thấp — điện thoại nằm ngang cao chừng 400px, ở đó cạnh
+ * bàn cờ bị chiều cao chặn chứ không phải bề ngang, nên mỗi điểm ảnh khoảng
+ * thở nhường ra là một điểm ảnh cạnh bàn.
+ */
+const GUTTER_SHORT = 5;
+const gutterCss = () => (window.innerHeight <= 500 ? GUTTER_SHORT : GUTTER);
+
+/**
+ * Bề ngang cột trái — đọc thẳng từ DOM để CSS là nguồn duy nhất.
+ *
+ * Điện thoại nằm ngang: `#sidebar` ra `position: fixed` và nổi đè lên bàn cờ,
+ * nên chỗ phải chừa là bề ngang thanh hẹp `#side-strip`. Màn hình rộng thì
+ * thanh hẹp `display: none` (bề ngang 0) và cột lại là `#sidebar` như cũ.
+ */
 function railWidthCss() {
+  const strip = document.getElementById('side-strip');
+  const w = strip ? strip.getBoundingClientRect().width : 0;
+  if (w > 0) return w;
   const el = document.getElementById('sidebar');
   return el ? el.getBoundingClientRect().width : 292;
 }
@@ -272,7 +289,7 @@ export default class BoardScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     const railW = px(railWidthCss());
     const actW = px(actRailWidthCss());
-    const g = px(GUTTER);
+    const g = px(gutterCss());
     const availW = Math.max(px(240), W - railW - actW - g * 2);
     const availH = Math.max(px(240), H - g * 2);
     this.size = Math.max(px(300), Math.min(availW, availH));

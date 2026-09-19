@@ -18,6 +18,20 @@
 
     <!-- HTML overlay: một cột điều khiển duy nhất + mặt bàn cờ -->
     <div id="ui">
+      <!-- Điện thoại nằm ngang: cột thông tin thu về thanh hẹp này. Chỉ thanh
+           hẹp đứng trong hàng flex nên bàn cờ chỉ phải chừa chỗ cho nó; bảng
+           đầy đủ bật ra thì nổi đè lên bàn, đóng lại là bàn thông thoáng. -->
+      <div id="side-strip">
+        <button id="side-toggle" type="button" aria-controls="sidebar" aria-expanded="false"
+                title="Mở cột thông tin" aria-label="Mở cột thông tin">☰</button>
+        <button id="strip-turn" type="button"></button>
+        <div id="strip-seats"></div>
+        <!-- ui/sidepanel.js dời .side-tools xuống đây khi màn hình nằm ngang -->
+      </div>
+
+      <!-- Chạm ra ngoài bảng thì đóng — chỉ ăn cú chạm khi bảng đang nổi -->
+      <div id="side-scrim"></div>
+
       <aside id="sidebar">
         <div class="brand">
           <span class="brand-mark">✦</span>
@@ -25,6 +39,8 @@
             <b>CỜ TỶ PHÚ</b>
             <i>Sài Gòn · Gia Định</i>
           </span>
+          <button id="side-close" type="button" title="Đóng cột thông tin"
+                  aria-label="Đóng cột thông tin">✕</button>
         </div>
 
         <!-- Thẻ lớn cho người đang tới lượt, bên dưới là cả bàn xếp hàng ngang -->

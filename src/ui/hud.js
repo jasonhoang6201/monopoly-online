@@ -36,6 +36,8 @@ export class Hud {
     this.quick = quick ?? null;
     this.cards = new Map();
     this.chips = new Map();
+    /** Chấm ghế trên thanh hẹp (điện thoại nằm ngang). */
+    this.dots = new Map();
     /** Người đang được rê chuột trong danh sách (null = không rê ai). */
     this.popFor = null;
     /**
@@ -123,6 +125,7 @@ export class Hud {
       this.cards.set(p.id, el);
     }
     this.buildRoster();
+    this.buildStrip();
     this.refresh();
   }
 
@@ -157,6 +160,40 @@ export class Hud {
       chip.addEventListener('blur', () => this.hidePop(p.id));
       rail.appendChild(chip);
       this.chips.set(p.id, chip);
+    }
+  }
+
+  /**
+   * Thanh hẹp bên trái khi điện thoại nằm ngang: ai đang đi cùng số tiền của
+   * họ, và một chấm cho mỗi ghế.
+   *
+   * Bảng đầy đủ nằm sau một cú chạm, nên thanh này phải trả lời được hai câu
+   * hỏi hay hỏi nhất — tới lượt ai, bàn còn mấy người — để phần lớn thời gian
+   * người chơi khỏi phải mở bảng ra.
+   */
+  buildStrip() {
+    const turn = $('strip-turn');
+    if (turn) {
+      turn.innerHTML = `
+        <span class="sturn-token"></span>
+        <span class="sturn-money"></span>`;
+      turn.onclick = () => this.onPlayerClick?.(this.state.turn);
+    }
+
+    const seats = $('strip-seats');
+    if (!seats) return;
+    seats.innerHTML = '';
+    this.dots.clear();
+    for (const p of this.state.players) {
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = 'sseat';
+      dot.title = `Xem bảng tài sản của ${p.name}`;
+      dot.setAttribute('aria-label', `Xem bảng tài sản của ${p.name}`);
+      dot.style.setProperty('--pc', p.token.css);
+      dot.addEventListener('click', () => this.onPlayerClick?.(p.id));
+      seats.appendChild(dot);
+      this.dots.set(p.id, dot);
     }
   }
 
@@ -255,10 +292,28 @@ export class Hud {
    * những người còn lại bay vào thẻ nhỏ của họ trong danh sách.
    */
   cardEl(playerId) {
+    const strip = this.stripEl();
+    if (strip) {
+      return (this.state.turn === playerId ? $('strip-turn') : this.dots.get(playerId))
+        ?? strip;
+    }
     if (this.state.turn === playerId) return this.cards.get(playerId);
     return this.chips.get(playerId) ?? this.cards.get(playerId);
   }
-  bankEl() { return $('bank-plate'); }
+  bankEl() { return this.stripEl() ? $('side-toggle') : $('bank-plate'); }
+
+  /**
+   * Thanh hẹp, nếu cột thông tin đang thu lại và đóng.
+   *
+   * Lúc ấy thẻ người chơi và bảng ngân hàng nằm khuất ngoài mép trái màn hình:
+   * cho tiền bay vào đó thì đồng tiền bay ra khỏi màn, nên phải nhắm vào thanh
+   * hẹp — chỗ duy nhất bên trái còn nhìn thấy được.
+   */
+  stripEl() {
+    const el = $('side-strip');
+    if (!el || !el.offsetParent) return null;
+    return document.body.classList.contains('side-open') ? null : el;
+  }
 
   refresh() {
     const st = this.state;
@@ -320,7 +375,17 @@ export class Hud {
           ? `${p.name} đang mất kết nối`
           : `Xem bảng tài sản của ${p.name}`;
       }
+
+      // Chấm ghế trên thanh hẹp
+      const dot = this.dots.get(p.id);
+      if (dot) {
+        dot.classList.toggle('is-active', active);
+        dot.classList.toggle('is-away', away);
+        dot.classList.toggle('is-bankrupt', p.bankrupt);
+      }
     }
+
+    this.paintStrip();
 
     $('bank-houses').textContent =
       `${st.bankHouses}/${TOTAL_HOUSES} nhà · ${st.bankHotels} k.sạn`;
@@ -332,6 +397,21 @@ export class Hud {
 
     // Bảng xem nhanh ăn theo cùng dữ liệu (chủ mới, nhà mới xây, thế chấp…)
     this.quick?.refresh();
+  }
+
+  /** Ô "đang tới lượt" trên thanh hẹp — quân cờ và số tiền của người đang đi. */
+  paintStrip() {
+    const box = $('strip-turn');
+    if (!box) return;
+    const p = this.state.players.find((x) => x.id === this.state.turn);
+    const tok = box.querySelector('.sturn-token');
+    const cash = box.querySelector('.sturn-money');
+    if (!p || !tok || !cash) { box.hidden = true; return; }
+    box.hidden = false;
+    box.style.setProperty('--pc', p.token.css);
+    tok.style.backgroundImage = `url('${tokenImage(p.token)}')`;
+    cash.textContent = p.bankrupt ? '—' : money(p.money);
+    box.title = `${p.name} — ${p.bankrupt ? 'đã phá sản' : money(p.money)}`;
   }
 
   /**

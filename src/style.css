@@ -83,6 +83,10 @@ html, body {
    đã thu hết, nên phần dưới màn hình bị đẩy khuất. */
 #app { position: relative; width: 100vw; height: 100vh; height: 100dvh; }
 
+/* Thanh hẹp thay cột thông tin, tấm chắn sau lưng bảng và nút đóng bảng —
+   cả ba chỉ có mặt khi điện thoại nằm ngang (xem khối cuối tệp). */
+#side-strip, #side-scrim, #side-close { display: none; }
+
 /* Cột phải — chỉ có bề ngang khi điện thoại nằm ngang (xem khối cuối tệp).
    Màn hình rộng thì nó biến mất hẳn để bàn cờ ăn luôn chỗ ấy. */
 #right-rail { display: none; }
@@ -2856,8 +2860,14 @@ html, body {
    màn hình trừ hai khoảng thở, nên bề ngang còn thừa chừng 470px. Chỗ
    thừa ấy chia cho hai cột đứng hai bên bàn cờ:
 
-     cột trái  #sidebar     hiệu bài · người chơi · xem nhanh · tiện ích
+     cột trái  #side-strip  thanh hẹp 44px: nút mở bảng · lượt đi · tiện ích
      cột phải  #right-rail  chỗ đứng của #actions và .tile-pick
+
+   #sidebar không còn đứng trong hàng flex nữa: nó ra `position: fixed`,
+   đóng thì trượt khuất hẳn ra mép trái, mở thì nổi đè lên bàn cờ. Hiệu bài,
+   bảng người chơi, xem nhanh và thanh Thời Cuộc đều là thứ đọc từng lúc chứ
+   không phải nhìn liên tục, nên bắt chúng ăn 260px bề ngang suốt ván là đổi
+   chỗ bàn cờ lấy chữ ít người đọc.
 
    Thanh nút dạt sang cột phải nên không còn nằm đè lên lòng bàn cờ như
    trên màn hình rộng — trên màn 402px cao thì tấm bảng ấy che mất gần
@@ -2874,7 +2884,12 @@ html, body {
     --cols: calc(100vw - 100dvh - var(--safe-l) - var(--safe-r));
     /* Hai cột cộng thêm đúng phần bị tai thỏ ăn, để chữ nghĩa bên trong
        vẫn nằm trọn trong vùng nhìn được. */
-    --rail: calc(clamp(168px, var(--cols) * .55, 312px) + var(--safe-l));
+    /* Thanh hẹp là thứ duy nhất bên trái còn ăn chỗ của bàn cờ. */
+    --strip: calc(44px + var(--safe-l));
+    /* Bề ngang bảng thông tin lúc bung ra — nó nổi trên bàn nên không còn
+       phải chia phần với bàn cờ, chỉ cần chừa lại một dải bàn để người chơi
+       biết mình vẫn đang đứng trên ván. */
+    --rail: calc(min(292px, 46vw) + var(--safe-l));
     --act:  calc(clamp(146px, var(--cols) * .45, 268px) + var(--safe-r));
     /* Bề ngang tối đa của hộp thoại: trừ đệm 8px hai bên của .scrim */
     --modal-w: calc(100vw - 16px - var(--safe-l) - var(--safe-r));
@@ -2887,13 +2902,131 @@ html, body {
     pointer-events: none;
   }
 
-  /* ---- cột trái: bóp mọi tầng lại cho 402px chiều cao chứa đủ ---- */
+  /* ---- cột trái: thanh hẹp luôn hiện ---- */
+  #side-strip {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 7px;
+    flex: 0 0 var(--strip); width: var(--strip); height: 100%;
+    padding: calc(7px + env(safe-area-inset-top, 0px)) 4px
+             calc(7px + var(--safe-b)) calc(4px + var(--safe-l));
+    pointer-events: auto;
+    background:
+      linear-gradient(180deg, rgba(48, 21, 15, .97) 0%, rgba(21, 10, 6, .98) 100%);
+    border-right: 1px solid rgba(200, 160, 72, .3);
+    box-shadow: 5px 0 20px rgba(6, 4, 2, .45);
+  }
+
+  /* Nút mở bảng — hình vuông cho khác hẳn hàng nút tròn ở chân thanh */
+  #side-toggle {
+    flex: none;
+    width: 34px; height: 34px; border-radius: 9px;
+    display: grid; place-items: center;
+    font-size: 15px; line-height: 1;
+    background: linear-gradient(180deg, rgba(74, 36, 26, .92), rgba(48, 21, 15, .96));
+    border: 1px solid var(--gold-deep);
+    color: var(--gold-light);
+    cursor: pointer;
+    box-shadow: var(--shadow-md);
+  }
+  #side-toggle:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
+  body.side-open #side-toggle { border-color: var(--gold-light); color: var(--gold-pale); }
+
+  /* Người đang tới lượt: quân cờ và số tiền — thứ duy nhất trong cột thông
+     tin phải đọc được mọi lúc, nên nó nằm thẳng trên thanh hẹp. */
+  #strip-turn {
+    flex: none;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    width: 100%; padding: 5px 2px 6px;
+    border-radius: 9px;
+    background: linear-gradient(180deg, rgba(255, 232, 178, .1), rgba(255, 232, 178, .03));
+    border: 1px solid var(--pc, var(--gold-deep));
+    box-shadow: 0 0 10px -3px var(--pc, transparent);
+    color: var(--paper);
+    cursor: pointer;
+  }
+  /* Chưa vào ván (còn trống) hay hết ván thì ô này biến mất hẳn */
+  #strip-turn:empty, #strip-turn[hidden] { display: none; }
+  .sturn-token {
+    width: 22px; height: 26px;
+    background: center/contain no-repeat;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .55));
+  }
+  .sturn-money {
+    font-family: var(--serif); font-size: 9px; line-height: 1.1;
+    color: var(--gold-pale);
+  }
+
+  /* Một chấm cho mỗi ghế: đủ để biết bàn còn mấy người và ai vừa phá sản.
+     Bấm vào chấm thì mở thẳng bảng tài sản, khỏi qua bảng thông tin. */
+  #strip-seats {
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    /* Bàn 6 người mà màn 402px thì hàng chấm là chỗ nhường trước tiên */
+    min-height: 0; overflow: hidden;
+  }
+  .sseat {
+    flex: none;
+    width: 13px; height: 13px; border-radius: 50%;
+    background: var(--pc);
+    border: 1px solid rgba(12, 6, 3, .6);
+    box-shadow: 0 0 0 1px rgba(200, 160, 72, .25);
+    cursor: pointer;
+    transition: transform .2s var(--ease-out-back), opacity .2s;
+  }
+  .sseat.is-active { box-shadow: 0 0 0 2px var(--gold-light), 0 0 9px -1px var(--pc); }
+  .sseat.is-away { opacity: .4; }
+  .sseat.is-bankrupt { opacity: .22; filter: grayscale(1); }
+
+  /* Hàng nút tiện ích dời hẳn xuống đây (ui/sidepanel.js đổi chỗ khối
+     .side-tools). Thả meme hay bật toàn màn hình là việc làm giữa ván; để
+     trong bảng thì mỗi lần thả meme mất thêm hai cú chạm mở và đóng bảng. */
+  #side-strip .side-tools {
+    flex-direction: column;
+    margin-top: auto;      /* đẩy xuống chân thanh */
+    gap: 6px;
+  }
+
+  /* ---- cột trái: bảng thông tin nổi lên trên bàn cờ ---- */
+  /* Đóng thì trượt khuất mép trái. `visibility` tắt luôn để lúc khuất nó
+     không ăn cú chạm rơi vào mép trái bàn cờ; bật lại ngay khi mở, còn lúc
+     đóng thì chờ hết đoạn trượt mới tắt. */
   #sidebar {
+    position: fixed; z-index: 20;
+    left: 0; top: 0; height: 100dvh;
+    flex: none; width: var(--rail);
     gap: 6px;
     padding: calc(8px + env(safe-area-inset-top, 0px)) 10px
              calc(8px + var(--safe-b)) calc(10px + var(--safe-l));
     /* Chừa đường thoát: bàn 6 người hay tên dài vẫn có thể vượt 402px */
     overflow-y: auto; overflow-x: hidden;
+    box-shadow: 16px 0 44px rgba(6, 4, 2, .62);
+    transform: translateX(-102%);
+    visibility: hidden;
+    transition: transform .26s var(--ease-soft), visibility 0s linear .26s;
+  }
+  body.side-open #sidebar {
+    transform: none;
+    visibility: visible;
+    transition: transform .26s var(--ease-soft), visibility 0s linear 0s;
+  }
+
+  #side-scrim {
+    display: block;
+    position: fixed; inset: 0; z-index: 19;
+    background: rgba(8, 5, 3, .5);
+    opacity: 0; pointer-events: none;
+    transition: opacity .26s var(--ease-soft);
+  }
+  body.side-open #side-scrim { opacity: 1; pointer-events: auto; }
+
+  #side-close {
+    display: grid; place-items: center;
+    flex: none; margin-left: auto;
+    width: 26px; height: 26px; border-radius: 50%;
+    font-size: 12px; line-height: 1;
+    background: rgba(74, 36, 26, .85);
+    border: 1px solid var(--gold-deep);
+    color: var(--gold-light);
+    cursor: pointer;
   }
   .brand { gap: 7px; padding-bottom: 6px; }
   .brand-mark { font-size: 15px; }
@@ -2958,9 +3091,13 @@ html, body {
   .icon-btn.off::after { width: 20px; }
   .bank-label { font-size: 8px; }
   #bank-houses { font-size: 10px; }
-  /* Cột hẹp lại thì bảng meme cũng phải hẹp theo — trừ luôn phần tai thỏ,
-     vì phần ấy nằm ngoài vùng nhìn được của cột. */
-  #meme-pop { --meme-w: min(206px, calc(var(--rail) - var(--safe-l) - 22px)); }
+  /* Bảng meme neo vào hàng nút, mà hàng nút nay nằm trong thanh hẹp 44px —
+     nên nó bung sang phải, đè lên bàn cờ, thay vì mọc thẳng lên trong cột. */
+  #side-strip #meme-pop {
+    right: auto; left: calc(100% + 6px);
+    bottom: 0;
+    --meme-w: min(230px, calc(100vw - var(--strip) - var(--safe-r) - 14px));
+  }
   /* Ba hàng meme cao hơn nửa cột 402px — hạ xuống hai hàng rưỡi, phần còn lại
      vẫn cuộn như cũ. */
   .meme-grid { max-height: calc(var(--meme-cell) * 2 + var(--meme-gap) + 14px); }

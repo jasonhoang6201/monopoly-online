@@ -9,6 +9,7 @@ import { startSession } from './net/session.js';
 import { audio } from './audio/audio.js';
 import { loadLacBird } from './render/motifs.js';
 import { loadArtwork } from './render/artwork.js';
+import { initSidePanel } from './ui/sidepanel.js';
 import { DPR } from './dpr.js';
 
 /** Chờ font sẵn sàng — canvas đo chữ sai nếu font chưa nạp xong. */
@@ -113,6 +114,10 @@ boot();
 /** Các nút tiện ích dưới chân cột: nhạc, hiệu ứng, toàn màn hình. */
 function wireChrome() {
   const $ = (id) => document.getElementById(id);
+
+  /* Điện thoại nằm ngang: cột thông tin thu về thanh hẹp, và hàng nút tiện ích
+     dời xuống đó — phải chạy trước khi ai đó đi tìm #meme-btn theo vị trí cũ. */
+  initSidePanel();
 
   $('music-toggle').addEventListener('click', (e) => {
     e.currentTarget.classList.toggle('off', !audio.toggleMusic());
