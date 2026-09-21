@@ -2890,7 +2890,13 @@ html, body {
        phải chia phần với bàn cờ, chỉ cần chừa lại một dải bàn để người chơi
        biết mình vẫn đang đứng trên ván. */
     --rail: calc(min(292px, 46vw) + var(--safe-l));
-    --act:  calc(clamp(146px, var(--cols) * .45, 268px) + var(--safe-r));
+    /* Cột phải ăn hết phần `--cols` còn lại sau thanh hẹp, chừa 12px thở.
+       Trước đây chia 45%: trên màn càng vuông (667×375, 568×320) `--cols` càng
+       hẹp, cột rơi xuống mức chặn dưới 146px và bảng chọn ô chỉ còn 126px —
+       chữ xuống dòng nhiều tới mức `.tp-acts` bị đẩy khỏi khung. Phần 55% kia
+       không hề thuộc về bàn cờ: bàn bị chiều cao chặn nên hai bên vẫn dư, lấy
+       vào đây không làm bàn nhỏ đi. */
+    --act:  calc(clamp(160px, var(--cols) - 56px, 300px) + var(--safe-r));
     /* Bề ngang tối đa của hộp thoại: trừ đệm 8px hai bên của .scrim */
     --modal-w: calc(100vw - 16px - var(--safe-l) - var(--safe-r));
   }
@@ -3150,7 +3156,8 @@ html, body {
   #actions .ai { height: 15px; }
   #actions .btn-key { top: 3px; right: 4px; }
 
-  .tile-pick { padding: 12px 12px 13px; border-radius: 12px; }
+  /* Đệm dưới trả cho `.tp-acts` giữ, vì hàng nút nay tự dán xuống đáy */
+  .tile-pick { padding: 12px 12px 0; border-radius: 12px; }
   .tp-eyebrow { font-size: 9px; letter-spacing: .18em; }
   .tp-title { font-size: 15px; margin-top: 3px; }
   .tp-sub { font-size: 11px; margin-top: 4px; line-height: 1.4; }
@@ -3158,7 +3165,17 @@ html, body {
   .tp-note { margin-top: 6px; font-size: 10px; line-height: 1.4; }
   .tp-timer { margin-top: 7px; font-size: 11px; }
   .tp-chip { font-size: 10px; padding: 2px 6px; }
-  .tp-acts { gap: 6px; margin-top: 9px; }
+  /* Hàng nút dán xuống đáy vùng nhìn của bảng.
+     Bảng có `overflow-y: auto`, mà nút bỏ ngang là dòng cuối: màn thấp thì nó
+     nằm dưới mép cuộn, người chơi thấy bảng không có vạch cuộn nên tưởng đã
+     hết — lôi thẻ ra rồi đổi ý là kẹt, vì bản một máy không có đồng hồ tự
+     thoát (`EventRunner.localMs` bằng 0). `sticky` giữ nút trong tầm mắt mà
+     chữ phía trên vẫn cuộn đọc được; dải chuyển sắc che chữ chui xuống dưới. */
+  .tp-acts {
+    position: sticky; bottom: 0; z-index: 1;
+    gap: 6px; margin-top: 9px; padding: 8px 0 13px;
+    background: linear-gradient(180deg, rgba(18, 9, 6, 0), rgba(18, 9, 6, .97) 30%);
+  }
   .tp-acts .btn { padding: 6px 12px; font-size: 11.5px; }
 
   /* ---- lớp phủ trong lòng bàn cờ ---- */
