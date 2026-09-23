@@ -17,6 +17,42 @@ import { KEEPABLE, cardOf } from '../data/cards.js';
 /** Tiền đền khi cưỡng chế mua đất: giá gốc cộng thêm 25%. */
 export const SEIZE_RATE = 1.25;
 
+/** Ô nhà ga / bến xe, theo thứ tự đi. */
+export const STATION_TILES = BOARD.filter((t) => t.type === 'station').map((t) => t.id);
+/** Ô dịch vụ: Thuỷ Cục và Nhà Máy Điện. */
+export const UTILITY_TILES = BOARD.filter((t) => t.type === 'utility').map((t) => t.id);
+
+/** Ô Khám Lớn — thẻ `move` có `jail` dẫn về đây. */
+const JAIL = 10;
+
+/**
+ * Thẻ di chuyển dắt quân đi đâu, và đi bao nhiêu ô.
+ *
+ * Trả về **số ô phải bước** chứ không chỉ ô đến, vì quân đi bộ qua từng ô: đi
+ * ngang ô Bắt Đầu là lãnh lương, và người chơi thấy rõ quân mình bò tới đâu.
+ * Thẻ `nearest` luôn tìm ô gần nhất **phía trước** — đi giật lùi tới nhà ga thì
+ * vừa mất lương vừa khó hiểu.
+ *
+ * `back` là đường duy nhất đi ngược, và `steps` khi ấy âm; `game/controller.js`
+ * không cộng lương cho nước lùi.
+ *
+ * @returns {{tile:number, steps:number}}
+ */
+export function moveDest(card, from) {
+  if (card.jail) return { tile: JAIL, steps: 0 };
+  if (card.back) {
+    const back = Math.min(card.back, 39);
+    return { tile: ((from - back) % 40 + 40) % 40, steps: -back };
+  }
+  const pool = card.nearest === 'station' ? STATION_TILES
+    : card.nearest === 'utility' ? UTILITY_TILES
+      : [card.to ?? 0];
+  // Ô gần nhất phía trước; đứng đúng ô ấy rồi thì đi trọn một vòng
+  const ahead = (id) => (((id - from) % 40) + 40) % 40 || 40;
+  const tile = pool.reduce((a, b) => (ahead(b) < ahead(a) ? b : a));
+  return { tile, steps: ahead(tile) };
+}
+
 /** Loại thẻ, mặc định là cộng/trừ tiền với ngân hàng. */
 export function cardType(card) { return card.type ?? 'bank'; }
 

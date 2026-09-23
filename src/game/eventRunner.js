@@ -117,10 +117,15 @@ export class EventRunner {
     const st = this.state;
     const who = (seat) => `<b style="color:${st.players[seat].token.css}">${st.players[seat].name}</b>`;
     switch (card.id) {
+      /* Đếm riêng ô có nhà: cả khu cùng nằm trong vùng thiên tai, nhưng ô chưa
+         cất nhà thì không mất gì — nói rõ ra để người chơi khỏi chờ một khoản
+         thiệt hại không tới. */
       case 'dong-dat':
-        return `Khu <b>${GROUPS[plan.group].name}</b> — ${plan.tiles.length} ô có nhà.`;
+        return `Khu <b>${GROUPS[plan.group].name}</b> — ${hitCount(plan)} trong
+                ${plan.tiles.length} ô có nhà để mất.`;
       case 'hoa-hoan':
-        return `Khu <b>${GROUPS[plan.group].name}</b> — ${plan.tiles.length} ô đang cháy.`;
+        return `Khu <b>${GROUPS[plan.group].name}</b> — lửa lan cả khu,
+                ${hitCount(plan)} trong ${plan.tiles.length} ô đang có nhà.`;
       case 'mo-duong':
         return `Khu <b>${GROUPS[plan.group].name}</b> lên giá thuê <b>+50%</b>, vĩnh viễn.`;
       case 'trung-thu':
@@ -264,13 +269,11 @@ export class EventRunner {
        mở tới nửa phút, cả bàn ngồi chờ mà không biết đang chờ vì ô nào. */
     await this.g.spot(plan.tiles.map((l) => l.id));
 
-    // Gom theo chủ đất: một người có ba ô trong khu thì chỉ hỏi một lần
-    const bySeat = new Map();
-    for (const lot of plan.tiles) {
-      if (st.players[lot.seat].bankrupt) continue;
-      if (!bySeat.has(lot.seat)) bySeat.set(lot.seat, []);
-      bySeat.get(lot.seat).push(lot);
-    }
+    /* Gom theo chủ đất: một người có ba ô trong khu thì chỉ hỏi một lần.
+       Kế hoạch mang **cả khu**, kể cả ô chưa có nhà (`lose === 0`) — mấy ô ấy
+       chỉ sáng lên cho thấy vùng thiên tai rộng tới đâu, không ai phải trả
+       tiền chống đỡ cho đất trống. */
+    const bySeat = lotsBySeat(st, plan);
 
     const answers = await this.askMany([...bySeat].map(([seat, lots]) => ({
       seat,
@@ -320,13 +323,9 @@ export class EventRunner {
     const st = this.state;
     await this.g.spot(plan.tiles.map((l) => l.id));
 
-    // Gom theo chủ đất; bỏ qua ô đã đổi chủ hoặc chủ đã vỡ nợ từ lúc lập kế hoạch
-    const bySeat = new Map();
-    for (const lot of plan.tiles) {
-      if (st.owner.get(lot.id) !== lot.seat || st.players[lot.seat].bankrupt) continue;
-      if (!bySeat.has(lot.seat)) bySeat.set(lot.seat, []);
-      bySeat.get(lot.seat).push(lot);
-    }
+    /* Gom theo chủ đất; bỏ qua ô trống, ô đã đổi chủ, hoặc chủ đã vỡ nợ từ
+       lúc lập kế hoạch. */
+    const bySeat = lotsBySeat(st, plan);
 
     const answers = await this.askMany([...bySeat].map(([seat, lots]) => ({
       seat,
@@ -723,4 +722,33 @@ export class EventRunner {
     g.clock = null;   // phá cửa "vẫn đúng người đúng việc" của armClock
     g.armClock(g.state.turn, this.askMs + 20000, label);
   }
+}
+
+/**
+ * Ô nào trong kế hoạch thiên tai thật sự mất nhà — kế hoạch mang cả khu, kể cả
+ * ô đất trống.
+ */
+function hitCount(plan) {
+  return plan.tiles.filter((t) => t.lose > 0).length;
+}
+
+/**
+ * Gom mấy ô sắp mất nhà theo chủ đất, để một người có ba ô trong khu chỉ phải
+ * trả lời một lần.
+ *
+ * Bỏ ra ngoài: ô không có nhà (`lose === 0`), ô vô chủ, ô đã đổi chủ hoặc chủ
+ * đã vỡ nợ kể từ lúc lập kế hoạch — sự kiện có thể chạy qua vài hộp thoại
+ * trước khi tới đây.
+ *
+ * @returns {Map<number, Array<object>>} ghế → mấy ô của họ
+ */
+function lotsBySeat(st, plan) {
+  const bySeat = new Map();
+  for (const lot of plan.tiles) {
+    if (lot.lose <= 0 || lot.seat === null || lot.seat === undefined) continue;
+    if (st.owner.get(lot.id) !== lot.seat || st.players[lot.seat].bankrupt) continue;
+    if (!bySeat.has(lot.seat)) bySeat.set(lot.seat, []);
+    bySeat.get(lot.seat).push(lot);
+  }
+  return bySeat;
 }

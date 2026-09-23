@@ -157,8 +157,8 @@ export class GameState {
      * `-1` là vĩnh viễn. @type {Array<object>}
      */
     this.mods = [];
-    /** Chồng thẻ Thời Cuộc đã xáo, tách theo kỳ. */
-    this.eventPiles = { 1: [], 2: [] };
+    /** Chồng thẻ Thời Cuộc đã xáo — một chồng cho cả bộ. @type {string[]} */
+    this.eventPile = [];
   }
 
   // ------------------------------------------------- hiệu ứng đang hiệu lực

@@ -194,12 +194,30 @@ const r = await page.evaluate(async () => {
   out.ticketOnBankrupt = st.decks.chest.gone.size === 0 && st.players[2].cards.length === 0;
   st.players[2].bankrupt = false;
 
+  /* Thẻ di chuyển: ô đến luôn tính đường đi tới, trừ nước lùi.
+     Đứng ở ô 7 (Cơ Hội đầu bàn) thì ga gần nhất phía trước là ô 15, dịch vụ
+     gần nhất là ô 12, và "về Bắt Đầu" phải đi trọn 33 ô chứ không giật lùi. */
+  out.moveStation = cr.moveDest({ type: 'move', nearest: 'station' }, 7);
+  out.moveUtility = cr.moveDest({ type: 'move', nearest: 'utility' }, 7);
+  out.moveGo = cr.moveDest({ type: 'move', to: 0 }, 7);
+  out.moveBack = cr.moveDest({ type: 'move', back: 3 }, 2);
+  out.moveJail = cr.moveDest({ type: 'move', jail: true }, 36);
+  // Ô đến của mọi thẻ di chuyển trong bộ đều nằm trên bàn, và đi tới được
+  out.moveAllValid = [...CHANCE, ...CHEST]
+    .filter((x) => x.type === 'move')
+    .every((x) => [0, 7, 17, 22, 33, 36].every((from) => {
+      const d = cr.moveDest(x, from);
+      return d.tile >= 0 && d.tile < 40 && Math.abs(d.steps) <= 40
+        && (x.jail || d.tile === ((from + d.steps) % 40 + 40) % 40);
+    }));
+  out.moveCount = [...CHANCE, ...CHEST].filter((x) => x.type === 'move').length;
+
   // Mọi thẻ trong cả hai bộ đều khai báo đúng loại
   const known = ['bank', 'collect', 'repair', 'jail-free', 'demolish',
-    'seize', 'resume', 'resume-random'];
+    'seize', 'resume', 'resume-random', 'move'];
   out.badType = [...CHANCE, ...CHEST].filter((x) => !known.includes(cr.cardType(x))).length;
   out.hasNew = ['collect', 'repair', 'jail-free', 'demolish', 'seize',
-    'resume', 'resume-random'].every((t) => !!find(CHANCE.concat(CHEST), t));
+    'resume', 'resume-random', 'move'].every((t) => !!find(CHANCE.concat(CHEST), t));
   // Bộ bài không còn thẻ phát mãi
   out.noForceSell = [...CHANCE, ...CHEST].every((x) => cr.cardType(x) !== 'force-sell');
   /* Mọi loại giữ túi đều có tên, biểu tượng và một câu công dụng — bảng túi
@@ -241,6 +259,16 @@ ok('thẻ giữ túi thì lúc nào rút cũng được', r.keepableAlwaysDrawn)
 ok('thẻ dỡ nhà mang theo số cấp', r.levels[0] === 1 && r.levels[1] === 2, r.levels.join('/'));
 ok('vé ra tù nói rõ phải ngồi tù mới dùng được',
   r.jailReason.ok === false && r.jailReason.reason.includes('Khám Lớn') && r.jailOkInJail);
+ok('thẻ đi tới ga gần nhất phía trước', r.moveStation.tile === 15 && r.moveStation.steps === 8,
+  JSON.stringify(r.moveStation));
+ok('thẻ đi tới dịch vụ gần nhất phía trước', r.moveUtility.tile === 12 && r.moveUtility.steps === 5,
+  JSON.stringify(r.moveUtility));
+ok('thẻ về ô Bắt Đầu đi trọn vòng chứ không giật lùi',
+  r.moveGo.tile === 0 && r.moveGo.steps === 33, JSON.stringify(r.moveGo));
+ok('thẻ lùi ô trả số bước âm', r.moveBack.tile === 39 && r.moveBack.steps === -3,
+  JSON.stringify(r.moveBack));
+ok('thẻ giải về Khám Lớn không đi bộ', r.moveJail.tile === 10 && r.moveJail.steps === 0);
+ok('mọi thẻ di chuyển trong bộ đều ra ô hợp lệ', r.moveAllValid, `${r.moveCount} thẻ`);
 ok('bảng túi thẻ đọc được nội dung lá đang giữ', r.bag);
 ok('rút vé ra tù thì lá ấy rời bộ bài', r.ticketGone && r.ticketStaysGone);
 ok('ảnh chụp mang theo vé và lá đang bị giữ', r.roundTrip);

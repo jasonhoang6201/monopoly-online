@@ -112,8 +112,8 @@ const purseBefore = await drv.page.evaluate(
 const tile = await drv.page.evaluate(() => {
   const c = window.__monopoly.controller;
   const st = c.state;
-  st.eventPiles = { 1: [], 2: ['dai-ha-gia'] };
-  st.eventsFired = 5;      // đã qua Kỳ 1 → bộ thẻ Kỳ 2 mở
+  st.eventPile = ['dai-ha-gia'];
+  st.eventsFired = 5;
   st.laps = 99;            // mở khoá không cần bán hết đất
   st.pressure = 999;
   c.guard(() => c.endTurn());

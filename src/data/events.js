@@ -1,18 +1,24 @@
 /**
  * Bộ thẻ THỜI CUỘC — sự kiện toàn bàn, khác hẳn Cơ Hội / Khí Vận.
  *
- * Cơ Hội và Khí Vận là chuyện riêng của người vừa đáp xuống ô, và chỉ có cộng
- * trừ tiền. Thời Cuộc thì nổ ra cho **cả bàn** cùng chịu, và được sinh ra để
- * chữa đúng một cái bệnh: chơi ít người, đất bán hết, không ai chịu đổi chác —
- * từ đó mỗi lượt chỉ còn lắc xí ngầu đi vòng vòng, tiền đứng yên, ván không có
- * đường kết thúc.
+ * Cơ Hội và Khí Vận là chuyện riêng của người vừa đáp xuống ô. Thời Cuộc thì
+ * nổ ra cho **cả bàn** cùng chịu, và được sinh ra để chữa đúng một cái bệnh:
+ * chơi ít người, đất bán hết, không ai chịu đổi chác — từ đó mỗi lượt chỉ còn
+ * lắc xí ngầu đi vòng vòng, tiền đứng yên, ván không có đường kết thúc.
  *
- * Vì thế thẻ ở đây chia làm hai kỳ:
- *   · Kỳ 1 — chỉ đụng tới tiền mặt và luật tạm thời. Rung nhẹ cho dòng tiền
- *     chảy lại, chưa ai mất đất.
- *   · Kỳ 2 — đụng tới nhà cửa và quyền sở hữu: động đất, hoả hoạn, trưng thu,
- *     đấu giá bắt buộc. Đây mới là chỗ ép đất đổi chủ mà **không cần đối
- *     phương đồng ý**.
+ * ── Một chồng bài duy nhất ─────────────────────────────────────────────────
+ * Trước đây bộ thẻ chia làm hai kỳ: kỳ 1 chỉ đụng tiền mặt, kỳ 2 mới đụng nhà
+ * đất và chỉ mở sau vài lần nổ đầu. Cách chia ấy làm mấy lần nổ đầu ván gần
+ * như vô hại — đúng lúc bàn cần bị xáo thì lại toàn thẻ cộng trừ tiền lẻ. Nay
+ * cả bộ nằm chung một chồng, **tỉ lệ ra ngang nhau**: động đất có thể tới ngay
+ * lần nổ đầu tiên. Thẻ nào lúc ấy vô nghĩa (ân xá khi không ai ngồi tù) thì
+ * `core/events.js` bỏ qua và bốc lá kế tiếp, nên không cần chia kỳ để chặn.
+ *
+ * ── Đổi giá thì vĩnh viễn, cấm đoán thì có hạn ─────────────────────────────
+ * Thẻ đụng tới **giá cả** (tiền thuê, lương, giá xây) không còn đếm ngược:
+ * chúng dời hẳn mặt bằng giá của ván. Thẻ **chặn một việc** (giới nghiêm cấm
+ * xây, mất giấy tờ treo một ô) thì vẫn có hạn — cấm xây vĩnh viễn là khoá luôn
+ * đường duy nhất làm tiền thuê lớn lên, ván sẽ đứng im chứ không ngắn lại.
  *
  * ── Hai phần chữ trên một mặt thẻ ──────────────────────────────────────────
  * `text` là lời văn: chuyện gì đang xảy ra ngoài phố, đọc cho có không khí.
@@ -23,6 +29,10 @@
  * `effect` viết thành hàm nhận chính thẻ ấy, nên mấy con số cân bằng
  * (`perHouse`, `braceRate`, `rounds`…) chỉ khai một chỗ: sửa số thì dòng chữ
  * đổi theo, không có đường lệch nhau.
+ *
+ * `heavy` đánh dấu thẻ đụng tới nhà cửa hoặc quyền sở hữu — băng chuyền bóc
+ * thẻ (`ui/caseOpen.js`) xếp mấy lá ấy vào hạng Hiếm. Trước đây nó xét theo
+ * kỳ; kỳ bỏ rồi nên cờ này khai thẳng trên thẻ.
  *
  * Biểu tượng (`sigil`) cố ý chỉ dùng ký tự **đơn sắc** — mấy hình như 🔥 hay ⛩
  * bị trình duyệt vẽ thành emoji màu, nhỏ xíu và lạc hẳn khỏi mặt thẻ giấy dó.
@@ -37,17 +47,33 @@ import { money } from './board.js';
 /** "Còn bấy nhiêu vòng nữa" — mọi thẻ có `rounds` đều đóng bằng dòng này. */
 const lasts = (c) => `Kéo dài ${c.rounds} vòng, hết thì luật trả về như cũ`;
 
+/**
+ * Dòng đóng của mấy thẻ **đổi giá vĩnh viễn**.
+ *
+ * Thẻ đổi giá mà hết hạn sau hai vòng thì cả bàn chỉ việc ngồi im chờ nó qua:
+ * không xây, không đổi chác, đợi luật trả về như cũ rồi chơi tiếp — đúng cái
+ * thế bí mà bộ thẻ này sinh ra để phá. Đổi giá vĩnh viễn thì mặt bằng giá của
+ * ván dịch hẳn đi, ai cũng phải tính lại từ nước kế tiếp.
+ *
+ * `addMod` gộp theo `id` nên rút lại lá cũ không nhân đôi hệ số; `usable` bên
+ * `core/events.js` cũng bỏ qua lá nào đã nằm sẵn trên bàn.
+ */
+const forever = 'Hiệu lực vĩnh viễn — từ giờ tới hết ván';
+
 /** Phần trăm gọn gàng: 1.25 → "+25%", 0.5 → "−50%". */
 const pct = (mult) => `${mult >= 1 ? '+' : '−'}${Math.round(Math.abs(mult - 1) * 100)}%`;
 
 export const EVENTS = [
-  /* ------------------------------------------------------------ Kỳ 1 */
+  /* -------------------------------------------- Tiền mặt và luật tạm thời */
   {
-    id: 'thue-dien-tho', era: 1, kind: 'bad', sigil: '⚖',
+    id: 'thue-dien-tho', kind: 'bad', sigil: '⚖',
     title: 'SƯU CAO THUẾ NẶNG',
     text: `Toà Đô Chánh ra lệnh trưng thu sưu thuế điền thổ toàn hạt Gia Định.
            Nhà nào cửa nấy đều bị gọi tên, không ai khất được.`,
-    perHouse: 25, perHotel: 100,
+    /* Đơn giá cũ (25/100) thu của một bộ ba ô đủ nhà chưa tới 300$ — bằng một
+       lần tiền thuê, không đủ bắt ai phải bán bớt. Nay mỗi nóc nhà nộp hơn nửa
+       giá xây, tức xây dày thì thuế mới thành khoản phải tính trước. */
+    perHouse: 60, perHotel: 250,
     effect: (c) => [
       `Mỗi căn nhà nộp ${money(c.perHouse)}, mỗi khách sạn ${money(c.perHotel)}`,
       'Cả bàn cùng nộp, tiền dồn hết vào Quỹ Công',
@@ -55,52 +81,55 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'lam-phat', era: 1, kind: 'chaos', sigil: '↑',
+    id: 'lam-phat', kind: 'chaos', sigil: '↑',
     title: 'GIÁ GẠO LEO THANG',
     text: `Gạo Chợ Lớn khan hàng, cái gì cũng lên giá theo. Chủ nhà nhân dịp
            hét thêm, người thuê đành cắn răng chịu.`,
-    mult: 1.25, rounds: 2,
+    mult: 1.25,
     effect: (c) => [
       `Tiền thuê khắp bàn ${pct(c.mult)}`,
-      lasts(c),
+      forever,
     ],
   },
   {
-    id: 'mat-mua', era: 1, kind: 'bad', sigil: '☵',
+    id: 'mat-mua', kind: 'bad', sigil: '☵',
     title: 'MẤT MÙA',
     text: `Nước lũ về sớm, ruộng miền Tây ngập trắng. Thóc không về tới vựa,
            đồng lương cũng hụt theo.`,
-    mult: 0.5, rounds: 3,
+    mult: 0.5,
     effect: (c) => [
       `Lương lãnh khi qua ô Bắt Đầu ${pct(c.mult)}`,
-      lasts(c),
+      forever,
     ],
   },
   {
-    id: 'bao-gia', era: 1, kind: 'bad', sigil: '⚒',
+    id: 'bao-gia', kind: 'bad', sigil: '⚒',
     title: 'BÃO GIÁ VẬT LIỆU',
     text: `Xi măng với gỗ lim đội giá gấp rưỡi. Nhà thầu nào cũng lắc đầu
            hẹn lại sang năm.`,
-    mult: 1.5, rounds: 3,
+    mult: 1.5,
     effect: (c) => [
       `Giá xây mỗi căn nhà ${pct(c.mult)}`,
       'Nhà đã xây rồi thì không phải bù thêm',
-      lasts(c),
+      forever,
     ],
   },
   {
-    id: 'siet-tin-dung', era: 1, kind: 'bad', sigil: '✎',
+    id: 'siet-tin-dung', kind: 'bad', sigil: '✎',
     title: 'NGÂN HÀNG SIẾT TÍN DỤNG',
     text: `Ngân Hàng Đông Dương rà lại sổ nợ, gọi từng người đang cắm đất
            lên đối chiếu.`,
-    rate: 0.10,
+    /* Lãi 10% của giá thế chấp là 5% giá gốc — cắm ba lô rẻ chỉ mất vài chục,
+       ai cũng cắm bừa. 25% mới đủ để thế chấp là nước đi có giá, và mới rút
+       được tiền ra khỏi bàn. */
+    rate: 0.25,
     effect: (c) => [
       `Ai đang thế chấp phải đóng lãi ${Math.round(c.rate * 100)}% tổng giá thế chấp`,
       'Đóng ngay một lần, không khất và không chuộc đất thay được',
     ],
   },
   {
-    id: 'gioi-nghiem', era: 1, kind: 'chaos', sigil: '⊘',
+    id: 'gioi-nghiem', kind: 'chaos', sigil: '⊘',
     title: 'GIỚI NGHIÊM',
     text: `Lệnh giới nghiêm ban ra, thợ thuyền không ai được ra đường.
            Giàn giáo bỏ không giữa phố.`,
@@ -112,7 +141,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'hoi-cho', era: 1, kind: 'good', sigil: '✦',
+    id: 'hoi-cho', kind: 'good', sigil: '✦',
     title: 'HỘI CHỢ ĐẤU XẢO',
     text: `Hội chợ Đấu Xảo mở ở vườn Ông Thượng. Người khố rách nhất bàn
            gánh hàng ra bán, một phen trúng đậm.`,
@@ -123,7 +152,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'an-xa', era: 1, kind: 'good', sigil: '✧',
+    id: 'an-xa', kind: 'good', sigil: '✧',
     title: 'ÂN XÁ',
     text: `Nhân lễ lớn, Khám Lớn mở cửa tha cho hết những người đang bị giam.`,
     effect: () => [
@@ -132,7 +161,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'quy-cong-phat-chan', era: 1, kind: 'good', sigil: '❖',
+    id: 'quy-cong-phat-chan', kind: 'good', sigil: '❖',
     title: 'QUỸ CÔNG PHÁT CHẨN',
     text: `Quỹ Công đem tiền ra phát chẩn ngay tại Bến Đậu, dân kéo tới
            chật cả bến.`,
@@ -143,35 +172,48 @@ export const EVENTS = [
     ],
   },
 
-  /* ------------------------------------------------------------ Kỳ 2 */
+  /* ------------------------------------- Nhà cửa và quyền sở hữu (`heavy`) */
   {
-    id: 'dong-dat', era: 2, kind: 'bad', sigil: '☳',
+    id: 'dong-dat', kind: 'bad', sigil: '☳', heavy: true,
     title: 'ĐỘNG ĐẤT',
     text: `Đất rung một trận, cả khu nứt tường sập mái. Người ta đổ ra đường
            đứng nhìn nhà mình.`,
-    /** Phí chống đỡ mỗi ô = nửa giá xây một căn. */
-    braceRate: 0.5,
+    /**
+     * Phí chống đỡ mỗi ô có nhà = **đúng giá xây một căn** ở ô ấy.
+     *
+     * Trước đây chỉ lấy nửa giá xây, nên chống đỡ luôn là nước đi hiển nhiên:
+     * trả 50$ để khỏi mất một cấp nhà đáng 100$ thì ai cũng trả, thẻ chỉ còn
+     * là một khoản phí nhỏ. Lấy đúng giá xây thì hai đường thiệt hại ngang
+     * nhau — mất tiền mặt hay mất nhà đều đau, người chơi phải thật sự chọn.
+     */
+    braceRate: 1,
     effect: (c) => [
-      'Bốc thăm một khu màu đang có nhà — cả khu cùng chịu',
-      `Chủ đất được hỏi: trả ${Math.round(c.braceRate * 100)}% giá xây mỗi ô để giữ nguyên nhà`,
-      'Không trả thì mỗi ô sập một cấp nhà, không đền một đồng',
+      'Bốc thăm một khu màu — cả khu cùng rung, ô chưa cất nhà thì vô sự',
+      `Chủ đất được hỏi: trả ${Math.round(c.braceRate * 100)}% giá xây mỗi ô có nhà để giữ nguyên`,
+      'Không trả thì mỗi ô ấy sập một cấp nhà, không đền một đồng',
     ],
   },
   {
-    id: 'hoa-hoan', era: 2, kind: 'bad', sigil: '☲',
+    id: 'hoa-hoan', kind: 'bad', sigil: '☲', heavy: true,
     title: 'HOẢ HOẠN',
     text: `Lửa bén từ một tiệm dầu, cháy lan cả dãy phố. Phu chữa cháy đứng
            chờ tiền công mới chịu kéo vòi.`,
-    /** Tiền thuê phu chữa cháy = 40% giá xây của phần nhà sắp cháy. */
-    saveRate: 0.4,
+    /**
+     * Tiền thuê phu chữa cháy = 80% giá xây của phần nhà sắp cháy.
+     *
+     * 40% cũ rẻ tới mức không ai buồn cân nhắc. Giữ dưới 100% một chút là cố
+     * ý: hoả hoạn lấy đi **nhiều cấp hơn** động đất, nên chữa vẫn phải là
+     * đường có lời — nhưng lời ít, và phải có sẵn tiền mặt mới chữa được.
+     */
+    saveRate: 0.8,
     effect: (c) => [
-      'Bốc thăm một khu màu đang có nhà — cả khu cùng cháy',
+      'Bốc thăm một khu màu — cả khu cùng cháy, ô chưa cất nhà thì vô sự',
       `Chủ đất được hỏi: trả ${Math.round(c.saveRate * 100)}% giá xây phần sắp cháy thì nhà còn nguyên`,
-      'Không trả thì mỗi ô mất nửa số nhà, làm tròn xuống',
+      'Không trả thì mỗi ô mất nửa số nhà, làm tròn lên',
     ],
   },
   {
-    id: 'mat-giay-to', era: 2, kind: 'chaos', sigil: '☗',
+    id: 'mat-giay-to', kind: 'chaos', sigil: '☗', heavy: true,
     title: 'MẤT GIẤY TỜ',
     text: `Kho địa bạ cháy sổ, giấy tờ nhà đất thất lạc cả loạt. Muốn đòi
            tiền thuê cũng chẳng biết chìa ra cái gì.`,
@@ -183,7 +225,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'trung-thu', era: 2, kind: 'chaos', sigil: '⚑',
+    id: 'trung-thu', kind: 'chaos', sigil: '⚑', heavy: true,
     title: 'TRƯNG THU QUY HOẠCH',
     text: `Nhà nước mở đại lộ, cắm mốc ngay giữa đất của người giàu nhất bàn.`,
     effect: () => [
@@ -193,7 +235,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'sang-nhuong', era: 2, kind: 'chaos', sigil: '⇥',
+    id: 'sang-nhuong', kind: 'chaos', sigil: '⇥', heavy: true,
     title: 'SANG NHƯỢNG BẮT BUỘC',
     text: `Toà án tuyên phát mãi một lô đất theo lệnh cưỡng chế, dán giấy
            ngay trước cổng.`,
@@ -204,7 +246,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'hoan-doi-dia-ba', era: 2, kind: 'chaos', sigil: '⇄',
+    id: 'hoan-doi-dia-ba', kind: 'chaos', sigil: '⇄', heavy: true,
     title: 'HOÁN ĐỔI ĐỊA BẠ',
     text: `Sổ địa bạ bị chép lộn cả loạt, tên chủ này nằm trên đất chủ kia.`,
     effect: () => [
@@ -214,7 +256,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'mo-duong', era: 2, kind: 'good', sigil: '⌁',
+    id: 'mo-duong', kind: 'good', sigil: '⌁', heavy: true,
     title: 'MỞ ĐƯỜNG LỚN',
     text: `Đại lộ mới xẻ ngang một khu, xe cộ chạy suốt ngày đêm, đất hai bên
            đường lên giá thấy rõ.`,
@@ -222,11 +264,11 @@ export const EVENTS = [
     effect: (c) => [
       'Bốc thăm một khu màu đã có chủ',
       `Tiền thuê cả khu ấy ${pct(c.mult)}`,
-      'Hiệu lực vĩnh viễn — từ giờ tới hết ván',
+      forever,
     ],
   },
   {
-    id: 'dai-ha-gia', era: 2, kind: 'good', sigil: '⚑',
+    id: 'dai-ha-gia', kind: 'good', sigil: '⚑', heavy: true,
     title: 'ĐẠI HẠ GIÁ',
     text: `Ngân hàng dọn kho, đem mấy lô đất còn ế ra rao bán giữa chợ.`,
     effect: () => [
@@ -249,7 +291,20 @@ export function effectLines(card) {
 /** Tra thẻ theo id — luật thực thi bên `core/events.js` gọi tới. */
 export const EVENT_BY_ID = Object.fromEntries(EVENTS.map((e) => [e.id, e]));
 
-/** Bốn nấc do chủ phòng chọn trước khi khai cuộc. */
+/**
+ * Bốn nấc do chủ phòng chọn trước khi khai cuộc.
+ *
+ * Nấc chỉ điều chỉnh **tỉ lệ ra**, không đổi bộ thẻ: cùng một chồng bài, cùng
+ * tỉ lệ giữa các lá, chỉ khác nhau ở chỗ thanh áp lực đầy nhanh cỡ nào.
+ *
+ * Mỗi nấc khai ba số: `base` là ngưỡng của lần nổ đầu, mỗi lần nổ lại hạ bớt
+ * `step`, và không bao giờ xuống thấp hơn `floor`. Ba số của nấc Chuẩn đã chia
+ * cho 1,5 so với bản trước (20/3/9 → 13/2/6), ba nấc còn lại chia theo cùng hệ
+ * số ấy để giữ đúng khoảng cách giữa các nấc.
+ *
+ * Mốc so sánh: một lượt "bàn bí" cộng 2 điểm, một vòng qua Bắt Đầu cộng 1,
+ * một lần cắm đất cộng 3 — xem `PRESSURE` ở cuối tệp.
+ */
 export const EVENT_LEVELS = {
   off: {
     key: 'off', name: 'Tắt', short: 'Không có sự kiện',
@@ -257,30 +312,30 @@ export const EVENT_LEVELS = {
   },
   nhe: {
     key: 'nhe', name: 'Nhẹ', short: 'Thưa và êm',
-    desc: 'Sự kiện thưa, phần lớn chỉ đụng tiền mặt. Đất chỉ đổi chủ ở cuối ván.',
-    // Ngưỡng đầu tiên, mỗi lần nổ lại hạ bớt `step`, không thấp hơn `floor`.
-    base: 26, step: 3, floor: 14,
-    /** Từ lần nổ thứ mấy thì mở bộ thẻ Kỳ 2 (đụng tới nhà đất). */
-    era2From: 4,
+    desc: 'Sự kiện thưa, dăm vòng mới có một lần. Bàn phải bán gần hết đất mới bắt đầu.',
+    base: 17, step: 2, floor: 9,
     /** Bàn phải bán được bấy nhiêu phần đất mới bắt đầu tính áp lực. */
-    saturation: 0.85,
+    saturation: 0.75,
   },
   chuan: {
     key: 'chuan', name: 'Chuẩn', short: 'Nhịp vừa phải',
-    desc: 'Vài vòng lại có biến. Kỳ 2 mở sớm để đất chịu đổi chủ khi bàn bí.',
-    base: 20, step: 3, floor: 9, era2From: 3, saturation: 0.8,
+    desc: 'Vài vòng lại có biến. Động đất, cưỡng chế có thể tới ngay lần nổ đầu.',
+    base: 13, step: 2, floor: 6, saturation: 0.6,
   },
   'hon-loan': {
-    key: 'hon-loan', name: 'Hỗn loạn', short: 'Liên miên',
-    desc: 'Sự kiện dồn dập, động đất và cưỡng chế từ rất sớm. Ván ngắn, khó lường.',
-    base: 14, step: 2, floor: 7, era2From: 1, saturation: 0.6,
+    key: 'hon-loan', name: 'Hỗn loạn', short: 'Nổ liên tục',
+    desc: 'Gần như lượt nào cũng có biến, từ rất sớm. Ván ngắn, khó lường.',
+    /* `floor: 2` bằng đúng điểm của một lượt bàn bí, tức từ lần nổ thứ ba trở
+       đi hầu như lượt nào cũng ra một thẻ. `saturation` hạ xuống 0.3 để khỏi
+       phải chờ bán hết đất mới thấy sự kiện đầu tiên. */
+    base: 5, step: 1, floor: 2, saturation: 0.3,
   },
 };
 
 export const DEFAULT_EVENT_LEVEL = 'chuan';
 
 /** Đủ vòng này thì mở khoá dù đất chưa bán hết — đề phòng bàn ế đất mãi. */
-export const UNLOCK_LAPS = 8;
+export const UNLOCK_LAPS = 6;
 
 /** Điểm áp lực cộng vào thanh Thời Cuộc, theo từng việc xảy ra trên bàn. */
 export const PRESSURE = {

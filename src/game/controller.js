@@ -10,10 +10,10 @@ import {
 } from '../data/board.js';
 import { GameState, rollDice, orderFromRolls } from '../core/state.js';
 import {
-  addPressure, eventDue, eventsOn, pressureRatio, threshold, eraOpen, autoRaise, PRESSURE,
+  addPressure, eventDue, eventsOn, pressureRatio, threshold, autoRaise, PRESSURE,
 } from '../core/events.js';
 import {
-  cardType, isKeepable, demolishLevels, usableCard, useReason, cardTargets,
+  cardType, isKeepable, demolishLevels, usableCard, useReason, cardTargets, moveDest,
   demolishGroups, demolishPicks,
   othersOf, shareEach, repairBill, seizePrice, resumePrice,
 } from '../core/cards.js';
@@ -52,6 +52,16 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
  */
 const offerTiles = (offer) => [...(offer?.give ?? []), ...(offer?.get ?? [])];
 
+/**
+ * Bao nhiêu thẻ di chuyển được nối nhau trong một nước đi.
+ *
+ * Thẻ di chuyển thả quân xuống ô mới, ô mới có thể lại là ô Cơ Hội / Khí Vận.
+ * Hai nấc là đủ cho mấy chuỗi đáng nhớ ("đi tới nhà ga" rồi "lùi ba ô"), còn
+ * quá đó thì cắt: lượt kéo dài vô tận không còn vui, và về lý thuyết bộ bài đủ
+ * thẻ di chuyển để chạy vòng vòng không dứt.
+ */
+const MAX_CARD_CHAIN = 2;
+
 export class Game {
   constructor(scene) {
     this.scene = scene;
@@ -66,6 +76,8 @@ export class Game {
      * `fateWatch`.
      */
     this.fateWaiters = new Set();
+    /** Đang ở nấc thứ mấy của một dây thẻ di chuyển — xem `MAX_CARD_CHAIN`. */
+    this.cardChain = 0;
     /** Người thi hành thẻ Thời Cuộc — xem `game/eventRunner.js`. */
     this.events = new EventRunner(this);
     /** Phòng online, hoặc null khi cả bàn ngồi chung một máy. */
@@ -1099,9 +1111,10 @@ export class Game {
     this.scene.clearHighlight();
     this.netEmit('move', { seat: idx, from, steps });
     await this.scene.moveToken(idx, from, steps, (pos) => {
-      if (pos === 0) passedGo = true;
+      // Thẻ "lùi mấy ô" đi ngược chiều: bước qua ô Bắt Đầu theo lối đó không lãnh lương
+      if (pos === 0 && steps > 0) passedGo = true;
     });
-    p.pos = (from + steps) % 40;
+    p.pos = ((from + steps) % 40 + 40) % 40;
     this.hud.refresh();
     this.sync();
 
@@ -1141,7 +1154,7 @@ export class Game {
 
       case 'chance':
       case 'chest':
-        await this.resolveCard(p, t.type);
+        await this.resolveCard(p, t.type, dice);
         break;
 
       case 'tax':
@@ -1233,8 +1246,13 @@ export class Game {
    * được** thì cất vào túi chờ đúng lúc. Bộ bài bỏ qua những lá nổ ngay mà lúc
    * này vô nghĩa (thuế nhà khi chưa cất căn nào) — xem `core/cards.js`.
    */
-  async resolveCard(p, kind) {
+  async resolveCard(p, kind, dice) {
     const st = this.state;
+    /* Thẻ di chuyển có thể thả quân xuống đúng một ô Cơ Hội / Khí Vận khác, và
+       lá kế tiếp lại là một thẻ di chuyển nữa. Chặn ở nấc thứ hai: quá đó thì
+       coi như ghé ngang ô, không rút thêm — không thì một ván xấu số có thể
+       chạy vòng vòng mãi. */
+    if (this.cardChain >= MAX_CARD_CHAIN) return;
     const drawn = st.decks[kind].draw((c) => usableCard(st, c, p.id));
     // Cả bộ không lá nào dùng được: coi như ghé qua, đừng bày một tấm thẻ rỗng
     if (!drawn) return;
@@ -1248,6 +1266,7 @@ export class Game {
     switch (cardType(drawn.card)) {
       case 'collect': return this.cardCollect(p, kind, drawn.card, title, seed);
       case 'repair':  return this.cardRepair(p, kind, drawn.card, title, seed);
+      case 'move':    return this.cardMove(p, kind, drawn.card, title, seed, dice);
       default:        return this.cardMoney(p, kind, drawn.card, title, seed);
     }
   }
@@ -1344,6 +1363,35 @@ export class Game {
       `<b>${p.name}</b> nộp thuế nhà cửa <span class="down">${money(bill.amount)}</span>
        — ${parts.join(', ')}.`, { kind: 'bad' });
     await this.payBank(p.id, bill.amount);
+  }
+
+  /**
+   * Thẻ di chuyển: dắt quân tới ô khác rồi **xử ô ấy như vừa lắc tới**.
+   *
+   * Quân đi bộ qua từng ô chứ không nhảy thẳng, nên ghé ngang ô Bắt Đầu là lãnh
+   * lương thật — trừ nước lùi và nước bị giải về Khám Lớn.
+   *
+   * Xí ngầu của nước lắc vừa rồi đi theo luôn: đáp xuống ô dịch vụ thì tiền
+   * thuê vẫn tính theo số vừa lắc, chứ không lắc lại một lần nữa.
+   */
+  async cardMove(p, kind, card, title, seed, dice) {
+    const dest = moveDest(card, p.pos);
+    await this.showFateCard(kind, card, {
+      note: `Đi tới <b>${tileLabel(dest.tile)}</b>.`,
+      label: 'Lên đường',
+      seed,
+    });
+    await this.bc.show(title, `<b>${p.name}</b>: ${card.text}`,
+      { kind: card.jail ? 'bad' : null, ms: 2600 });
+
+    if (card.jail) { await this.goToJail(p); return; }
+
+    this.cardChain = (this.cardChain ?? 0) + 1;
+    try {
+      await this.advance(p, dest.steps, dice);
+    } finally {
+      this.cardChain -= 1;
+    }
   }
 
   /* ================================================================

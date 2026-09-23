@@ -23,6 +23,19 @@
  *   · `resume-random` — cũng giải toả, nhưng lô đất do **bốc thăm** giữa mọi lô
  *                   trống trên bàn: bàn cờ sáng chạy qua từng ô rồi chậm dần,
  *                   dừng ở đâu là lô ấy.
+ *   · `move`      — dắt quân đi chỗ khác rồi **xử ô mới như vừa lắc tới đó**:
+ *                   mua được, phải trả tiền thuê, rút tiếp thẻ nếu đáp trúng ô
+ *                   Cơ Hội / Khí Vận. Ô đến khai bằng một trong bốn cách:
+ *                   `to` (ô cố định), `nearest` ('station' | 'utility' — ô gần
+ *                   nhất **phía trước**), `back` (lùi mấy ô), `jail` (về Khám
+ *                   Lớn, không lãnh lương dọc đường).
+ *
+ * ── Vì sao thêm thẻ di chuyển ──────────────────────────────────────────────
+ * Thẻ chỉ cộng trừ tiền không đổi được chỗ đứng của quân, nên hai người có thể
+ * đi cả chục lượt mà không ai đáp vào đất của ai. Thẻ di chuyển thả quân xuống
+ * đúng chỗ có chủ: tiền thuê mới có đường chảy, và bộ đất đang bỏ trống bỗng
+ * có khách. Ô đến tính đường **đi tới** chứ không đi tắt, nên ghé ngang ô Bắt
+ * Đầu là lãnh lương thật.
  *
  * ── Thẻ giữ trong túi ──────────────────────────────────────────────────────
  * Năm loại kể trên (`KEEPABLE`) **không nổ ngay lúc rút**: rút được thì cất
@@ -54,12 +67,43 @@ export const CHANCE = [
   { text: 'Góp tiền trùng tu Lăng Ông Bà Chiểu.', amount: -70 },
   { text: 'Bị phạt vì đậu xe trước Nhà Hát Tây giờ cấm.', amount: -50 },
   {
+    text: `Hết tiền trong túi, đành đi bộ ngược về đầu lộ Bắt Đầu lãnh lương
+           tháng mới.`,
+    type: 'move', to: 0,
+  },
+  {
+    text: `Trễ chuyến tàu Mỹ Tho, phải chạy riết tới nhà ga gần nhất mua vé
+           chuyến sau.`,
+    type: 'move', nearest: 'station',
+  },
+  {
+    text: `Nhà Máy Điện với Thuỷ Cục gọi lên đối chiếu công tơ — cái nào gần
+           thì tới cái đó.`,
+    type: 'move', nearest: 'utility',
+  },
+  {
+    text: 'Xe kéo quay đầu vì lộ Catinat đang cấm đường, lùi lại ba căn phố.',
+    type: 'move', back: 3,
+  },
+  {
+    text: `Được mời dự dạ tiệc ở Dinh Thượng Thơ ngay đầu đường Catinat, không
+           đi thì mất mặt.`,
+    type: 'move', to: 37,
+  },
+  {
+    text: `Cò bót Catinat chặn xét giấy tuỳ thân, giấy không đủ nên bị giải về
+           Khám Lớn.`,
+    type: 'move', jail: true,
+  },
+  {
     text: 'Mừng thọ ông nội, cả phố kéo tới chúc, ai cũng có phong bao.',
     type: 'collect', amount: 180,
   },
   {
     text: 'Sở Lục Lộ tổng kiểm tra nhà phố: nhà nào cũng phải sửa mái, quét vôi lại.',
-    type: 'repair', perHouse: 25, perHotel: 100,
+    /* Đơn giá cũ 25/100 chỉ bằng một lần tiền thuê ô rẻ — ai xây dày cũng
+       không thấy đau. Nay nộp cỡ nửa giá xây mỗi nóc nhà. */
+    type: 'repair', perHouse: 50, perHotel: 200,
   },
   {
     text: 'Quen lớn với ông Cò bót Catinat, xin sẵn một tờ giấy bãi nại phòng thân.',
@@ -105,8 +149,30 @@ export const CHEST = [
   { text: 'Bạn hàng Chợ Lớn biếu quà Tết, mỗi nhà một phong bao.', type: 'collect', amount: 90 },
   { text: 'Tới ngày sinh nhật, cả bàn góp tiền mừng tuổi.', type: 'collect', amount: 150 },
   {
+    text: 'Tới kỳ lãnh lương, phải về tận sở ở đầu lộ Bắt Đầu mới có tiền.',
+    type: 'move', to: 0,
+  },
+  {
+    text: `Bạn hàng nhắn lên ga gần nhất nhận một chuyến hàng gửi từ Lục Tỉnh
+           về.`,
+    type: 'move', nearest: 'station',
+  },
+  {
+    text: 'Thuỷ Cục cắt nước cả xóm, phải lên tận sở khiếu nại mới xong.',
+    type: 'move', to: 12,
+  },
+  {
+    text: `Ghe chở hàng cập bến Nhà Rồng, chủ hàng phải ra bến nhận rồi mới
+           tính tiếp.`,
+    type: 'move', to: 25,
+  },
+  {
+    text: 'Bỏ quên cái nón ở quán hai căn phố phía sau, đành quay lại lấy.',
+    type: 'move', back: 2,
+  },
+  {
     text: 'Toà Đô Chánh đánh thuế thổ trạch: cứ mỗi nóc nhà, mỗi khách sạn đều phải nộp.',
-    type: 'repair', perHouse: 40, perHotel: 115,
+    type: 'repair', perHouse: 75, perHotel: 250,
   },
   {
     text: 'Có người thân làm thơ ký trong Khám Lớn, dặn sẵn khi hữu sự thì đưa giấy này ra.',

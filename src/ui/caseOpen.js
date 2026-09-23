@@ -43,10 +43,12 @@ export const RANKS = {
 /** @param {'chance'|'chest'|'event'} kind */
 export function rankOf(kind, card) {
   if (kind === 'event') {
-    if (card.era >= 2) return 'hiem';          // kỳ 2 đụng tới nhà đất
+    if (card.heavy) return 'hiem';             // đụng tới nhà cửa, quyền sở hữu
     return card.kind === 'chaos' ? 'quy' : 'kha';
   }
   if (KEEPABLE.has(card.type)) return 'hiem';  // thẻ cất túi, chờ đúng lúc mới nổ
+  // Thẻ dắt quân đi chỗ khác đổi thế cờ nhiều hơn một khoản tiền lẻ
+  if (card.type === 'move') return card.jail ? 'hiem' : 'quy';
   if (card.type === 'repair' || card.type === 'collect') return 'quy';
   return Math.abs(card.amount ?? 0) >= 150 ? 'kha' : 'thuong';
 }
@@ -62,6 +64,7 @@ function shortLabel(kind, card) {
     case 'seize':         return 'CƯỠNG CHẾ';
     case 'resume':
     case 'resume-random': return 'GIẢI TOẢ';
+    case 'move':          return card.jail ? 'VÀO TÙ' : 'ĐỔI CHỖ';
     default:              return (card.amount > 0 ? '+' : '−') + money(Math.abs(card.amount));
   }
 }

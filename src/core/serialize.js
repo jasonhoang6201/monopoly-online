@@ -52,7 +52,7 @@ export function snapshot(st) {
     pot: st.pot,
     dryTurn: st.dryTurn,
     mods: st.mods.map((m) => ({ ...m })),
-    eventPiles: { 1: [...st.eventPiles[1]], 2: [...st.eventPiles[2]] },
+    eventPile: [...st.eventPile],
   };
 }
 
@@ -110,6 +110,9 @@ export function applySnapshot(st, snap) {
   st.pot = snap.pot ?? st.pot;
   st.dryTurn = snap.dryTurn ?? st.dryTurn;
   st.mods = (snap.mods ?? st.mods).map((m) => ({ ...m }));
-  if (snap.eventPiles) st.eventPiles = { 1: [...snap.eventPiles[1]], 2: [...snap.eventPiles[2]] };
+  /* Ảnh chụp cũ mang hai chồng chia theo kỳ (`eventPiles`). Gộp lại thành một
+     chồng thay vì bỏ đi, để ván đang chơi giữa lúc cập nhật không bị xáo lại. */
+  if (snap.eventPile) st.eventPile = [...snap.eventPile];
+  else if (snap.eventPiles) st.eventPile = [...(snap.eventPiles[1] ?? []), ...(snap.eventPiles[2] ?? [])];
   return st;
 }

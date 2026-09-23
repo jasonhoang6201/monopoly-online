@@ -7,7 +7,7 @@ import { money, TOTAL_HOUSES, tileLabel } from '../data/board.js';
 import { cardOf, cardName } from '../data/cards.js';
 import { paintToken } from '../render/pieces.js';
 import {
-  eventsOn, unlocked, pressureRatio, threshold, eraOpen, modLabel,
+  eventsOn, unlocked, pressureRatio, threshold, modLabel,
 } from '../core/events.js';
 
 const $ = (id) => document.getElementById(id);
@@ -440,7 +440,6 @@ export class Hud {
     box.querySelector('.fm-bar i').style.width = `${Math.round(r * 100)}%`;
 
     const bits = [];
-    if (eraOpen(st) === 2) bits.push('Kỳ 2 · nhà đất');
     if (st.pot > 0) bits.push(`Quỹ Công ${money(st.pot)}`);
     for (const m of st.mods) {
       const l = modLabel(m);

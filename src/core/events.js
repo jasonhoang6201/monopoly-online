@@ -74,12 +74,6 @@ export function pressureRatio(st) {
    Rút thẻ
    ================================================================== */
 
-/** Kỳ nào đang mở: Kỳ 2 (đụng nhà đất) chỉ mở sau vài lần nổ đầu. */
-export function eraOpen(st) {
-  const lv = levelOf(st);
-  return lv && st.eventsFired >= lv.era2From ? 2 : 1;
-}
-
 /** Ô đất có chủ mà chưa cất căn nhà nào — thứ duy nhất đem sang tay được. */
 function bareOwned(st, playerId = null) {
   return [...st.owner.entries()]
@@ -87,23 +81,54 @@ function bareOwned(st, playerId = null) {
     .map(([id]) => id);
 }
 
+/** Hiệu ứng của thẻ này đã nằm sẵn trên bàn chưa. */
+function hasMod(st, id) { return st.mods.some((m) => m.id === id); }
+
 /** Nhóm màu đang có nhà trên đó. */
 function builtGroups(st) {
   return Object.keys(GROUPS).filter((g) => GROUP_TILES[g].some((id) => st.housesOn(id) > 0));
 }
 
-/** Số cấp nhà một ô mất khi để lửa cháy: nửa số nhà đang có, làm tròn xuống. */
-export function burnLoss(houses) { return Math.floor(houses / 2); }
+/**
+ * Danh sách ô của một khu màu cho hai thẻ thiên tai — **kể cả ô chưa có nhà**.
+ *
+ * Trước đây kế hoạch chỉ giữ mấy ô đang có nhà, nên ô đất trống trong khu biến
+ * mất khỏi hoạt cảnh: bàn cờ sáng lên hai ô giữa một khu ba ô, người chơi
+ * tưởng lửa chừa ô kia ra vì lý do luật nào đó. Nay cả khu đều nằm trong kế
+ * hoạch, ô trống mang `lose: 0` — vào vùng thiên tai nhưng không mất gì, và
+ * `eventRunner` chỉ hỏi tiền những chủ có nhà.
+ *
+ * @param {(houses:number)=>number} lossOf số cấp nhà ô ấy mất nếu chủ không trả
+ * @param {number} rate hệ số tiền chữa, nhân với giá xây của phần sắp mất
+ */
+function groupLots(st, group, lossOf, rate) {
+  return GROUP_TILES[group].map((id) => {
+    const houses = st.housesOn(id);
+    const lose = houses > 0 ? lossOf(houses) : 0;
+    const cost = Math.ceil(BOARD[id].house_cost * Math.max(1, lose) * rate);
+    return {
+      id,
+      seat: st.owner.get(id) ?? null,
+      houses,
+      lose,
+      /* Hai thẻ đọc hai tên khác nhau cho cùng một khoản: động đất gọi là tiền
+         chống đỡ, hoả hoạn gọi là tiền phu chữa cháy. Ô không nhà thì không
+         phải trả gì. */
+      brace: lose > 0 ? cost : 0,
+      save: lose > 0 ? cost : 0,
+    };
+  });
+}
 
 /**
- * Khu nào đem ra bốc thăm hoả hoạn được: phải có ít nhất một ô mất được một
- * cấp nhà. Khu toàn ô một căn thì cháy xong chẳng ô nào suy suyển — nổ một sự
- * kiện rỗng như thế thì thà bốc thẻ khác.
+ * Số cấp nhà một ô mất khi để lửa cháy: nửa số nhà đang có, **làm tròn lên**.
+ *
+ * Trước đây làm tròn xuống, nên ô một căn cháy xong vẫn còn nguyên một căn —
+ * cả khu toàn ô một nhà thì hoả hoạn thành thẻ rỗng, phải loại khu ấy ra khỏi
+ * vòng bốc thăm. Làm tròn lên thì khu nào có nhà là cháy được, và lửa lấy đi
+ * nhiều hơn động đất (ô ba nhà mất hai cấp thay vì một).
  */
-function burnableGroups(st) {
-  return Object.keys(GROUPS)
-    .filter((g) => GROUP_TILES[g].some((id) => burnLoss(st.housesOn(id)) > 0));
-}
+export function burnLoss(houses) { return Math.ceil(houses / 2); }
 
 /** Người giàu nhất bàn — thẻ trưng thu nhắm vào đây, tiêu chí ai cũng kiểm được. */
 export function leaderSeat(st) {
@@ -135,12 +160,19 @@ export function usable(st, card) {
     case 'an-xa':
       return alive.some((p) => p.inJail);
     case 'lam-phat':
+      return st.owner.size > 0 && !hasMod(st, card.id);
     case 'mo-duong':
       return st.owner.size > 0;
+    /* Ba thẻ đổi giá chạy tới hết ván, và `addMod` gộp theo id nên rút lại lần
+       nữa chẳng đổi gì — bỏ qua để bốc lá khác thay vì bày một thẻ rỗng. */
+    case 'mat-mua':
+    case 'bao-gia':
+      return !hasMod(st, card.id);
+    /* Khu bốc thăm được là khu có ít nhất một ô đang có nhà. Cả bàn không còn
+       căn nào thì thiên tai chẳng lấy được gì — bốc thẻ khác. */
     case 'dong-dat':
-      return builtGroups(st).length > 0;
     case 'hoa-hoan':
-      return burnableGroups(st).length > 0;
+      return builtGroups(st).length > 0;
     case 'mat-giay-to':
       return alive.filter((p) => st.propertiesOf(p.id).length > 0).length >= 2;
     case 'trung-thu': {
@@ -161,27 +193,29 @@ export function usable(st, card) {
 /**
  * Rút một thẻ hợp cảnh.
  *
- * Mỗi kỳ giữ một chồng bài riêng, xáo hết mới lặp lại — giống Cơ Hội / Khí Vận,
- * để cùng một ván không gặp đi gặp lại một thẻ. Thẻ rút lên mà không dùng được
- * thì để riêng ra và bốc tiếp, xong mới trả cả nắm ấy về chồng: bỏ hẳn thì lần
- * sau bàn đã đổi, thẻ ấy lại dùng được mà không còn trong chồng nữa.
+ * **Một chồng bài duy nhất** cho cả bộ, xáo hết mới lặp lại — giống Cơ Hội /
+ * Khí Vận, để cùng một ván không gặp đi gặp lại một thẻ. Chồng này thay cho
+ * hai chồng chia theo kỳ trước đây: mọi thẻ giờ có tỉ lệ ra ngang nhau, kể cả
+ * mấy lá đụng tới nhà đất.
+ *
+ * Thẻ rút lên mà không dùng được thì để riêng ra và bốc tiếp, xong mới trả cả
+ * nắm ấy về chồng: bỏ hẳn thì lần sau bàn đã đổi, thẻ ấy lại dùng được mà
+ * không còn trong chồng nữa.
  */
 export function drawEvent(st) {
-  const era = eraOpen(st);
-  const deck = EVENTS.filter((e) => e.era <= era);
-  let pile = st.eventPiles[era];
-  if (!pile || pile.length === 0) pile = st.eventPiles[era] = shuffledIds(deck);
+  if (!st.eventPile || st.eventPile.length === 0) st.eventPile = shuffledIds(EVENTS);
+  const pile = st.eventPile;
 
   const skipped = [];
   let chosen = null;
   while (pile.length > 0) {
     const id = pile.pop();
-    const card = deck.find((e) => e.id === id);
+    const card = EVENTS.find((e) => e.id === id);
     if (card && usable(st, card)) { chosen = card; break; }
     if (card) skipped.push(id);
   }
   // Trả những thẻ chưa dùng được về chồng, xáo lẫn vào chỗ còn lại
-  st.eventPiles[era] = shuffle([...pile, ...skipped]);
+  st.eventPile = shuffle([...pile, ...skipped]);
   return chosen;
 }
 
@@ -242,12 +276,14 @@ export function planEvent(st, card) {
     case 'quy-cong-phat-chan':
       return { amount: card.bonus };
 
+    /* Ba thẻ đổi giá mang `turns: -1` — chạy tới hết ván. Xem ghi chú "Đổi giá
+       thì vĩnh viễn" ở `data/events.js`. */
     case 'lam-phat':
-      return { mod: { id: card.id, type: 'rent', mult: card.mult, turns: rounds(st, card.rounds) } };
+      return { mod: { id: card.id, type: 'rent', mult: card.mult, turns: -1 } };
     case 'mat-mua':
-      return { mod: { id: card.id, type: 'salary', mult: card.mult, turns: rounds(st, card.rounds) } };
+      return { mod: { id: card.id, type: 'salary', mult: card.mult, turns: -1 } };
     case 'bao-gia':
-      return { mod: { id: card.id, type: 'build', mult: card.mult, turns: rounds(st, card.rounds) } };
+      return { mod: { id: card.id, type: 'build', mult: card.mult, turns: -1 } };
     case 'gioi-nghiem':
       return { mod: { id: card.id, type: 'freeze-build', turns: rounds(st, card.rounds) } };
 
@@ -260,15 +296,7 @@ export function planEvent(st, card) {
 
     case 'dong-dat': {
       const group = pick(builtGroups(st));
-      const tiles = GROUP_TILES[group]
-        .filter((id) => st.housesOn(id) > 0)
-        .map((id) => ({
-          id,
-          seat: st.owner.get(id),
-          houses: st.housesOn(id),
-          brace: Math.ceil(BOARD[id].house_cost * card.braceRate),
-        }));
-      return { group, tiles };
+      return { group, tiles: groupLots(st, group, () => 1, card.braceRate) };
     }
 
     case 'hoa-hoan': {
@@ -278,18 +306,10 @@ export function planEvent(st, card) {
          một khoản thuế người dẫn đầu biết trước mà chừa tiền ra. Bốc thăm khu
          thì ai xây cũng có phần rủi, và cháy cả khu mới ra cái nghĩa "cháy lan
          cả dãy phố". */
-      const groups = burnableGroups(st);
+      const groups = builtGroups(st);
       if (groups.length === 0) return null;
       const group = pick(groups);
-      const tiles = GROUP_TILES[group]
-        .map((id) => ({ id, houses: st.housesOn(id), lose: burnLoss(st.housesOn(id)) }))
-        .filter((t) => t.lose > 0)
-        .map((t) => ({
-          ...t,
-          seat: st.owner.get(t.id),
-          save: Math.ceil(BOARD[t.id].house_cost * t.lose * card.saveRate),
-        }));
-      return tiles.length ? { group, tiles } : null;
+      return { group, tiles: groupLots(st, group, burnLoss, card.saveRate) };
     }
 
     case 'mat-giay-to': {

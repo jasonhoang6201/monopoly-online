@@ -116,7 +116,7 @@ const r = await page.evaluate(async () => {
 
   // Mọi thẻ đều lập được kế hoạch, hoặc bị loại đúng lý do
   st.players.forEach((p) => { p.money = 3000; });
-  const { EVENTS } = await import('/src/data/events.js');
+  const { EVENTS, EVENT_BY_ID } = await import('/src/data/events.js');
   out.planned = [];
   out.badPlan = [];
   for (const card of EVENTS) {
@@ -127,12 +127,34 @@ const r = await page.evaluate(async () => {
     else out.planned.push(card.id);
   }
 
-  // Rút thẻ: Kỳ 2 chỉ mở sau vài lần nổ
+  /* Rút thẻ: một chồng duy nhất, mọi thẻ chung tỉ lệ. Rút cạn cả bộ rồi soi
+     xem có lá nào không bao giờ lên — kỳ đã bỏ nên thẻ nhà đất phải ra được
+     ngay từ lần nổ đầu. */
   st.eventsFired = 0;
-  st.eventPiles = { 1: [], 2: [] };
-  out.era1 = ev.eraOpen(st);
-  st.eventsFired = 5;
-  out.era2 = ev.eraOpen(st);
+  st.eventPile = [];
+  // Cất nhà cho một khu, không thì thiên tai không có gì để giáng xuống
+  GROUP_TILES.red.forEach((id) => { st.owner.set(id, 0); st.houses.set(id, 2); });
+  const seen = new Set();
+  for (let i = 0; i < 200; i++) {
+    const card = ev.drawEvent(st);
+    if (card) seen.add(card.id);
+  }
+  out.drawnKinds = [...seen];
+  out.heavyDrawnEarly = seen.has('dong-dat') || seen.has('hoa-hoan');
+  out.noEraField = EVENTS.every((c) => c.era === undefined);
+
+  /* Thẻ đổi giá chạy tới hết ván (`turns: -1`), và rút lại lần nữa thì bị bỏ
+     qua vì `addMod` gộp theo id — bày lá ấy ra cũng không đổi được gì. */
+  st.mods = [];
+  const priceCards = ['lam-phat', 'mat-mua', 'bao-gia'];
+  out.priceForever = priceCards.every((id) => ev.planEvent(st, EVENT_BY_ID[id]).mod.turns === -1);
+  for (const id of priceCards) st.addMod(ev.planEvent(st, EVENT_BY_ID[id]).mod);
+  st.tickMods(); st.tickMods(); st.tickMods(); st.tickMods();
+  out.priceSurvivesTicks = st.mods.length === 3;
+  out.priceSkippedTwice = priceCards.every((id) => !ev.usable(st, EVENT_BY_ID[id]));
+  // Giới nghiêm vẫn có hạn: cấm xây vĩnh viễn là khoá luôn đường làm tiền thuê lớn lên
+  out.curfewStillTimed = ev.planEvent(st, EVENT_BY_ID['gioi-nghiem']).mod.turns > 0;
+  st.mods = [];
 
   // Ảnh chụp mang đủ trường mới
   const { snapshot, fromSnapshot } = await import('/src/core/serialize.js');
@@ -147,7 +169,7 @@ const r = await page.evaluate(async () => {
   // Ảnh chụp cũ (không có phần Thời Cuộc) vẫn dựng lại được
   const legacy = { ...snap };
   delete legacy.settings; delete legacy.mods; delete legacy.pot;
-  delete legacy.eventPiles; delete legacy.pressure;
+  delete legacy.eventPile; delete legacy.pressure;
   const old = fromSnapshot(legacy);
   out.legacySnapshot = old.mods.length === 0 && old.pot === 0 && !!old.settings.events;
 
@@ -166,7 +188,11 @@ ok('mất mùa cắt nửa lương', r.salaryHalved);
 ok('hiệu ứng tự hết hạn theo lượt', r.modsExpire);
 ok('cấn nợ tự động thế chấp đủ tiền', r.autoRaise);
 ok('mọi thẻ đều lập được kế hoạch', r.badPlan.length === 0, r.badPlan.join(','));
-ok('Kỳ 2 chỉ mở sau vài lần nổ', r.era1 === 1 && r.era2 === 2);
+ok('thẻ nhà đất rút được ngay từ đầu', r.heavyDrawnEarly && r.noEraField,
+  r.drawnKinds.join(','));
+ok('thẻ đổi giá chạy tới hết ván', r.priceForever && r.priceSurvivesTicks);
+ok('rút lại thẻ đổi giá đang có hiệu lực thì bỏ qua', r.priceSkippedTwice);
+ok('giới nghiêm vẫn có hạn', r.curfewStillTimed);
 ok('ảnh chụp mang đủ phần Thời Cuộc', r.roundTrip);
 ok('ảnh chụp cũ vẫn dựng lại được', r.legacySnapshot);
 
@@ -177,7 +203,7 @@ await page.evaluate(() => {
   const c = window.__monopoly.controller;
   const st = c.state;
   // Chỉ để lại thẻ Kỳ 1 không cần hỏi ai, cho bước kiểm này chạy gọn
-  st.eventPiles = { 1: ['hoi-cho'], 2: [] };
+  st.eventPile = ['hoi-cho'];
   st.eventsFired = 0;
   st.pressure = 999;
   c.guard(() => c.endTurn());
@@ -264,11 +290,11 @@ async function clearModals(page, ms = 120000) {
   return false;
 }
 
-console.log('\n--- từng thẻ Kỳ 2 ---');
-const ERA2 = ['dong-dat', 'hoa-hoan', 'mat-giay-to', 'trung-thu',
-              'sang-nhuong', 'hoan-doi-dia-ba', 'mo-duong', 'dai-ha-gia'];
+console.log('\n--- từng thẻ đụng nhà đất ---');
+const HEAVY = ['dong-dat', 'hoa-hoan', 'mat-giay-to', 'trung-thu',
+               'sang-nhuong', 'hoan-doi-dia-ba', 'mo-duong', 'dai-ha-gia'];
 
-for (const id of ERA2) {
+for (const id of HEAVY) {
   const before = errors.length;
   await clearModals(page);
   // Dựng lại một bàn có đất và nhà để thẻ nào cũng có việc để làm
@@ -287,7 +313,7 @@ for (const id of ERA2) {
     // Một bộ đủ màu có nhà, để động đất và hoả hoạn có chỗ mà giáng xuống
     [11, 13, 14].forEach((tile) => { st.owner.set(tile, 0); st.houses.set(tile, 3); });
     st.bankHouses = 32 - 9;
-    st.eventPiles = { 1: [], 2: [cardId] };
+    st.eventPile = [cardId];
     st.eventsFired = 5;
     st.laps = 99;
     st.pressure = 999;
