@@ -11,6 +11,7 @@ import {
 } from '../render/geometry.js';
 import { paintBoard, nameBand, P } from '../render/boardArt.js';
 import { paintToken, paintCoin } from '../render/pieces.js';
+import { makeTileFx, fxBox, FX_TILE_W } from '../render/tileFx.js';
 import {
   paintHouseGlyph, paintHotelGlyph, paintEdgeGlow, paintEdgeSpill, SPILL_ROOT,
 } from '../render/glyphs.js';
@@ -21,6 +22,9 @@ import {
 import { BOARD, money } from '../data/board.js';
 import { audio } from '../audio/audio.js';
 import { DPR, px } from '../dpr.js';
+
+/* Người dùng xin bớt chuyển động thì ô đổi trạng thái ngay, không diễn */
+const REDUCED_MOTION = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
 /* Khoảng thở quanh bàn cờ, tính bằng điểm ảnh CSS */
 const GUTTER = 12;
@@ -227,6 +231,21 @@ export default class BoardScene extends Phaser.Scene {
     this.glowLayer = this.add.container(0, 0).setDepth(3);
     this.tokenLayer = this.add.container(0, 0).setDepth(6);
     this.fxLayer = this.add.container(0, 0).setDepth(20);
+    /* Hoạt cảnh ô đất (`render/tileFx.js`): phần mặt ô (vết nứt, vết sém, ô
+       rung) nằm trên nước màu chủ đất nhưng dưới vệt đèn và quân cờ; phần nổi
+       (búa, biển, lửa) nằm chung `fxLayer`, trên quân cờ. */
+    this.fxUnder = this.add.container(0, 0).setDepth(2.5);
+    this.fxRuns = new Map();
+    this.fxSeq = 0;
+    /* Hoạt cảnh đang chạy được quyền giữ vệt đèn nhà và lớp thế chấp của ô ấy
+       ở một độ hiện riêng — `refresh` dựng lại lớp phủ bất cứ lúc nào, nên độ
+       hiện phải nằm ở đây chứ không nằm trên đối tượng vừa bị huỷ. */
+    this.glowVis = new Map();
+    this.mortVis = new Map();
+    this.mortParts = new Map();
+    this.fxView = null;
+    this.fxState = null;
+    this.events.on(Phaser.Scenes.Events.UPDATE, (_t, delta) => this.stepTileFx(delta / 1000));
 
     /* Một nhịp thở duy nhất cho mọi vệt đèn: đèn hơi tỏ hơi mờ như ánh nến,
        rẻ hơn hẳn việc mỗi ô nuôi một tween riêng. */
@@ -237,7 +256,9 @@ export default class BoardScene extends Phaser.Scene {
       duration: 1900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
       onUpdate: () => {
         const k = 0.80 + this.glowBeat.t * 0.28;
-        for (const f of this.glowFx) f.img.setAlpha(f.base * k);
+        for (const f of this.glowFx) {
+          f.img.setAlpha(Math.min(1, f.base * (f.beat === false ? 1 : k) * (this.glowVis.get(f.id) ?? 1)));
+        }
       },
     });
 
@@ -277,6 +298,8 @@ export default class BoardScene extends Phaser.Scene {
       this.textures.remove('board');
       this.textures.addCanvas('board', paintBoard(need));
       this.board.setTexture('board');
+      // Bản xám dựng theo bàn cũ thì lệch điểm ảnh — bỏ đi, lần sau cần sẽ dựng lại
+      if (this.textures.exists('board-gray')) this.textures.remove('board-gray');
       this.layout();
     }
   }
@@ -323,6 +346,8 @@ export default class BoardScene extends Phaser.Scene {
     });
 
     this.syncBoardHud();
+    // Hoạt cảnh dựng theo toạ độ cũ — đổi cỡ bàn thì bỏ, ô về đúng trạng thái
+    this.stopAllTileFx();
     if (this.state) this.refresh(this.state);
     this.placeTokens();
     if (this.highlightedTile != null) this.highlightTile(this.highlightedTile, this.highlightColor);
@@ -778,10 +803,12 @@ export default class BoardScene extends Phaser.Scene {
   // -------------------------------------------------- chủ sở hữu & nhà cửa
 
   refresh(state) {
+    this.diffTileFx(state);
     this.state = state;
     this.overlay.removeAll(true);
     this.glowLayer.removeAll(true);
     this.glowFx = [];
+    this.mortParts.clear();
 
     for (const t of BOARD) {
       const ownerId = state.owner.get(t.id);
@@ -804,28 +831,27 @@ export default class BoardScene extends Phaser.Scene {
          (trước là 0,62) và dải tên ô được dán lại nguyên bản đè lên — xem
          `addNameBand` — nên đọc tên đất không còn phải nheo mắt. */
       const own = ownerTint(p.token.color);
-      // Ô thế chấp nhạt đi để thấy ngay là đất đang cầm, nhưng đừng nhạt quá —
-      // nước màu là thứ duy nhất còn nói lên đất của ai
-      const dim = state.isMortgaged(t.id) ? 0.5 : 1;
+      /* Ô thế chấp: mặt ô dán lại từ bản xám của bàn cờ — cùng một cách nhìn
+         với thẻ đất trong hộp thoại (`.deedcard.is-mortgaged`: xám + nhãn đỏ).
+         Nước màu chủ đất nhạt đi nhưng vẫn giữ, vì đó là thứ duy nhất còn nói
+         lên đất của ai. */
+      const mort = state.isMortgaged(t.id);
+      const grayParts = [];
+      if (mort) grayParts.push(this.pasteBoard(t.id, 0, 1, 'board-gray').img);
+      const dim = mort ? 0.5 : 1;
       const wash = OWNER_WASH(own) * dim;
       g.fillStyle(own, wash);
       g.fillRect(-sw / 2, -sh / 2, sw, sh);
       this.overlay.add(g);
 
       // Dải tên ô + sắc nhóm đất nổi lên trên nước màu
-      this.addNameBand(t, own, wash * BAND_WASH);
+      const band = this.addNameBand(t, own, wash * BAND_WASH, mort ? 'board-gray' : 'board');
 
-      if (state.isMortgaged(t.id)) {
-        // Vẽ sau dải tên: gạch chéo báo đất đang cầm phải nằm trên cùng, không
-        // thì dải tên dán đè lên làm mất một nửa nét gạch.
-        const x = this.add.graphics();
-        x.setPosition(sc.x, sc.y).setRotation(a);
-        x.lineStyle(Math.max(1.5, sw * 0.045), 0xB3322A, 0.85);
-        x.beginPath();
-        x.moveTo(-sw * 0.34, -sh * 0.28); x.lineTo(sw * 0.34, sh * 0.28);
-        x.moveTo(sw * 0.34, -sh * 0.28); x.lineTo(-sw * 0.34, sh * 0.28);
-        x.strokePath();
-        this.overlay.add(x);
+      // Nhãn đỏ vẽ sau dải tên để dải tên dán lại không đè mất nhãn
+      if (mort) {
+        if (band) grayParts.push(band);
+        this.mortParts.set(t.id, { gray: grayParts, tag: this.addMortgageTag(t, sc, a, sw, sh) });
+        this.applyMortVis(t.id);
       }
 
       /* Đất đã xây thì KHÔNG dựng nóc nhà lên mặt ô nữa — mặt ô để trống cho
@@ -854,28 +880,10 @@ export default class BoardScene extends Phaser.Scene {
    * @param {number} alpha lớp nước màu mỏng giữ lại trên dải, để dải không
    *   trông như ô chưa ai mua
    */
-  addNameBand(t, tint, alpha) {
-    if (isCorner(t.id)) return;
+  addNameBand(t, tint, alpha, key = 'board') {
+    if (isCorner(t.id)) return null;
     const band = nameBand(t.type);
-    const c = tileCenter(t.id, TEX);
-    const { w, h } = tileSize(t.id, TEX);
-    const a = tileAngle(t.id);
-    const cos = Math.cos(a), sin = Math.sin(a);
-    const at = (lx, ly) => ({ x: c.x + lx * cos - ly * sin, y: c.y + lx * sin + ly * cos });
-
-    const p1 = at(-w / 2, -h / 2 + h * band.top);
-    const p2 = at(w / 2, -h / 2 + h * band.bottom);
-    const rx = Math.min(p1.x, p2.x), ry = Math.min(p1.y, p2.y);
-    const rw = Math.abs(p2.x - p1.x), rh = Math.abs(p2.y - p1.y);
-
-    // Vùng cắt đo bằng điểm ảnh của tấm ảnh gốc, mà tấm ấy vẽ ở độ phân giải
-    // riêng (`boardPx`) chứ không phải hệ toạ độ hình học `TEX`.
-    const k = this.boardPx / TEX;
-    const strip = this.add.image(this.board.x, this.board.y, 'board')
-      .setOrigin(0.5)
-      .setDisplaySize(this.size, this.size)
-      .setCrop(rx * k, ry * k, rw * k, rh * k);
-    this.overlay.add(strip);
+    const { rx, ry, rw, rh, img } = this.pasteBoard(t.id, band.top, band.bottom, key);
 
     const g = this.add.graphics();
     const s = this.toScreen(rx + rw / 2, ry + rh / 2);
@@ -883,6 +891,269 @@ export default class BoardScene extends Phaser.Scene {
     g.fillStyle(tint, alpha);
     g.fillRect(-rw * this.scaleF / 2, -rh * this.scaleF / 2, rw * this.scaleF, rh * this.scaleF);
     this.overlay.add(g);
+    return img;
+  }
+
+  /**
+   * Cắt một dải của ô trên ảnh bàn cờ rồi đặt trùng chỗ cũ vào lớp `overlay`.
+   * `top`/`bottom` đo theo chiều cao ô tính từ mép trong, như `nameBand`.
+   * Trả về vùng cắt theo toạ độ `TEX`.
+   */
+  pasteBoard(id, top, bottom, key = 'board') {
+    if (key === 'board-gray') this.ensureGrayBoard();
+    const c = tileCenter(id, TEX);
+    const { w, h } = tileSize(id, TEX);
+    const a = tileAngle(id);
+    const cos = Math.cos(a), sin = Math.sin(a);
+    const at = (lx, ly) => ({ x: c.x + lx * cos - ly * sin, y: c.y + lx * sin + ly * cos });
+
+    const p1 = at(-w / 2, -h / 2 + h * top);
+    const p2 = at(w / 2, -h / 2 + h * bottom);
+    const rx = Math.min(p1.x, p2.x), ry = Math.min(p1.y, p2.y);
+    const rw = Math.abs(p2.x - p1.x), rh = Math.abs(p2.y - p1.y);
+
+    // Vùng cắt đo bằng điểm ảnh của tấm ảnh gốc, mà tấm ấy vẽ ở độ phân giải
+    // riêng (`boardPx`) chứ không phải hệ toạ độ hình học `TEX`.
+    const k = this.boardPx / TEX;
+    const strip = this.add.image(this.board.x, this.board.y, key)
+      .setOrigin(0.5)
+      .setDisplaySize(this.size, this.size)
+      .setCrop(rx * k, ry * k, rw * k, rh * k);
+    this.overlay.add(strip);
+    return { rx, ry, rw, rh, img: strip };
+  }
+
+  /**
+   * Bản xám của mặt bàn, dựng một lần khi lần đầu có ô thế chấp. Làm bằng
+   * vòng lặp điểm ảnh chứ không dùng `ctx.filter`, vì Safari cũ bỏ qua
+   * `ctx.filter` mà không báo lỗi. Công thức khớp CSS
+   * `grayscale(.62) brightness(.78)` của thẻ đất trong hộp thoại.
+   */
+  ensureGrayBoard() {
+    if (this.textures.exists('board-gray')) return;
+    const src = this.textures.get('board').getSourceImage();
+    const cv = document.createElement('canvas');
+    cv.width = src.width; cv.height = src.height;
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(src, 0, 0);
+    const img = ctx.getImageData(0, 0, cv.width, cv.height);
+    const d = img.data;
+    const G = 0.62, B = 0.78;
+    for (let i = 0; i < d.length; i += 4) {
+      const lum = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+      d[i]     = (d[i]     * (1 - G) + lum * G) * B;
+      d[i + 1] = (d[i + 1] * (1 - G) + lum * G) * B;
+      d[i + 2] = (d[i + 2] * (1 - G) + lum * G) * B;
+    }
+    ctx.putImageData(img, 0, 0);
+    this.textures.addCanvas('board-gray', cv);
+  }
+
+  /**
+   * Nhãn đỏ "THẾ CHẤP" nằm ngang thân ô, xoay theo ô. Ô đất có dải tên ở đầu
+   * ô nên nhãn đặt về phía chân ô (đè lên giá mua — đất đã có chủ thì giá mua
+   * không còn ai cần đọc); ô nhà ga / tiện ích có dải tên ở nửa dưới nên nhãn
+   * lên nửa trên.
+   */
+  addMortgageTag(t, sc, a, sw, sh) {
+    const y = t.type === 'property' ? sh * 0.385 : -sh * 0.22;
+    const txt = this.add.text(0, y, 'THẾ CHẤP', {
+      fontFamily: '"Be Vietnam Pro", ui-sans-serif, sans-serif',
+      fontStyle: 'bold',
+      fontSize: `${Math.max(8, Math.round(sw * 0.15))}px`,
+      color: '#FFE6DF',
+    }).setOrigin(0.5);
+    // Chữ dài hơn bề ngang ô thì thu nhỏ lại, chừa lề hai bên
+    const maxW = sw * 0.78;
+    if (txt.width > maxW) txt.setScale(maxW / txt.width);
+    const bw = txt.displayWidth + sw * 0.12, bh = txt.displayHeight + sw * 0.06;
+    const bg = this.add.graphics();
+    bg.fillStyle(0x000000, 0.35).fillRoundedRect(-bw / 2, y - bh / 2 + bh * 0.1, bw, bh, bh * 0.22);
+    bg.fillStyle(0xB3322A, 0.95).fillRoundedRect(-bw / 2, y - bh / 2, bw, bh, bh * 0.22);
+    // Gốc container đặt ngay tâm nhãn để hoạt cảnh thế chấp phóng nhãn tại chỗ
+    const tag = this.add.container(sc.x - Math.sin(a) * y, sc.y + Math.cos(a) * y, [bg, txt]).setRotation(a);
+    bg.y -= y; txt.y -= y;
+    this.overlay.add(tag);
+    return tag;
+  }
+
+  // ------------------------------------------------- hoạt cảnh trên ô đất
+
+  /**
+   * So trạng thái vừa nhận với lần `refresh` trước để tự chạy hoạt cảnh: nhà
+   * tăng thì búa gõ, ô vừa thế chấp thì cắm biển, ô vừa chuộc thì màu tràn lại.
+   *
+   * Làm ở đây chứ không ở chỗ bấm nút, vì máy ngồi xem chỉ nhận ảnh chụp
+   * (`controller.onSync` → `refresh`) — so ảnh chụp thì máy nào cũng thấy cùng
+   * hoạt cảnh mà không phải phát thêm tin nào.
+   *
+   * Không so khi:
+   *   - `state` là đối tượng khác lần trước — vào ván, vào lại phòng: mọi thứ
+   *     "mới xuất hiện" nhưng chẳng có gì vừa xảy ra;
+   *   - ô đổi chủ — giao dịch, đấu giá, phá sản đều mang theo nhà và thế chấp,
+   *     không phải xây hay cầm cố.
+   * Nhà giảm thì không tự đoán: bán nhà thì im lặng, còn động đất / hoả hoạn
+   * được gọi thẳng qua `tileFx` vì chỉ máy cầm lái biết nguyên nhân.
+   */
+  diffTileFx(state) {
+    const view = new Map();
+    for (const [id, o] of state.owner) {
+      view.set(id, { o, h: state.housesOn(id), m: state.isMortgaged(id) });
+    }
+    const prev = this.fxState === state ? this.fxView : null;
+    this.fxView = view;
+    this.fxState = state;
+    if (!prev) return;
+    const sound = new Set();
+    const play = (kind, id, extra) => {
+      this.startTileFx(kind, id, { ...extra, sound: !sound.has(kind) });
+      sound.add(kind);
+    };
+    for (const [id, now] of view) {
+      const was = prev.get(id);
+      if (!was || was.o !== now.o) continue;
+      if (now.h > was.h) play('build', id, { from: was.h, to: now.h });
+      if (now.m && !was.m) play('mortgage', id);
+      else if (!now.m && was.m) play('redeem', id);
+    }
+  }
+
+  /**
+   * Hoạt cảnh có nguyên nhân mà ảnh chụp không nói ra (động đất, hoả hoạn).
+   * Nhiều ô thì chạy so le 150ms, chỉ ô đầu có tiếng.
+   * @param {'quake'|'fire'} kind
+   * @param {number[]} ids
+   */
+  tileFx(kind, ids) {
+    const list = [...new Set(ids ?? [])];
+    const go = (id, i) => this.startTileFx(kind, id, { sound: i === 0, house: true });
+    // Ô đầu chạy ngay trong nhịp này, không đợi khung hình sau như `delayedCall(0)`
+    return Promise.all(list.map((id, i) => (i === 0 ? go(id, i) : new Promise((resolve) => {
+      this.time.delayedCall(i * 150, () => go(id, i).then(resolve));
+    }))));
+  }
+
+  /** Độ hiện lớp thế chấp của một ô — hoạt cảnh thế chấp giữ nó ẩn tới lúc biển cắm xong. */
+  applyMortVis(id) {
+    const parts = this.mortParts.get(id);
+    if (!parts) return;
+    const v = this.mortVis.get(id);
+    for (const img of parts.gray) img.setAlpha(v ? v.gray : 1);
+    parts.tag.setAlpha(v ? v.tag : 1).setScale(v ? v.tagScale : 1);
+  }
+
+  /**
+   * Mặt ô trên ảnh bàn cờ, đo sẵn để `tileFx.js` vẽ lại vào hệ của ô: vùng
+   * cắt theo điểm ảnh ảnh gốc, cỡ vẽ theo đơn vị hoạt cảnh (trước khi xoay).
+   */
+  tileSource(id, key, u) {
+    if (key === 'board-gray') this.ensureGrayBoard();
+    const c = tileCenter(id, TEX);
+    const { w, h } = tileSize(id, TEX);
+    const a = tileAngle(id);
+    // Ô thường xoay bội số 90°: nằm dọc thì hai cạnh đổi chỗ trên ảnh
+    const side = Math.abs(Math.sin(a)) > 0.5;
+    const bw = side ? h : w, bh = side ? w : h;
+    const k = this.boardPx / TEX;
+    return {
+      img: this.textures.get(key).getSourceImage(),
+      sx: (c.x - bw / 2) * k, sy: (c.y - bh / 2) * k, sw: bw * k, sh: bh * k,
+      dw: bw * this.scaleF / u, dh: bh * this.scaleF / u,
+      angle: a, hh: h * this.scaleF / u / 2,
+    };
+  }
+
+  /**
+   * Chạy một hoạt cảnh trên ô `id`. Ô đang có hoạt cảnh thì hoạt cảnh cũ dừng
+   * ngay — bấm xây liền tay thì mỗi căn một nhịp búa mới, không xếp hàng.
+   * @returns {Promise<void>} xong khi hoạt cảnh hết
+   */
+  startTileFx(kind, id, opts = {}) {
+    const st = this.state;
+    const t = BOARD[id];
+    if (!st || !t || isCorner(id) || REDUCED_MOTION()) return Promise.resolve();
+    this.stopTileFx(id);
+
+    const { w, h } = tileSize(id, TEX);
+    const sw = w * this.scaleF, sh = h * this.scaleF;
+    const u = sw / FX_TILE_W;
+    const hh = sh / u / 2;
+    const box = fxBox(hh);
+    const cw = Math.max(2, Math.ceil(box.width * u)), ch = Math.max(2, Math.ceil(box.height * u));
+
+    const owner = st.players[st.owner.get(id)];
+    const own = owner ? ownerTint(owner.token.color) : 0xffffff;
+    const mortgaged = st.isMortgaged(id);
+    const env = {
+      hh,
+      headerBottom: nameBand(t.type).bottom,
+      tagY: (t.type === 'property' ? 0.385 : -0.22) * hh * 2,
+      house: opts.house ?? false,
+      hotel: opts.to === 5,
+      mortgaged,
+      src: this.tileSource(id, 'board', u),
+      graySrc: this.tileSource(id, 'board-gray', u),
+      wash: {
+        css: `#${own.toString(16).padStart(6, '0')}`,
+        alpha: owner ? OWNER_WASH(own) * (mortgaged ? 0.5 : 1) : 0,
+      },
+      glowFrom: opts.from ? GLOW_BY_HOUSES[Math.min(opts.from, 5)] / GLOW_BY_HOUSES[Math.min(opts.to ?? 1, 5)] : 0,
+      sfx: (name) => { if (opts.sound !== false) audio.sfx(name); },
+      setGlow: (v) => { if (v == null) this.glowVis.delete(id); else this.glowVis.set(id, v); },
+      setMort: (v) => { if (v == null) this.mortVis.delete(id); else this.mortVis.set(id, v); this.applyMortVis(id); },
+    };
+    const fx = makeTileFx(kind, env);
+    if (!fx) return Promise.resolve();
+
+    const key = `tilefx-${++this.fxSeq}`;
+    const under = this.textures.createCanvas(`${key}-u`, cw, ch);
+    const over = this.textures.createCanvas(`${key}-o`, cw, ch);
+    const c = tileCenter(id, TEX);
+    const sc = this.toScreen(c.x, c.y);
+    const a = tileAngle(id);
+    const ox = -box.left / box.width, oy = -box.top / box.height;
+    const imgU = this.add.image(sc.x, sc.y, `${key}-u`).setOrigin(ox, oy).setRotation(a);
+    const imgO = this.add.image(sc.x, sc.y, `${key}-o`).setOrigin(ox, oy).setRotation(a);
+    this.fxUnder.add(imgU);
+    this.fxLayer.add(imgO);
+
+    return new Promise((resolve) => {
+      this.fxRuns.set(id, { id, key, fx, t: 0, u, box, under, over, imgU, imgO, resolve });
+    });
+  }
+
+  /** Mỗi khung hình: vẽ lại mọi hoạt cảnh đang chạy lên canvas của nó. */
+  stepTileFx(dt) {
+    for (const run of this.fxRuns.values()) {
+      run.t += Math.min(dt, 0.05);
+      const t = Math.min(run.t, run.fx.dur);
+      const gu = run.under.getContext(), go = run.over.getContext();
+      for (const g of [gu, go]) {
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.clearRect(0, 0, run.under.width, run.under.height);
+        g.setTransform(run.u, 0, 0, run.u, -run.box.left * run.u, -run.box.top * run.u);
+      }
+      run.fx.draw(t, Math.min(dt, 0.05), gu, go);
+      run.under.refresh();
+      run.over.refresh();
+      if (run.t >= run.fx.dur) this.stopTileFx(run.id);
+    }
+  }
+
+  stopTileFx(id) {
+    const run = this.fxRuns.get(id);
+    if (!run) return;
+    this.fxRuns.delete(id);
+    run.fx.finish();
+    run.imgU.destroy();
+    run.imgO.destroy();
+    this.textures.remove(`${run.key}-u`);
+    this.textures.remove(`${run.key}-o`);
+    run.resolve();
+  }
+
+  stopAllTileFx() {
+    for (const id of [...this.fxRuns.keys()]) this.stopTileFx(id);
   }
 
   /**
@@ -910,6 +1181,7 @@ export default class BoardScene extends Phaser.Scene {
       .setTint(0x1B0B07)
       .setAlpha(0.24 + base * 0.14);
     this.glowLayer.add(shade);
+    this.glowFx.push({ img: shade, base: 0.24 + base * 0.14, id, beat: false });
 
     /* Ảnh đèn xoay thêm nửa vòng để trục +Y của nó chỉ vào lòng bàn cờ, gốc
        ảnh đặt đúng mép ô — nhờ vậy chỗ sáng nhất nằm sát ô, còn đuôi sáng thì
@@ -923,7 +1195,7 @@ export default class BoardScene extends Phaser.Scene {
         .setTint(tint)
         .setAlpha(alpha);
       this.glowLayer.add(img);
-      this.glowFx.push({ img, base: alpha });
+      this.glowFx.push({ img, base: alpha, id });
     };
 
     // Quầng loang — cho cảm giác có ánh sáng toả ra giữa bàn

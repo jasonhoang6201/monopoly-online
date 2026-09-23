@@ -602,7 +602,8 @@ export class Audio {
 
   /**
    * @param {'dice'|'shake'|'diceHit'|'step'|'coin'|'buy'|'build'|'card'|'jail'
-   *        |'bankrupt'|'firework'|'trade'|'turn'|'click'|'cardTick'} name
+   *        |'bankrupt'|'firework'|'trade'|'turn'|'click'|'cardTick'
+   *        |'knock'|'thud'|'rumble'|'crackle'|'redeem'} name
    * @param {object} [opts] tham số riêng của từng hiệu ứng (gain, i, …)
    */
   sfx(name, opts = {}) {
@@ -680,6 +681,70 @@ export class Audio {
       build(t) {
         this.woodBlock(t, 700, 0.18, this.sfxGain);
         this.woodBlock(t + 0.12, 900, 0.15, this.sfxGain);
+      },
+      /** Búa gõ xuống đầu ô — một nhịp trong ba nhịp của hoạt cảnh xây nhà. */
+      knock(t) {
+        this.woodBlock(t, 260, 0.22, this.sfxGain);
+        this.clack(t, 1800, 0.06, 3);
+      },
+      /** Cọc biển thế chấp cắm xuống đất: tiếng trầm rơi nhanh. */
+      thud(t) {
+        const o = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        o.frequency.setValueAtTime(130, t);
+        o.frequency.exponentialRampToValueAtTime(45, t + 0.2);
+        g.gain.setValueAtTime(0.45, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+        o.connect(g).connect(this.sfxGain);
+        o.start(t); o.stop(t + 0.26);
+      },
+      /** Đất rung: tiếng ồn lọc trầm, lên nhanh rồi tắt dần theo nhịp rung của ô. */
+      rumble(t) {
+        const n = this.noiseSource(1.5);
+        const lp = this.ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 140;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.001, t);
+        g.gain.exponentialRampToValueAtTime(0.9, t + 0.15);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
+        n.connect(lp).connect(g).connect(this.sfxGain);
+        n.start(t); n.stop(t + 1.55);
+      },
+      /** Lửa cháy: tiếng phù phù dải giữa, rải thêm tiếng lách tách. */
+      crackle(t) {
+        const dur = 2.0;
+        const n = this.noiseSource(dur);
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = 700;
+        bp.Q.value = 0.6;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.001, t);
+        g.gain.exponentialRampToValueAtTime(0.16, t + 0.3);
+        g.gain.setValueAtTime(0.16, t + dur * 0.7);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        n.connect(bp).connect(g).connect(this.sfxGain);
+        n.start(t); n.stop(t + dur + 0.05);
+        for (let i = 0; i < 14; i++) {
+          this.clack(t + 0.1 + Math.random() * dur * 0.7, 2500 + Math.random() * 2000, 0.03 + Math.random() * 0.05, 2);
+        }
+      },
+      /** Chuộc đất: ba nốt chuông đi lên. */
+      redeem(t) {
+        [784, 1047, 1319].forEach((f, i) => {
+          const o = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          const at = t + i * 0.09;
+          o.type = 'sine';
+          o.frequency.value = f;
+          g.gain.setValueAtTime(0.0001, at);
+          g.gain.exponentialRampToValueAtTime(0.14, at + 0.01);
+          g.gain.exponentialRampToValueAtTime(0.001, at + 0.6);
+          o.connect(g).connect(this.sfxGain);
+          g.connect(this.reverb);
+          o.start(at); o.stop(at + 0.62);
+        });
       },
       /** Chốt giao dịch: hợp âm rải đi lên. */
       trade(t) {

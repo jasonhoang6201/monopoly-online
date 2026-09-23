@@ -405,6 +405,20 @@ export class Game {
   }
 
   /**
+   * Hoạt cảnh động đất / hoả hoạn trên các ô vừa mất nhà — trên mọi máy.
+   * Xây nhà, thế chấp, chuộc lại thì không cần gọi: bàn cờ tự nhận ra từ ảnh
+   * chụp (`BoardScene.diffTileFx`). Riêng nhà giảm thì ảnh chụp không nói vì
+   * sao, nên máy cầm lái phải báo.
+   * @param {'quake'|'fire'} kind
+   * @param {number[]} ids
+   */
+  tileFx(kind, ids) {
+    if (!ids.length) return Promise.resolve();
+    this.netEmit('tilefx', { kind, ids });
+    return this.scene.tileFx(kind, ids);
+  }
+
+  /**
    * Nháy sáng ô mà nước vừa rồi đụng tới — trên **mọi máy**, không riêng máy
    * cầm lái.
    *
@@ -473,6 +487,9 @@ export class Game {
       sc.shake(0.012, 700);
     } else if (name === 'spot') {
       await sc.spotTiles(data.ids, data.ms);
+    } else if (name === 'tilefx') {
+      // Không `await`: hoạt cảnh chạy song song với dòng thông báo theo sau
+      sc.tileFx(data.kind, data.ids);
     } else if (name === 'eventcard') {
       /* Thẻ Thời Cuộc là chuyện của cả bàn, nên máy nào cũng phải thấy mặt thẻ.
          Cùng `seed` thì dải xếp y hệt và dừng đúng ô ấy, cả bàn hồi hộp cùng
@@ -1677,6 +1694,7 @@ export class Game {
     this.scene.shake(0.008, 420);
     this.hud.refresh();
     this.scene.refresh(st);
+    if (gone) this.tileFx('quake', [tileId]);
     this.sync();
     await this.bc.show(title,
       `<b>${p.name}</b> cho dỡ <b>${before === 5 && gone === 1 ? 'khách sạn' : `${gone} cấp nhà`}</b>
@@ -2275,7 +2293,7 @@ export class Game {
       // mấy máy còn lại, họ chỉ thấy dòng thông báo chứ không thấy nút nào bấm
       this.spot([id]);
       if (act === 'build') {
-        audio.sfx('build');
+        // Tiếng búa do hoạt cảnh xây nhà trên bàn cờ phát, khỏi kêu hai lần
         this.hud.flashMoney(playerId, false);
         this.bc.show(res.isHotel ? 'LÊN KHÁCH SẠN' : 'XÂY NHÀ',
           res.isHotel

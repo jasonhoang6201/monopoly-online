@@ -295,10 +295,12 @@ export class EventRunner {
         await this.g.payBank(seat, total);
         continue;
       }
+      const hit = lots.filter((l) => st.housesOn(l.id) > 0).map((l) => l.id);
       for (const lot of lots) this.collapse(lot.id);
       this.g.hud.refresh();
       this.g.scene.refresh(st);
       this.g.sync();
+      this.g.tileFx('quake', hit);
       await this.g.bc.show('NHÀ SẬP',
         `<b>${p.name}</b> mất một tầng nhà ở ${lots.map((l) => tileShortLabel(l.id)).join(', ')} — không đền bù.`,
         { kind: 'bad', ms: 4200 });
@@ -350,16 +352,20 @@ export class EventRunner {
       }
 
       let gone = 0;
+      const burnt = [];
       for (const lot of lots) {
+        const had = st.housesOn(lot.id);
         for (let i = 0; i < lot.lose && st.housesOn(lot.id) > 0; i++) {
           this.collapse(lot.id);
           gone += 1;
         }
+        if (st.housesOn(lot.id) < had) burnt.push(lot.id);
       }
       audio.sfx('bankrupt');
       this.g.hud.refresh();
       this.g.scene.refresh(st);
       this.g.sync();
+      this.g.tileFx('fire', burnt);
       await this.g.bc.show('CHÁY NHÀ',
         `<b>${p.name}</b> để mặc lửa cháy — mất <b>${gone} cấp nhà</b> ở
          ${lots.map((l) => tileShortLabel(l.id)).join(', ')}, không đền bù.`,
