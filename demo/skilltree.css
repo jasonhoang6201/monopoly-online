@@ -1,0 +1,73 @@
+/* Chỉ dùng cho trang mẫu cây kỹ năng — không đem vào game. */
+#lab.lab-skill { max-width: 980px; font-family: var(--serif); }
+.lab-skill .lab-title { font-family: var(--serif); }
+.lab-sub b { color: var(--gold-light); }
+
+.sk-seats { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.sk-seat {
+  flex: 1; min-width: 180px;
+  display: grid; grid-template-columns: auto 1fr; gap: 2px 9px; align-items: center;
+  padding: 10px 14px; text-align: left;
+  font: inherit; color: var(--paper); cursor: pointer;
+  border-radius: 11px;
+  background: rgba(36, 26, 18, .7);
+  border: 1px solid rgba(200, 160, 72, .25);
+}
+.sk-seat.on { border-color: var(--t); box-shadow: 0 0 0 1px var(--t), 0 0 18px color-mix(in srgb, var(--t) 30%, transparent); }
+.sk-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--t); grid-row: span 2; box-shadow: 0 0 8px var(--t); }
+.sk-dot.big { width: 20px; height: 20px; }
+.sk-sname { font-family: var(--serif); font-size: 14.5px; color: var(--gold-pale); }
+.sk-spts { font-size: 11px; color: var(--paper-deep); }
+
+.sk-panel, .sk-builds {
+  padding: 18px 20px; margin-bottom: 18px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #241A12, #170F0A);
+  border: 1px solid var(--gold-deep);
+}
+.sk-me-head { display: flex; align-items: center; gap: 12px; }
+.sk-me-head > div:nth-child(2) { flex: 1; display: flex; flex-direction: column; }
+.sk-me-head b { font-family: var(--serif); font-size: 20px; color: var(--gold-pale); }
+.sk-me-head span { font-size: 12px; color: var(--paper-deep); }
+.sk-pts {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 6px 16px; border-radius: 12px;
+  border: 1px solid var(--gold); background: rgba(200, 160, 72, .1);
+  transition: transform .3s var(--ease-out-back);
+}
+.sk-pts b { font-family: var(--serif); font-size: 28px; line-height: 1; color: var(--gold-light); }
+.sk-pts i { font-size: 10.5px; font-style: normal; color: var(--paper-deep); }
+.sk-pts.gain { transform: scale(1.18); box-shadow: 0 0 24px rgba(230, 200, 120, .55); }
+
+.sk-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0 14px; }
+.sk-have { display: flex; flex-direction: column; gap: 9px; }
+.sk-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.sk-bn {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 190px;
+  font-size: 12.5px; color: var(--c); font-weight: 600;
+}
+.sk-bn i { font-style: normal; font-weight: 400; font-size: 11px; color: var(--paper-deep); }
+.sk-bn .sk-ico { width: 18px; height: 18px; }
+.sk-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.sk-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px 3px 6px; border-radius: 999px;
+  font-size: 11.5px; color: #FFF8E6;
+  background: color-mix(in srgb, var(--c) 35%, #1A120C);
+  border: 1px solid color-mix(in srgb, var(--c) 70%, transparent);
+}
+.sk-chip .sk-ico { width: 15px; height: 15px; }
+.sk-chip.ult { border-color: var(--gold-light); box-shadow: 0 0 10px color-mix(in srgb, var(--c) 50%, transparent); }
+.sk-note { font-size: 12px; color: var(--paper-deep); opacity: .8; }
+
+.sk-builds h2 { font-family: var(--serif); font-size: 18px; color: var(--gold-pale); font-weight: 600; margin-bottom: 4px; }
+#builds { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 12px; }
+.sk-build {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px 14px; border-radius: 11px;
+  background: rgba(10, 6, 4, .35); border: 1px solid rgba(200, 160, 72, .2);
+}
+.sk-build header { display: flex; align-items: center; gap: 8px; }
+.sk-build header b { flex: 1; font-family: var(--serif); font-size: 15px; color: var(--gold-pale); }
+.sk-cost { font-size: 11px; color: var(--gold-light); }
+.sk-build p { font-size: 12px; line-height: 1.5; color: var(--paper-warm); }

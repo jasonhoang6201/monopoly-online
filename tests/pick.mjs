@@ -26,8 +26,11 @@ export async function pickOnBoard(page, id = null) {
   /* Bọc trong khối lệnh để không trả promise về: `onTileClick` là hàm async,
      nó chỉ kết thúc sau khi hộp xác nhận đóng — mà hộp ấy do chính bài kiểm
      bấm ở dòng dưới. Trả promise ra thì `evaluate` ngồi chờ chính mình. */
+  // Bảng chọn nhanh (kỹ năng Nhà Du Hành) chốt ngay khi bấm ô, không có hộp xác nhận
+  const quick = await page.locator('.tile-pick[data-quick]').count();
   await page.evaluate((t) => { window.__monopoly.scene.onTileClick(t); }, tile);
   await page.waitForTimeout(400);
+  if (quick) return tile;
   await page.locator('.scrim.show .modal-foot button.btn').first().click({ timeout: 10000 });
   await page.waitForTimeout(400);
   return tile;

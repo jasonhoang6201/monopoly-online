@@ -20,6 +20,8 @@ import {
 import { cardOf, CARD_KINDS, cardName, cardEffect, DECKS } from '../data/cards.js';
 import { inventoryModal } from '../ui/inventory.js';
 import { EventRunner } from './eventRunner.js';
+import { SkillPlay } from './skillPlay.js';
+import { has, watchCash, bumpFeat } from '../core/skills.js';
 import { snapshot, fromSnapshot, applySnapshot } from '../core/serialize.js';
 import { Hud, Broadcast } from '../ui/hud.js';
 import { QuickView } from '../ui/quickview.js';
@@ -80,6 +82,8 @@ export class Game {
     this.cardChain = 0;
     /** Người thi hành thẻ Thời Cuộc — xem `game/eventRunner.js`. */
     this.events = new EventRunner(this);
+    /** Kỹ năng trong lượt chơi — xem `game/skillPlay.js`. */
+    this.skills = new SkillPlay(this);
     /** Phòng online, hoặc null khi cả bàn ngồi chung một máy. */
     this.net = null;
     /**
@@ -1017,12 +1021,17 @@ export class Game {
           title: 'Chìa tờ giấy bãi nại — được thả ngay, miễn phí',
           onClick: () => this.guard(() => this.useJailCard()),
         }] : []),
-        { label: `Nộp ${money(JAIL_FINE)} ra tù`, key: 'n', cls: 'btn-gold', icon: coinSvg(),
-          disabled: p.money < JAIL_FINE, onClick: () => this.guard(() => this.payOutOfJail()) },
+        // Khách Quen Nhà Đá ra tù không mất tiền — cùng nút, cùng phím, chỉ đổi chữ
+        has(p, 'cnX2')
+          ? { label: 'Ra tù miễn phí', key: 'n', cls: 'btn-gold', icon: coinSvg(),
+              title: 'Khách Quen Nhà Đá: ra tù không phải nộp phạt',
+              onClick: () => this.guard(() => this.payOutOfJail()) }
+          : { label: `Nộp ${money(JAIL_FINE)} ra tù`, key: 'n', cls: 'btn-gold', icon: coinSvg(),
+              disabled: p.money < JAIL_FINE, onClick: () => this.guard(() => this.payOutOfJail()) },
         { label: 'Lắc xí ngầu (cầu đôi)', key: 'r', cls: 'btn-primary', pulse: true,
           icon: diceSvg(), title: 'Ra đôi thì được thả ngay',
           onClick: () => this.guard(() => this.rollInJail()) },
-        ...bag, trade, manage, bankrupt,
+        ...this.skills.buttons(p, rolled), ...bag, trade, manage, bankrupt,
       ]);
       return;
     }
@@ -1033,7 +1042,7 @@ export class Game {
             onClick: () => this.guard(() => this.endTurn()) }
         : { label: 'Lắc xí ngầu', key: 'r', cls: 'btn-primary', pulse: true, icon: diceSvg(),
             onClick: () => this.guard(() => this.takeRoll()) },
-      ...bag, trade, manage, bankrupt,
+      ...this.skills.buttons(p, rolled), ...bag, trade, manage, bankrupt,
     ]);
   }
 
@@ -1087,14 +1096,23 @@ export class Game {
   async takeRoll() {
     const st = this.state;
     const p = st.current;
-    const d = rollDice();
-    this.netEmit('dice', d);
-    await this.scene.rollDiceAnim(d.a, d.b);
+    const first = rollDice();
+    this.netEmit('dice', first);
+    await this.scene.rollDiceAnim(first.a, first.b);
 
-    // Đổ đôi lần thứ 3 → vào tù ngay
+    /* Kỹ năng sau khi lắc: Xí Ngầu Gian đổi kết quả, Quay Đầu đổi chiều đi.
+       Cược chốt theo kết quả **cuối cùng**, nên phải chạy sau hộp hỏi ấy. */
+    const { d, back } = await this.skills.afterRoll(p, first);
+    await this.skills.settleBets(p, d);
+    if (st.over || p.bankrupt) { await this.endTurn(); return; }
+    if (d.isDouble) p.doubles += 1;
+    await this.skills.rollPerks(p, d);
+    if (st.over || p.bankrupt) { await this.endTurn(); return; }
+
+    // Đổ đôi lần thứ 3 → vào tù ngay (Đôi Hên: trúng thưởng thay vì vào tù)
     if (d.isDouble) {
-      p.doubles += 1;
       if (p.doubles >= 3) {
+        if (await this.skills.jackpot(p)) { await this.endTurn(); return; }
         await this.bc.show('ĐỔ ĐÔI LẦN THỨ BA',
           `<b>${p.name}</b> đổ đôi ba lần liên tiếp — mời về <b>Khám Lớn</b>!`, { kind: 'bad' });
         await this.goToJail(p);
@@ -1105,7 +1123,7 @@ export class Game {
         `<b>${p.name}</b> ra đôi ${d.a} — được đi thêm một lượt nữa.`, { ms: 2200 });
     }
 
-    await this.advance(p, d.sum, d);
+    await this.advance(p, back ? -d.sum : d.sum, d);
 
     // Vào tù thì hết lượt ngay, kể cả khi vừa đổ đôi.
     if (st.over || p.bankrupt || p.inJail) { await this.endTurn(); return; }
@@ -1132,14 +1150,19 @@ export class Game {
       if (pos === 0 && steps > 0) passedGo = true;
     });
     p.pos = ((from + steps) % 40 + 40) % 40;
+    bumpFeat(p, 'steps', Math.abs(steps));
     this.hud.refresh();
     this.sync();
+    await this.skills.pickup(p);
 
     if (passedGo) {
       /* Lương có thể đang bị thẻ "mất mùa" cắt còn một nửa — hỏi luật chứ đừng
-         lấy thẳng hằng số. Và mỗi vòng qua đây là một nấc của thanh Thời Cuộc. */
+         lấy thẳng hằng số. Và mỗi vòng qua đây là một nấc của thanh Thời Cuộc.
+         Điểm kỹ năng và bộ đếm lần qua cộng **trước** khi tính lương: Thâm Niên
+         tính cả lần qua này. */
       const landed = p.pos === 0;      // dừng đúng ô 0, không chỉ đi ngang
-      const pay = st.salary(landed);
+      const points = this.skills.lapStart(p);
+      const { total: pay, parts } = st.payslip(landed, p);
       const cut = st.modMult('salary') !== 1;
       st.laps += 1;
       addPressure(st, PRESSURE.lap);
@@ -1147,10 +1170,18 @@ export class Game {
         ? ` — đạp trúng ô Bắt Đầu nên lương ×${GO_LANDING_MULT}${cut ? ', đã trừ mất mùa' : ''}`
         : (cut ? ' — mất mùa nên chỉ còn bấy nhiêu' : '');
       await this.bc.show(landed ? 'ĐẠP Ô BẮT ĐẦU' : 'QUA Ô BẮT ĐẦU',
-        `<b>${p.name}</b> lãnh lương <span class="up">${money(pay)}</span>${note}.`,
+        `<b>${p.name}</b> lãnh lương <span class="up">${money(pay)}</span>${note}
+         · <b>+${points} điểm kỹ năng</b>${points > 1 ? ' (có Lão Làng)' : ''} (đang có ${p.skillPoints}).`,
         { ms: landed ? 2800 : 2400 });
       await this.receiveFromBank(idx, pay);
+      this.skills.paid(p, parts);
+      await this.skills.lapEnd(p);
+      if (st.over || p.bankrupt) return;
     }
+
+    // Dừng chung ô với người khác: thành tựu và Hai Ngón chạy trước khi xử lý ô
+    await this.skills.landed(p);
+    if (st.over || p.bankrupt) return;
 
     this.scene.highlightTile(p.pos, p.token.color);
     await this.resolveTile(p, dice);
@@ -1167,6 +1198,7 @@ export class Game {
       case 'station':
       case 'utility':
         await this.resolveOwnable(p, t, dice);
+        if (t.type === 'station') await this.skills.express(p, dice);
         break;
 
       case 'chance':
@@ -1174,12 +1206,14 @@ export class Game {
         await this.resolveCard(p, t.type, dice);
         break;
 
-      case 'tax':
+      case 'tax': {
+        const tax = this.skills.cut(p, t.tax_amount);
         await this.bc.show(t.name.split(' (')[0].toUpperCase(),
-          `<b>${p.name}</b> phải nộp <span class="down">${money(t.tax_amount)}</span> cho ngân hàng.`,
+          `<b>${p.name}</b> phải nộp <span class="down">${money(tax)}</span> cho ngân hàng${this.skills.cutNote(p)}.`,
           { kind: 'bad' });
-        await this.payBank(p.id, t.tax_amount);
+        await this.payBank(p.id, tax);
         break;
+      }
 
       case 'corner':
         if (t.id === GOTO_JAIL_TILE) {
@@ -1200,6 +1234,7 @@ export class Game {
           } else {
             await this.bc.show('BẾN ĐẬU', `<b>${p.name}</b> nghỉ chân miễn phí.`, { ms: 2000 });
           }
+          await this.skills.parking(p);
         }
         break;
     }
@@ -1229,6 +1264,8 @@ export class Game {
         this.scene.refresh(st);
         await this.bc.show('TẬU ĐẤT',
           `<b>${p.name}</b> mua <b>${tileLabel(t.id)}</b> giá <span class="down">${money(t.price)}</span>.`);
+        await this.skills.brokerFees(p.id, t.id);
+        await this.skills.bought(p, t.id);
       } else {
         await this.bc.show('BỎ QUA', `<b>${p.name}</b> không mua <b>${tileLabel(t.id)}</b>.`, { ms: 2200 });
       }
@@ -1238,6 +1275,7 @@ export class Game {
     // Đất của chính mình
     if (ownerId === p.id) {
       await this.bc.show('ĐẤT NHÀ', `<b>${p.name}</b> về thăm đất của mình.`, { ms: 1900 });
+      await this.skills.atHome(p);
       return;
     }
 
@@ -1249,11 +1287,14 @@ export class Game {
     }
 
     const owner = st.players[ownerId];
-    const rent = st.rentFor(t.id, dice?.sum ?? 7);
+    const bill = this.skills.rentBill(p, t.id, dice);
+    const rent = bill.total;
+    // Thâu Tóm: ép mua lô này thay vì trả thuê
+    if (await this.skills.trySeize(p, t.id, rent)) return;
     await this.bc.show('TRẢ TIỀN THUÊ',
       `<b>${p.name}</b> trả <span class="down">${money(rent)}</span> cho <b>${owner.name}</b>
-       tại <b>${tileLabel(t.id)}</b>.`, { kind: 'bad' });
-    await this.payPlayer(p.id, ownerId, rent);
+       tại <b>${tileLabel(t.id)}</b>${this.skills.rentNote(p, t.id, bill)}.`, { kind: 'bad' });
+    if (await this.payPlayer(p.id, ownerId, rent)) this.skills.rentPaid(owner, bill);
   }
 
   /**
@@ -1340,9 +1381,10 @@ export class Game {
         `<b>${p.name}</b>: ${card.text} <span class="up">+${money(card.amount)}</span>`);
       await this.receiveFromBank(p.id, card.amount);
     } else {
+      const fine = this.skills.cut(p, -card.amount);
       await this.bc.show(title,
-        `<b>${p.name}</b>: ${card.text} <span class="down">−${money(-card.amount)}</span>`, { kind: 'bad' });
-      await this.payBank(p.id, -card.amount);
+        `<b>${p.name}</b>: ${card.text} <span class="down">−${money(fine)}</span>${this.skills.cutNote(p)}`, { kind: 'bad' });
+      await this.payBank(p.id, fine);
     }
   }
 
@@ -1376,10 +1418,11 @@ export class Game {
     if (bill.houses) parts.push(`${bill.houses} nhà × ${money(card.perHouse)}`);
     if (bill.hotels) parts.push(`${bill.hotels} khách sạn × ${money(card.perHotel)}`);
     await this.showFateCard(kind, card, { amount: -bill.amount, note: parts.join(' · '), seed });
+    const due = this.skills.cut(p, bill.amount);
     await this.bc.show(title,
-      `<b>${p.name}</b> nộp thuế nhà cửa <span class="down">${money(bill.amount)}</span>
-       — ${parts.join(', ')}.`, { kind: 'bad' });
-    await this.payBank(p.id, bill.amount);
+      `<b>${p.name}</b> nộp thuế nhà cửa <span class="down">${money(due)}</span>
+       — ${parts.join(', ')}${this.skills.cutNote(p)}.`, { kind: 'bad' });
+    await this.payBank(p.id, due);
   }
 
   /**
@@ -1766,6 +1809,7 @@ export class Game {
     const p = this.state.players[playerId];
     this.state.dryTurn = false;
     p.money += amount;
+    watchCash(p);
     this.hud.refresh();
     this.sync();
     this.hud.flashMoney(playerId, true);
@@ -1783,6 +1827,7 @@ export class Game {
     const p = this.state.players[playerId];
     this.state.dryTurn = false;
     p.money -= amount;
+    watchCash(p);
     this.hud.refresh();
     this.sync();
     this.hud.flashMoney(playerId, false);
@@ -1811,6 +1856,8 @@ export class Game {
     st.dryTurn = false;
     from.money -= amount;
     to.money += amount;
+    watchCash(from);
+    watchCash(to);
     st.debt = null;
     this.hud.refresh();
     this.sync();
@@ -2157,6 +2204,7 @@ export class Game {
     this.hud.refresh();
     this.sync();
     this.scene.highlightTile(JAIL_TILE, p.token.color);
+    await this.skills.jailed(p);
   }
 
   /**
@@ -2183,9 +2231,14 @@ export class Game {
   async payOutOfJail() {
     const st = this.state;
     const p = st.current;
-    await this.bc.show('NỘP TIỀN RA TÙ',
-      `<b>${p.name}</b> nộp <span class="down">${money(JAIL_FINE)}</span> để được tự do.`);
-    if (!(await this.payBank(p.id, JAIL_FINE))) { await this.endTurn(); return; }
+    if (this.skills.freeBail(p, JAIL_FINE)) {
+      await this.bc.show('RA TÙ MIỄN PHÍ',
+        `<b>${p.name}</b> là <b>Khách Quen Nhà Đá</b> — ra tù không mất đồng nào.`);
+    } else {
+      await this.bc.show('NỘP TIỀN RA TÙ',
+        `<b>${p.name}</b> nộp <span class="down">${money(JAIL_FINE)}</span> để được tự do.`);
+      if (!(await this.payBank(p.id, JAIL_FINE))) { await this.endTurn(); return; }
+    }
     st.releaseFromJail(p);
     this.hud.refresh();
     await this.takeRoll();
@@ -2202,6 +2255,8 @@ export class Game {
     const d = rollDice();
     this.netEmit('dice', d);
     await this.scene.rollDiceAnim(d.a, d.b);
+    await this.skills.rollPerks(p, d);
+    if (st.over || p.bankrupt) { await this.endTurn(); return; }
 
     if (d.isDouble) {
       st.releaseFromJail(p);
@@ -2219,11 +2274,14 @@ export class Game {
     this.hud.refresh();
 
     if (p.jailTurns >= MAX_JAIL_TURNS) {
+      const free = this.skills.freeBail(p, JAIL_FINE);
       await this.bc.show('HẾT HẠN 3 LƯỢT',
-        `<b>${p.name}</b> cầu đôi hụt lần thứ ${MAX_JAIL_TURNS} — phải nộp
+        free
+          ? `<b>${p.name}</b> cầu đôi hụt lần thứ ${MAX_JAIL_TURNS} — là <b>Khách Quen Nhà Đá</b> nên khỏi nộp phạt, đi ${d.sum} ô.`
+          : `<b>${p.name}</b> cầu đôi hụt lần thứ ${MAX_JAIL_TURNS} — phải nộp
          <span class="down">${money(JAIL_FINE)}</span> rồi đi ${d.sum} ô.`,
         { kind: 'bad' });
-      if (!(await this.payBank(p.id, JAIL_FINE))) { await this.endTurn(); return; }
+      if (!free && !(await this.payBank(p.id, JAIL_FINE))) { await this.endTurn(); return; }
       st.releaseFromJail(p);
       this.hud.refresh();
       await this.advance(p, d.sum, d);
@@ -2299,10 +2357,12 @@ export class Game {
           res.isHotel
             ? `<b>${p.name}</b> xây <b>khách sạn</b> ở <b>${label}</b>, trả lại 4 căn nhà cho ngân hàng.`
             : `<b>${p.name}</b> xây thêm một căn nhà ở <b>${label}</b> (<span class="down">−${money(res.cost)}</span>).`);
+        this.skills.contractorNote(res.payouts);
       } else if (act === 'sell') {
         this.hud.flashMoney(playerId, true);
         this.bc.show('BÁN NHÀ',
           `<b>${p.name}</b> bán lại một căn ở <b>${label}</b> (<span class="up">+${money(res.refund)}</span>).`);
+        this.skills.contractorNote(res.payouts);
       } else if (act === 'mortgage') {
         addPressure(this.state, PRESSURE.mortgage);
         this.hud.flashMoney(playerId, true);
@@ -2447,6 +2507,7 @@ export class Game {
        <br><b style="color:${B.token.css}">${B.name}</b> nhận: ${describe(st, offer.give, offer.giveMoney)}`,
       { kind: 'trade', ms: 6000 });
     await this.spot([...offer.give, ...offer.get], 2600);
+    await this.skills.tradeFees(offer);
 
     // Chủ mới của đất đang thế chấp được mời chuộc lại (phí = thế chấp + 10%)
     await this.offerRedeem(B.id, offer.give.filter((id) => st.isMortgaged(id)));

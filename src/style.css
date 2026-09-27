@@ -890,7 +890,7 @@ html, body {
   border: 1px solid rgba(200, 160, 72, .5);
   border-left-width: 4px;
 }
-.tp-acts { display: flex; gap: 8px; justify-content: center; margin-top: 13px; }
+.tp-acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 13px; }
 .tp-acts .btn { padding: 8px 16px; font-size: 12.5px; }
 
 /* Xếp tầng theo mức việc: việc chính chiếm trọn hàng trên cùng, hai việc
@@ -3141,8 +3141,13 @@ html, body {
   .tile-pick.nudge { animation-name: tp-nudge-side; }
 
   /* Cột hẹp: mỗi nút chiếm trọn một hàng, xếp dọc từ trên xuống */
+  /* `flex-start` chứ không `center` như bản rộng: khung cột cao hơn màn (người
+     có túi thẻ và vài kỹ năng bấm để dùng là lên 9 nút) thì phần tràn của một
+     cột căn giữa chìa ra **cả phía trên**, mà vùng cuộn không với tới phía
+     trên — nút Lắc xí ngầu nằm đầu cột bị đẩy khỏi màn, cuộn cũng không ra.
+     Khung vừa đủ chỗ thì hai cách căn trông y hệt nhau. */
   #actions {
-    flex-direction: column; flex-wrap: nowrap;
+    flex-direction: column; flex-wrap: nowrap; justify-content: flex-start;
     gap: 6px; padding: 10px; border-radius: 12px;
   }
   #actions .btn { flex: 0 0 auto; width: 100%; padding: 8px 10px; }

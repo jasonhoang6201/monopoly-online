@@ -15,6 +15,7 @@
  */
 import { BOARD, GROUPS, GROUP_TILES, money, tileLabel, tileShortLabel } from '../data/board.js';
 import { drawEvent, planEvent, autoRaise } from '../core/events.js';
+import { houseImmune } from '../core/skills.js';
 import { handoff } from '../ui/modal.js';
 import {
   bracePromptModal, firePromptModal, auctionBidModal, auctionResultModal,
@@ -595,6 +596,8 @@ export class EventRunner {
     this.g.hud.refresh();
     this.g.scene.refresh(st);
     this.g.sync();
+    // Đất ngân hàng bán qua đấu giá cũng là một lần "mua từ ngân hàng" — Môi Giới ăn hoa hồng
+    if (o.seller === null) await this.g.skills.brokerFees(win.seat, tileId);
 
     /* Bảng giá thay cho dòng thông báo cũ, và mở ở mọi máy chứ không riêng máy
        cầm lái. Không `await`: hộp cứ đứng đó tới lúc người chơi bấm, mỗi máy
@@ -753,6 +756,8 @@ function lotsBySeat(st, plan) {
   for (const lot of plan.tiles) {
     if (lot.lose <= 0 || lot.seat === null || lot.seat === undefined) continue;
     if (st.owner.get(lot.id) !== lot.seat || st.players[lot.seat].bankrupt) continue;
+    // Sổ Hồng / Di Sản: nhà không sập, khỏi hỏi chủ đất có chống đỡ không
+    if (houseImmune(st, lot.id)) continue;
     if (!bySeat.has(lot.seat)) bySeat.set(lot.seat, []);
     bySeat.get(lot.seat).push(lot);
   }

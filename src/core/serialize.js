@@ -10,6 +10,9 @@
  */
 import { GameState, TOKENS } from './state.js';
 
+/** `skillUse` lồng hai tầng (id → {n, gain, tick}): chép cả tầng trong, không thì hai bên dùng chung object. */
+const copyUse = (u) => Object.fromEntries(Object.entries(u ?? {}).map(([id, v]) => [id, { ...v }]));
+
 export function snapshot(st) {
   return {
     players: st.players.map((p) => ({
@@ -23,6 +26,16 @@ export function snapshot(st) {
       bankrupt: p.bankrupt,
       doubles: p.doubles,
       cards: p.cards.map((c) => ({ ...c })),
+      skillPoints: p.skillPoints,
+      skills: [...p.skills],
+      laps: p.laps,
+      cooldowns: { ...p.cooldowns },
+      usedTurn: { ...p.usedTurn },
+      skillLv: { ...p.skillLv },
+      lapUses: { ...p.lapUses },
+      jails: p.jails,
+      skillUse: copyUse(p.skillUse),
+      feats: { ...p.feats },
     })),
     turn: st.turn,
     order: st.order ? [...st.order] : null,
@@ -53,6 +66,9 @@ export function snapshot(st) {
     dryTurn: st.dryTurn,
     mods: st.mods.map((m) => ({ ...m })),
     eventPile: [...st.eventPile],
+    /* Cây kỹ năng: biển Di Sản và bộ đếm lượt cho kỹ năng "mỗi lượt 1 lần". */
+    heritage: [...st.heritage],
+    turnNo: st.turnNo,
   };
 }
 
@@ -84,6 +100,17 @@ export function applySnapshot(st, snap) {
     p.doubles = s.doubles;
     // `jailCards` là tên cũ hồi túi thẻ mới chỉ đựng vé ra tù
     p.cards = (s.cards ?? s.jailCards ?? []).map((c) => ({ ...c }));
+    // Ảnh chụp của ván mở trước khi có cây kỹ năng không mang mấy trường này
+    p.skillPoints = s.skillPoints ?? p.skillPoints;
+    p.skills = [...(s.skills ?? p.skills)];
+    p.laps = s.laps ?? p.laps;
+    p.cooldowns = { ...(s.cooldowns ?? p.cooldowns) };
+    p.usedTurn = { ...(s.usedTurn ?? p.usedTurn) };
+    p.skillLv = { ...(s.skillLv ?? p.skillLv) };
+    p.lapUses = { ...(s.lapUses ?? p.lapUses) };
+    p.jails = s.jails ?? p.jails;
+    p.skillUse = copyUse(s.skillUse ?? p.skillUse);
+    p.feats = { ...(s.feats ?? p.feats) };
   });
   st.turn = snap.turn;
   st.order = snap.order ? [...snap.order] : null;
@@ -112,6 +139,8 @@ export function applySnapshot(st, snap) {
   st.mods = (snap.mods ?? st.mods).map((m) => ({ ...m }));
   /* Ảnh chụp cũ mang hai chồng chia theo kỳ (`eventPiles`). Gộp lại thành một
      chồng thay vì bỏ đi, để ván đang chơi giữa lúc cập nhật không bị xáo lại. */
+  if (snap.heritage) st.heritage = new Set(snap.heritage);
+  st.turnNo = snap.turnNo ?? st.turnNo;
   if (snap.eventPile) st.eventPile = [...snap.eventPile];
   else if (snap.eventPiles) st.eventPile = [...(snap.eventPiles[1] ?? []), ...(snap.eventPiles[2] ?? [])];
   return st;

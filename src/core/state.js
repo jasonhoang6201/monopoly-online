@@ -10,6 +10,7 @@ import {
 } from '../data/board.js';
 import { CHANCE, CHEST, Deck } from '../data/cards.js';
 import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
+import { has, param, roll, ownerRentMult, houseImmune, credit } from './skills.js';
 
 /**
  * Bảng màu quân — quân cờ chỉ phân biệt bằng MÀU, không mang biểu tượng riêng.
@@ -75,6 +76,31 @@ export class Player {
      * @type {Array<{kind:string,index:number}>}
      */
     this.cards = [];
+
+    /* ---- cây kỹ năng (xem data/skills.js) ---- */
+    /** Điểm chưa tiêu — +1 mỗi lần qua ô Bắt Đầu. */
+    this.skillPoints = 0;
+    /** Id các kỹ năng đã học. Mảng chứ không Set để đi thẳng vào ảnh chụp. */
+    this.skills = [];
+    /** Số lần đã qua ô Bắt Đầu — Thâm Niên và Nhà Lâu Năm tính theo nó. */
+    this.laps = 0;
+    /** id kỹ năng → số lần qua ô Bắt Đầu còn phải chờ trước khi dùng lại. */
+    this.cooldowns = {};
+    /** id kỹ năng → số lượt (`GameState.turnNo`) lần cuối đã dùng — cho giới hạn "mỗi lượt 1 lần". */
+    this.usedTurn = {};
+    /** id kỹ năng → level, chỉ ghi ô từ level 2 trở lên (xem `levelOf`). */
+    this.skillLv = {};
+    /** id kỹ năng → số lần đã dùng từ lần qua ô Bắt Đầu gần nhất — cho kỹ năng có `charges`. */
+    this.lapUses = {};
+    /** Số lần đã vào tù — Liên Đoàn Lao Động trừ tỉ lệ theo số này. */
+    this.jails = 0;
+    /**
+     * id kỹ năng → `{n, gain}`: số lần kỹ năng đã chạy và số tiền nó mang về
+     * từ lúc học — điều kiện lên level (xem `credit` trong core/skills.js).
+     */
+    this.skillUse = {};
+    /** Bộ đếm thành tựu mở khoá kỹ năng ẩn (xem `FEATS` trong data/skills.js). */
+    this.feats = {};
   }
 }
 
@@ -159,6 +185,18 @@ export class GameState {
     this.mods = [];
     /** Chồng thẻ Thời Cuộc đã xáo — một chồng cho cả bộ. @type {string[]} */
     this.eventPile = [];
+
+    /**
+     * Ô mang biển Di Sản (kỹ năng Phố Cổ): thuê ×1.5, không bị dỡ hay ép mua.
+     * Biển gỡ khi khách sạn trên ô bị hạ. @type {Set<number>}
+     */
+    this.heritage = new Set();
+    /**
+     * Đếm lượt từ đầu ván, tăng ở `nextTurn`. Kỹ năng "mỗi lượt 1 lần" đánh dấu
+     * bằng con số này thay vì một cờ bật/tắt: `beginTurn` chạy lại nhiều lần
+     * trong cùng một lượt (ảnh chụp về, sổ ghế đổi), xoá cờ ở đó là cho dùng lại.
+     */
+    this.turnNo = 0;
   }
 
   // ------------------------------------------------- hiệu ứng đang hiệu lực
@@ -189,17 +227,43 @@ export class GameState {
     return this.mods.some((m) => m.type === 'frozen' && m.tiles.includes(tileId));
   }
 
-  /** Giá xây một căn ở ô này, đã tính bão giá vật liệu. */
+  /** Giá xây một căn ở ô này, đã tính bão giá vật liệu và kỹ năng Mái Ấm của chủ đất. */
   buildCost(tileId) {
-    return Math.ceil(BOARD[tileId].house_cost * this.modMult('build'));
+    const owner = this.ownerOf(tileId);
+    const cut = has(owner, 'ac1') ? 1 - param(owner, 'ac1').cut : 1;
+    return Math.ceil(BOARD[tileId].house_cost * this.modMult('build') * cut);
   }
 
   /**
-   * Lương lãnh khi qua ô Bắt Đầu, đã tính mất mùa.
-   * @param {boolean} [landed] dừng đúng ô 0 chứ không chỉ đi ngang — ×1.5.
+   * Lương lãnh khi qua ô Bắt Đầu, đã tính mất mùa và kỹ năng của người lãnh.
+   * @param {boolean} [landed] dừng đúng ô 0 chứ không chỉ đi ngang — ×1.5
+   *   (×2 nếu có Về Nhà).
+   * @param {?Player} [p] người lãnh; bỏ trống là lương gốc.
    */
-  salary(landed = false) {
-    return Math.round(GO_SALARY * this.modMult('salary') * (landed ? GO_LANDING_MULT : 1));
+  salary(landed = false, p = null) {
+    return this.payslip(landed, p).total;
+  }
+
+  /**
+   * Lương kèm phần mỗi kỹ năng góp vào — controller ghi phần ấy vào tiến độ
+   * lên level của từng kỹ năng. Phần của Tăng Ca, Thâm Niên đã nhân mất mùa
+   * và hệ số đạp ô; phần của Về Nhà là khoản vượt hệ số đạp ô thường (×1.5).
+   * @returns {{total:number, parts:Object<string,number>}}
+   */
+  payslip(landed = false, p = null) {
+    const mod = this.modMult('salary');
+    const parts = {};
+    let base = GO_SALARY;
+    // Level 1 có khoảng ngẫu nhiên: mỗi lần lãnh lương rút lại một lần
+    if (has(p, 'cn2a')) base += (parts.cn2a = roll(param(p, 'cn2a').bonus));
+    if (has(p, 'cn3')) {
+      const { cap, perLap } = param(p, 'cn3');
+      base += (parts.cn3 = Math.min(cap, roll(perLap) * (p.laps ?? 0)));
+    }
+    const land = landed ? (has(p, 'dh2b') ? param(p, 'dh2b').goMult : GO_LANDING_MULT) : 1;
+    for (const id of Object.keys(parts)) parts[id] *= mod * land;
+    if (landed && has(p, 'dh2b')) parts.dh2b = base * mod * (land - GO_LANDING_MULT);
+    return { total: Math.round(base * mod * land), parts };
   }
 
   /** Đếm ngược mọi hiệu ứng một lượt, bỏ những cái đã hết hạn. */
@@ -243,6 +307,21 @@ export class GameState {
   hasFullGroup(playerId, group) {
     const ids = GROUP_TILES[group];
     return ids.length > 0 && ids.every((id) => this.owner.get(id) === playerId);
+  }
+
+  /**
+   * Những ô trong bộ màu mà người chơi được xây: cả bộ khi đủ bộ; hoặc 2 ô
+   * đang giữ của một bộ 3 ô khi có Sổ Hồng. Rỗng là chưa được xây.
+   *
+   * Luật xây đều tay và luật thế chấp chỉ xét trong đúng những ô này — ô thứ
+   * ba nằm trong tay người khác, chủ Sổ Hồng không quyết được gì ở đó.
+   */
+  buildGroup(playerId, group) {
+    const ids = GROUP_TILES[group];
+    if (this.hasFullGroup(playerId, group)) return ids;
+    const mine = ids.filter((id) => this.owner.get(id) === playerId);
+    if (ids.length === 3 && mine.length === 2 && has(this.players[playerId], 'ac3')) return mine;
+    return [];
   }
 
   /** Số nhà ga người chơi đang sở hữu. */
@@ -298,7 +377,7 @@ export class GameState {
     // Giấy tờ thất lạc thì chủ đất chưa đòi tiền ai được, y như đang thế chấp.
     if (ownerId === undefined || this.isMortgaged(tileId) || this.isFrozen(tileId)) return 0;
 
-    const k = this.rentMult(tileId);
+    const k = this.rentMult(tileId) * ownerRentMult(this, tileId);
     if (t.type === 'station') {
       return Math.round(STATION_RENT[this.stationCount(ownerId)] * k);
     }
@@ -322,16 +401,21 @@ export class GameState {
    * Có được xây thêm 1 nhà (hoặc lên khách sạn) trên ô này không?
    * Trả về { ok, reason, isHotel, cost }.
    */
-  canBuild(playerId, tileId) {
+  /**
+   * @param {{free?:boolean}} [o] `free`: căn nhà tặng của Phố Cổ — không xét
+   *   tiền, không xét lệnh giới nghiêm (kỹ năng chứ không phải thợ thuê).
+   */
+  canBuild(playerId, tileId, o = {}) {
     const t = BOARD[tileId];
     if (t.type !== 'property') return { ok: false, reason: 'Chỉ đất mới xây được nhà.' };
-    if (this.hasMod('freeze-build')) return { ok: false, reason: 'Đang giới nghiêm — thợ thuyền nghỉ hết.' };
+    if (!o.free && this.hasMod('freeze-build')) return { ok: false, reason: 'Đang giới nghiêm — thợ thuyền nghỉ hết.' };
     if (this.owner.get(tileId) !== playerId) return { ok: false, reason: 'Không phải đất của bạn.' };
-    if (!this.hasFullGroup(playerId, t.color_group)) {
+    const group = this.buildGroup(playerId, t.color_group);
+    if (!group.length) {
       return { ok: false, reason: `Cần đủ bộ ${GROUPS[t.color_group].name}.` };
     }
     // Không xây được trên nhóm có ô đang thế chấp.
-    if (GROUP_TILES[t.color_group].some((id) => this.isMortgaged(id))) {
+    if (group.some((id) => this.isMortgaged(id))) {
       return { ok: false, reason: 'Trong bộ còn ô đang thế chấp.' };
     }
 
@@ -339,7 +423,7 @@ export class GameState {
     if (cur >= 5) return { ok: false, reason: 'Đã có khách sạn.' };
 
     // Xây đều tay: không ô nào được hơn ô khác cùng bộ quá 1 căn.
-    const min = Math.min(...GROUP_TILES[t.color_group].map((id) => this.housesOn(id)));
+    const min = Math.min(...group.map((id) => this.housesOn(id)));
     if (cur > min) return { ok: false, reason: 'Phải xây đều các ô trong bộ.' };
 
     const isHotel = cur === 4;
@@ -349,17 +433,23 @@ export class GameState {
       return { ok: false, reason: 'Ngân hàng đã hết nhà (32 căn).' };
     }
 
-    const cost = this.buildCost(tileId);
+    const cost = o.free ? 0 : this.buildCost(tileId);
     if (this.players[playerId].money < cost) return { ok: false, reason: 'Không đủ tiền.' };
 
     return { ok: true, isHotel, cost };
   }
 
   /** Xây 1 nhà, hoặc lên khách sạn (trả lại 4 căn nhà cho ngân hàng). */
-  build(playerId, tileId) {
-    const check = this.canBuild(playerId, tileId);
+  build(playerId, tileId, o = {}) {
+    const check = this.canBuild(playerId, tileId, o);
     if (!check.ok) return check;
-    this.players[playerId].money -= check.cost;
+    const p = this.players[playerId];
+    p.money -= check.cost;
+    // Tiến độ lên level: Mái Ấm tính số tiền được bớt, Sổ Hồng tính căn xây trên bộ chưa đủ
+    if (!o.free && has(p, 'ac1')) {
+      credit(p, 'ac1', Math.ceil(BOARD[tileId].house_cost * this.modMult('build')) - check.cost);
+    }
+    if (!this.hasFullGroup(playerId, BOARD[tileId].color_group)) credit(p, 'ac3');
     if (check.isHotel) {
       this.houses.set(tileId, 5);
       this.bankHouses += 4;   // trả 4 căn nhà về kho
@@ -368,7 +458,34 @@ export class GameState {
       this.houses.set(tileId, this.housesOn(tileId) + 1);
       this.bankHouses -= 1;
     }
+    check.payouts = this.payContractors(playerId, 'build');
     return check;
+  }
+
+  /**
+   * Thầu Vật Liệu: mỗi căn người khác xây / bán / bị dỡ, ngân hàng trả cho
+   * những ai học kỹ năng này (trừ chính chủ căn nhà).
+   *
+   * Cộng thẳng vào ví ở đây chứ không để controller làm: bảng quản lý tài sản
+   * gọi `build` / `sellHouse` trực tiếp, và máy cầm lái còn làm lại chúng khi
+   * con nợ ở máy khác xoay tiền (`applyRaiseActs`) — tiền thầu phải đi theo
+   * đúng một đường với căn nhà, không thì có đường xây mà quên trả.
+   *
+   * Mỗi nhà thầu nhận theo level **của mình**, nên khoản tiền tính riêng từng
+   * người chứ không truyền một con số chung vào.
+   * @param {'build'|'sell'} kind
+   * @returns {Array<{seat:number, amount:number}>}
+   */
+  payContractors(builderId, kind) {
+    const out = [];
+    for (const q of this.players) {
+      if (q.id === builderId || !has(q, 'dc2b')) continue;
+      const amount = roll(param(q, 'dc2b')[kind]);
+      q.money += amount;
+      credit(q, 'dc2b', amount);
+      out.push({ seat: q.id, amount });
+    }
+    return out;
   }
 
   /** Có bán lại được 1 cấp nhà không? */
@@ -384,7 +501,10 @@ export class GameState {
     // Phá đều tay.
     const max = Math.max(...GROUP_TILES[t.color_group].map((id) => this.housesOn(id)));
     if (cur < max) return { ok: false, reason: 'Phải bán đều các ô trong bộ.' };
-    return { ok: true, refund: Math.floor(t.house_cost / 2) };
+    // Sổ Hồng level 2–3 bán lại được hơn nửa giá xây
+    const owner = this.players[playerId];
+    const back = has(owner, 'ac3') ? param(owner, 'ac3').refund : 0.5;
+    return { ok: true, refund: Math.floor(t.house_cost * back) };
   }
 
   /** Bán 1 cấp nhà lại cho ngân hàng, lấy về nửa giá xây. */
@@ -392,7 +512,9 @@ export class GameState {
     const check = this.canSellHouse(playerId, tileId);
     if (!check.ok) return check;
     const cur = this.housesOn(tileId);
+    check.payouts = this.payContractors(playerId, 'sell');
     if (cur === 5) {
+      this.heritage.delete(tileId);
       this.houses.set(tileId, 4);
       this.bankHouses -= 4;
       this.bankHotels += 1;
@@ -417,7 +539,11 @@ export class GameState {
   demolish(tileId) {
     const cur = this.housesOn(tileId);
     if (cur === 0) return 0;
+    // Sổ Hồng và biển Di Sản: thẻ hay thiên tai đều không dỡ được
+    if (houseImmune(this, tileId)) return 0;
+    this.payContractors(this.owner.get(tileId), 'sell');
     if (cur === 5) {
+      this.heritage.delete(tileId);
       this.bankHotels += 1;
       if (this.bankHouses >= 4) { this.houses.set(tileId, 4); this.bankHouses -= 4; }
       else this.houses.delete(tileId);
@@ -432,7 +558,8 @@ export class GameState {
   /** Dỡ sạch nhà cửa trên một ô, trả về số **cấp** đã dỡ (khách sạn tính 5). */
   clearHouses(tileId) {
     const levels = this.housesOn(tileId) === 5 ? 5 : this.housesOn(tileId);
-    while (this.housesOn(tileId) > 0) this.demolish(tileId);
+    // Ô miễn dỡ thì `demolish` trả 0 mà nhà vẫn còn — dừng, đừng quay mãi
+    while (this.housesOn(tileId) > 0 && this.demolish(tileId)) { /* dỡ tiếp */ }
     return levels;
   }
 
@@ -498,6 +625,7 @@ export class GameState {
     player.pos = JAIL_TILE;
     player.inJail = true;
     player.jailTurns = 0;
+    player.jails = (player.jails ?? 0) + 1;
     player.doubles = 0;
   }
 
@@ -555,6 +683,7 @@ export class GameState {
       this.houses.delete(tileId);
       this.owner.delete(tileId);
       this.mortgaged.delete(tileId);
+      this.heritage.delete(tileId);
     }
     // Thẻ còn trong túi người vỡ nợ thì trả về bộ, đừng chôn theo họ
     while (p.cards.length) this.dropCard(playerId);
@@ -570,6 +699,7 @@ export class GameState {
    */
   nextTurn() {
     this.tickMods();
+    this.turnNo += 1;
     // Lượt mới bắt đầu ở thế "chưa có đồng nào đổi chủ"
     this.dryTurn = true;
     const ord = this.playOrder;

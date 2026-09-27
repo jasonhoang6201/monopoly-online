@@ -4,6 +4,7 @@
  * phá sản và tổng kết ván.
  */
 import { openModal, handoff } from './modal.js';
+import { mountSkillTree } from './skillTree.js';
 import {
   BOARD, GROUPS, money, tileLabel, tileShortLabel, JAIL_FINE, START_MONEY,
 } from '../data/board.js';
@@ -1003,6 +1004,12 @@ export function playerModal(state, playerId) {
   const stat = (v, label, cls = '') => `<div class="pstat ${cls}"><b>${v}</b><span>${label}</span></div>`;
 
   const body = `
+    <div class="ptabs" role="tablist">
+      <button type="button" class="ptab on" role="tab" data-tab="assets" aria-selected="true">Tài sản</button>
+      <button type="button" class="ptab" role="tab" data-tab="skills" aria-selected="false">
+        Cây kỹ năng<span class="ptab-n">${p.skills?.length ?? 0}</span></button>
+    </div>
+    <div class="ppane" data-pane="assets">
     <div class="phead">
       <span class="phead-token" style="background-image:url('${tokenImage(p.token)}')"></span>
       <span class="phead-main">
@@ -1042,7 +1049,9 @@ export function playerModal(state, playerId) {
         <b style="color:#FF8A7A">Đang thế chấp</b> — tổng tiền chuộc lại
         <b>${money(mortgaged.reduce((s, id) => s + BOARD[id].redeem, 0))}</b>
         (đã gồm lãi 10%): ${mortgaged.map((id) => esc(tileLabel(id))).join(' · ')}
-      </div>` : ''}`;
+      </div>` : ''}
+    </div>
+    <div class="ppane ppane-skills" data-pane="skills" hidden></div>`;
 
   return openModal({
     eyebrow: 'BẢNG TÀI SẢN',
@@ -1052,10 +1061,26 @@ export function playerModal(state, playerId) {
     body,
     scrimClose: true,   // chỉ để xem — bấm ra ngoài là đóng
     buttons: [{ label: 'Đóng', value: null, cls: 'btn-ghost' }],
-    onMount: (bodyEl, close) => {
+    onMount: (bodyEl, close, modal) => {
       bodyEl.querySelectorAll('.deedcard.clickable').forEach((el) => {
         el.addEventListener('click', () => close({ openTile: +el.dataset.tile }));
       });
+      /* Cây chỉ dựng khi mở tab lần đầu: đa số lần mở bảng tài sản là để xem
+         đất, khỏi tốn công dựng 25 ô + đường nối SVG cho không. */
+      const pane = bodyEl.querySelector('[data-pane="skills"]');
+      bodyEl.querySelectorAll('.ptab').forEach((tab) => tab.addEventListener('click', () => {
+        const key = tab.dataset.tab;
+        bodyEl.querySelectorAll('.ptab').forEach((t) => {
+          t.classList.toggle('on', t === tab);
+          t.setAttribute('aria-selected', String(t === tab));
+        });
+        bodyEl.querySelectorAll('.ppane').forEach((x) => { x.hidden = x.dataset.pane !== key; });
+        // Màn thấp: tab cây ẩn tiêu đề + chân hộp để cây đủ chỗ (skillTree.css), ✕ trên thanh điểm thay nút Đóng
+        modal.classList.toggle('ptree-on', key === 'skills');
+        if (key === 'skills' && !pane.firstChild) {
+          pane.appendChild(mountSkillTree(p, { readOnly: true, onClose: () => close(null) }).el);
+        }
+      }));
     },
   });
 }

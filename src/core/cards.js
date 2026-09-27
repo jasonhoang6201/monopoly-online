@@ -13,6 +13,7 @@
  */
 import { BOARD, GROUPS, GROUP_TILES } from '../data/board.js';
 import { KEEPABLE, cardOf } from '../data/cards.js';
+import { houseImmune } from './skills.js';
 
 /** Tiền đền khi cưỡng chế mua đất: giá gốc cộng thêm 25%. */
 export const SEIZE_RATE = 1.25;
@@ -116,9 +117,9 @@ export function cardTargets(st, card, seat) {
     .map(([id]) => id);
 
   switch (cardType(card)) {
-    // Có nhà mới dỡ được
+    // Có nhà mới dỡ được; ô có Sổ Hồng hay biển Di Sản thì không dỡ nổi
     case 'demolish':
-      return foreign.filter((id) => st.housesOn(id) > 0).sort((a, b) => a - b);
+      return foreign.filter((id) => st.housesOn(id) > 0 && !houseImmune(st, id)).sort((a, b) => a - b);
 
     /* Cưỡng chế mua: chỉ lô đất trống (nhà cửa không sang tên theo, y như luật
        giao dịch), và chỉ lô mà người rút **trả nổi tiền đền** bằng tiền mặt —

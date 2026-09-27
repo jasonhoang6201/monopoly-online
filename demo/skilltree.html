@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Cây kỹ năng (bản mẫu)</title>
+  <link rel="stylesheet" href="/fonts/fonts.css" />
+  <link rel="stylesheet" href="/src/style.css" />
+  <link rel="stylesheet" href="/demo/demo.css" />
+  <link rel="stylesheet" href="/demo/skilltree.css" />
+</head>
+<body>
+  <div id="app">
+    <main id="lab" class="lab-skill">
+      <header class="lab-head">
+        <div class="lab-title">CÂY KỸ NĂNG</div>
+        <p class="lab-sub">
+          Bản mẫu cho <code>src/ui/skillTree.js</code> — chưa gắn vào luật ván chơi.
+          Mỗi lần qua ô Bắt Đầu được <b>+1 điểm</b>. Giá: cấp 1 = 1, cấp 2 = 1, cấp 3 = 2,
+          tối thượng = 3 → đi thẳng một nhánh cần <b>7 điểm</b> tới tối thượng.
+        </p>
+      </header>
+
+      <section class="sk-seats" id="seats"></section>
+
+      <section class="sk-panel" id="me"></section>
+
+      <section class="sk-builds">
+        <h2>Lối build mẫu</h2>
+        <p class="sk-note">Bấm “Áp thử” để nạp nguyên lối build vào người chơi đang chọn rồi mở cây xem.</p>
+        <div id="builds"></div>
+      </section>
+    </main>
+    <div id="modal-root"></div>
+  </div>
+  <script type="module" src="/demo/skilltree.js"></script>
+</body>
+</html>

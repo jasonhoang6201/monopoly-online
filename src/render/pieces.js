@@ -174,3 +174,91 @@ export function paintCoin(s = 48) {
   }
   return cv;
 }
+
+/* ------------------------------------------------------------- hào quang */
+
+/**
+ * Vầng sáng tràn ra ngoài viền quân bao nhiêu điểm ảnh, theo bề ngang texture
+ * quân. BoardScene cũng gọi hàm này để đặt điểm neo, nên chỉ chỉnh ở đây.
+ */
+export const auraPad = (w) => Math.round(w * 0.13);
+
+/**
+ * Vầng sáng bo theo viền quân của người đã học kỹ năng tối thượng.
+ *
+ * Lấy dáng quân từ chính texture quân (bỏ bóng đổ mờ dưới đế — chỉ giữ điểm
+ * ảnh gần đặc), tô dáng đó bằng màu nhánh, rồi in lại quanh vị trí gốc theo
+ * nhiều vòng bán kính tăng dần với độ trong thấp. Chỗ in chồng nhiều lần (sát
+ * viền quân) đậm, càng ra xa càng ít lần chồng nên nhạt dần — thành vầng sáng
+ * ôm dáng quân. Không dùng `ctx.filter = blur` vì Safari chưa hỗ trợ trên
+ * canvas: ở đó vầng sáng sẽ thành một cái bóng viền cứng.
+ *
+ * Màu trắng (đủ 5 tối thượng) gần trùng nền kem của ô đất: vòng ngoài cùng in
+ * màu tối mờ trước, vầng trắng in đè lên trong, nên vẫn tách khỏi nền.
+ * Canvas trả về rộng hơn texture quân `pad` điểm ảnh mỗi phía; BoardScene đặt
+ * nó trùng tâm với quân và dưới lớp quân, nên phần giữa bị thân quân che,
+ * chỉ lộ vầng sáng quanh viền.
+ * @param {HTMLCanvasElement|HTMLImageElement} token texture quân (paintToken)
+ * @param {string} color màu hex (`ultColor` trong core/skills.js)
+ * @returns {{cv: HTMLCanvasElement, pad: number}}
+ */
+export function paintAura(token, color) {
+  const W = token.width, H = token.height;
+  const pad = auraPad(W);
+  const cv = canvas(W + pad * 2, H + pad * 2);
+  const ctx = cv.getContext('2d');
+  const RINGS = 6, DIRS = 16;
+  const ring = (sil, from, to, alpha) => {
+    for (let r = from; r <= to; r++) {
+      const rad = (pad * r) / RINGS;
+      ctx.globalAlpha = alpha * (1 - (r - 1) / RINGS);
+      for (let d = 0; d < DIRS; d++) {
+        const a = (d / DIRS) * Math.PI * 2 + r * 0.4;
+        ctx.drawImage(sil, pad + Math.cos(a) * rad, pad + Math.sin(a) * rad);
+      }
+    }
+  };
+  if (color.toUpperCase() === '#FFFFFF') {
+    ring(silhouette(token, () => '#3a2a1c'), 3, RINGS, 0.14);
+    ring(silhouette(token, () => color), 1, 4, 0.2);
+  } else {
+    ring(silhouette(token, () => color), 1, RINGS, 0.16);
+  }
+  ctx.globalAlpha = 1;
+  return { cv, pad };
+}
+
+/**
+ * Một bóng mờ khi quân đi: giữ nguyên hình và khối sáng tối của quân, phủ màu
+ * hào quang lên 60% — nhìn ra vẫn là quân đó, mà màu đủ đậm để nhận ra. Độ
+ * trong do BoardScene đặt theo khoảng cách tới quân.
+ * @param {HTMLCanvasElement|HTMLImageElement} token texture quân (paintToken)
+ * @param {string} color màu hex của một nhánh
+ */
+export function paintGhost(token, color) {
+  return silhouette(token, () => color, 0.6);
+}
+
+/**
+ * Dáng quân không kèm bóng đổ dưới đế: điểm ảnh nào độ đặc dưới ~55% (bóng đổ
+ * vẽ ở 34%) thì xoá hẳn, còn lại giữ nguyên để mép quân không bị răng cưa.
+ * `tint` < 1 thì giữ hình quân bên dưới và phủ màu lên theo tỉ lệ đó; bằng 1
+ * thì tô đặc màu.
+ */
+function silhouette(token, fill, tint = 1) {
+  const W = token.width, H = token.height;
+  const cv = canvas(W, H);
+  const ctx = cv.getContext('2d');
+  ctx.drawImage(token, 0, 0);
+  const img = ctx.getImageData(0, 0, W, H);
+  const px = img.data;
+  for (let i = 3; i < px.length; i += 4) if (px[i] < 140) px[i] = 0;
+  ctx.putImageData(img, 0, 0);
+  ctx.globalCompositeOperation = 'source-atop';
+  ctx.globalAlpha = tint;
+  ctx.fillStyle = fill(ctx);
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  return cv;
+}

@@ -36,20 +36,26 @@ function tileMeta(state, id, owned) {
  * @param {import('../scenes/BoardScene.js').default} scene
  * @param {import('../core/state.js').GameState} state
  * @param {number[]} ids các ô chọn được
- * @param {{eyebrow:string,title:string,sub:string,note?:string,confirm:string,
- *          owned?:boolean,cancel?:string}} text `cancel` là nhãn nút bỏ ngang;
+ * @param {{eyebrow:string,title:string,sub:string,note?:string,confirm?:string,
+ *          owned?:boolean,cancel?:string,quick?:boolean,
+ *          extra?:Array<{label:string,value:*}>}} text `cancel` là nhãn nút bỏ ngang;
  *   bỏ trống thì phiên chọn này bắt buộc phải ra một ô. Chỉ đặt khi bên gọi còn
  *   lùi lại được — thẻ tự lôi ra khỏi túi thì lùi được, sự kiện ép chọn thì không.
+ *   `quick`: bấm ô là chốt luôn, không mở hộp xác nhận — dùng khi chỉ có vài ô
+ *   sáng (kỹ năng Nhà Du Hành chọn 1–3 ô đích), bấm lỡ vào ô tối thì không ăn,
+ *   nên hộp xác nhận chỉ thêm một cú bấm. `extra`: thêm nút cạnh nút bỏ ngang,
+ *   bấm thì trả về `value` của nút ấy thay cho số ô.
  * @param {number} [ms] bản online: hạn chọn. Hết giờ thì lấy ô **rẻ nhất** —
  *   bỏ trống thì sự kiện đứng lại, mà tự lấy ô đắt thì hoá ra phạt người mất
  *   kết nối nặng hơn người ngồi bấm. Phiên bỏ ngang được thì hết giờ là bỏ
  *   ngang, vì chưa có gì xảy ra để mà phải gánh hậu quả.
- * @returns {Promise<?number>} ô đã chốt, `null` nếu bỏ ngang
+ * @returns {Promise<?number|*>} ô đã chốt, `null` nếu bỏ ngang, hoặc `value` của nút `extra`
  */
 export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
   const cheapest = [...ids].sort((a, b) => BOARD[a].price - BOARD[b].price)[0];
   const owned = text.owned !== false;
   const cancel = text.cancel ?? null;
+  const extra = text.extra ?? [];
 
   return new Promise((resolve) => {
     const hud = document.getElementById('board-hud');
@@ -60,12 +66,14 @@ export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
       <div class="tp-title">${text.title}</div>
       <div class="tp-sub">${text.sub}</div>
       <div class="tp-call">Bấm vào <b>ô đang sáng</b> trên bàn cờ —
-        có <b>${ids.length}</b> ô chọn được</div>
+        ${text.quick ? 'bấm là đi luôn' : `có <b>${ids.length}</b> ô chọn được`}</div>
       ${text.note ? `<div class="tp-note">${text.note}</div>` : ''}
       <div class="tp-timer" hidden></div>
-      ${cancel ? `<div class="tp-acts">
-        <button type="button" class="btn btn-ghost tp-cancel">${esc(cancel)}</button>
+      ${cancel || extra.length ? `<div class="tp-acts">
+        ${extra.map((x, i) => `<button type="button" class="btn btn-ghost tp-extra" data-i="${i}">${esc(x.label)}</button>`).join('')}
+        ${cancel ? `<button type="button" class="btn btn-ghost tp-cancel">${esc(cancel)}</button>` : ''}
       </div>` : ''}`;
+    if (text.quick) panel.dataset.quick = '1';
     hud.appendChild(panel);
     // Thanh nút hành động nằm đúng chỗ này; cất đi trong lúc chọn
     hud.classList.add('picking');
@@ -107,6 +115,7 @@ export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
     myClick = scene.pushTileClick(async (id) => {
       if (done || asking) return;
       if (!ids.includes(id)) { refuse(); return; }
+      if (text.quick) { audio.sfx('buy'); finish(id); return; }
 
       asking = true;
       audio.sfx('buy');
@@ -142,6 +151,10 @@ export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
       audio.sfx('click');
       finish(null);
     });
+    panel.querySelectorAll('.tp-extra').forEach((b) => b.addEventListener('click', () => {
+      audio.sfx('click');
+      finish(extra[Number(b.dataset.i)].value);
+    }));
 
     if (ms) {
       const timer = panel.querySelector('.tp-timer');

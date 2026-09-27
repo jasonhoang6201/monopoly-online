@@ -10,7 +10,8 @@ import {
   TEX, DEPTH, EDGE, tileCenter, tokenSpot, tileEdgePoint, tileSize, tileAngle, isCorner,
 } from '../render/geometry.js';
 import { paintBoard, nameBand, P } from '../render/boardArt.js';
-import { paintToken, paintCoin } from '../render/pieces.js';
+import { paintToken, paintCoin, paintAura, paintGhost, auraPad } from '../render/pieces.js';
+import { ultColors, ultColor } from '../core/skills.js';
 import { makeTileFx, fxBox, FX_TILE_W } from '../render/tileFx.js';
 import {
   paintHouseGlyph, paintHotelGlyph, paintEdgeGlow, paintEdgeSpill, SPILL_ROOT,
@@ -229,6 +230,14 @@ export default class BoardScene extends Phaser.Scene {
     this.overlay = this.add.container(0, 0).setDepth(2);
     /* Vệt đèn báo ô đã có nhà — nằm trên nước màu chủ đất, dưới quân cờ */
     this.glowLayer = this.add.container(0, 0).setDepth(3);
+    /* Hào quang tối thượng và bóng mờ khi đi nằm ngay dưới lớp quân: vầng
+       sáng không bao giờ che thân quân nào, kể cả quân đứng chung ô. */
+    this.auraLayer = this.add.container(0, 0).setDepth(5.9);
+    /** Mỗi ghế: `{img, key}` hoặc null. @type {Array<?{img:Phaser.GameObjects.Image, key:string}>} */
+    this.auras = [];
+    /** Mỗi ghế: màu hào quang (`ultColor`) hoặc null — bóng mờ khi đi lấy màu ở đây. */
+    this.auraColor = [];
+    this.events.on('update', (time) => this.tickAuras(time));
     this.tokenLayer = this.add.container(0, 0).setDepth(6);
     this.fxLayer = this.add.container(0, 0).setDepth(20);
     /* Hoạt cảnh ô đất (`render/tileFx.js`): phần mặt ô (vết nứt, vết sém, ô
@@ -521,6 +530,9 @@ export default class BoardScene extends Phaser.Scene {
   setPlayers(players) {
     this.players = players;
     this.tokenLayer.removeAll(true);
+    this.auraLayer.removeAll(true);
+    this.auras = [];
+    this.auraColor = [];
     this.tokens = players.map((p) => {
       const key = `tok-${p.token.key}`;
       if (!this.textures.exists(key)) this.textures.addCanvas(key, paintToken(p.token.css, 288));
@@ -592,11 +604,12 @@ export default class BoardScene extends Phaser.Scene {
     const dir = Math.sign(steps);
     const n = Math.abs(steps);
     const hop = this.size * 0.038;
+    const stopTrail = this.trail(playerIndex);
 
     return new Promise((resolve) => {
       let i = 0;
       const step = () => {
-        if (i >= n) { resolve(); return; }
+        if (i >= n) { stopTrail(); resolve(); return; }
         i++;
         const pos = ((fromPos + dir * i) % 40 + 40) % 40;
         const t = this.tokenTarget(playerIndex, pos);
@@ -635,15 +648,134 @@ export default class BoardScene extends Phaser.Scene {
     const spr = this.tokens[playerIndex];
     if (!spr) return Promise.resolve();
     const t = this.tokenTarget(playerIndex, pos);
+    const stopTrail = this.trail(playerIndex);
     return new Promise((resolve) => {
       this.tweens.add({
-        targets: spr, x: t.x, y: t.y, duration: 520, ease: 'Cubic.easeInOut', onComplete: resolve,
+        targets: spr, x: t.x, y: t.y, duration: 520, ease: 'Cubic.easeInOut',
+        onComplete: () => { stopTrail(); resolve(); },
       });
       this.tweens.add({
         targets: spr, angle: { from: 0, to: 720 }, duration: 520, ease: 'Cubic.easeInOut',
         onComplete: () => spr.setAngle(0),
       });
     });
+  }
+
+  // ---------------------------------------------------- hào quang tối thượng
+
+  /**
+   * Dựng lại vầng sáng của từng quân theo các nhánh đã học tối thượng. Gọi mỗi
+   * lần `refresh` — máy ngồi xem dựng lại từ ảnh chụp nên cũng thấy hào quang
+   * ngay khi người kia học xong. Màu không đổi thì giữ nguyên tấm cũ.
+   */
+  syncAuras(state) {
+    state.players.forEach((p, i) => {
+      // `key` giữ danh sách màu nhánh để biết khi nào phải dựng lại; màu vẽ lên là `ultColor`
+      const key = ultColors(p).join(',');
+      const color = ultColor(p);
+      this.auraColor[i] = color;
+      const cur = this.auras[i];
+      if ((cur?.key ?? '') === key) return;
+      cur?.img.destroy();
+      this.auras[i] = null;
+      const spr = this.tokens?.[i];
+      if (!color || !spr) return;
+      // Vầng sáng lấy dáng từ texture quân nên mỗi cặp (quân, màu) một tấm
+      const tex = `aura-${spr.texture.key}-${color}`;
+      const src = spr.texture.getSourceImage();
+      const pad = auraPad(src.width);
+      if (!this.textures.exists(tex)) this.textures.addCanvas(tex, paintAura(src, color).cv);
+      // Canvas vầng sáng rộng hơn quân `pad` mỗi phía: dời gốc cho điểm neo
+      // của quân (chân quân) trùng đúng điểm neo tương ứng trên vầng sáng
+      const img = this.add.image(0, 0, tex).setAlpha(0).setOrigin(
+        (spr.originX * src.width + pad) / (src.width + pad * 2),
+        (spr.originY * src.height + pad) / (src.height + pad * 2),
+      );
+      this.auraLayer.add(img);
+      this.auras[i] = {
+        img, key,
+        kx: (src.width + pad * 2) / src.width,
+        ky: (src.height + pad * 2) / src.height,
+      };
+    });
+  }
+
+  /**
+   * Mỗi khung hình: vầng sáng bám theo quân (cả lúc đang nhảy, nảy, xoay),
+   * cùng cỡ và góc với quân, thở nhẹ theo nhịp sin.
+   */
+  tickAuras(time) {
+    this.auras.forEach((a, i) => {
+      if (!a) return;
+      const spr = this.tokens[i];
+      if (!spr?.visible) { a.img.setVisible(false); return; }
+      a.img.setVisible(true)
+        .setPosition(spr.x, spr.y)
+        .setDisplaySize(spr.displayWidth * a.kx, spr.displayHeight * a.ky)
+        .setAngle(spr.angle)
+        .setAlpha(0.72 + 0.2 * Math.sin(time * 0.0028 + i * 1.7));
+    });
+  }
+
+  /**
+   * Bóng mờ khi quân của người có tối thượng di chuyển: mỗi khung hình ghi lại
+   * vị trí, góc, cỡ của quân; bóng thứ k đặt ở chỗ quân đã đứng `(k+1)·GAP` ms
+   * trước (nội suy giữa hai khung hình). `GAP` xấp xỉ một khung hình nên các
+   * bóng đè lên nhau thành một vệt liền; 7 bóng × 18ms, đuôi chừng nửa ô.
+   * Độ đậm giảm nhanh dần: sát quân đặc, đuôi tắt nhanh — giảm đều thì cả vệt
+   * một màu, nhìn chói. Mỗi bóng là chính hình quân phủ màu hào quang.
+   *
+   * Quân dừng thì vẫn ghi tiếp: các bóng đuổi kịp về đúng chỗ quân đứng (bị
+   * thân quân che) rồi mới gỡ bỏ, không tắt cái rụp giữa đường.
+   * @returns {()=>void} gọi khi quân đã tới nơi để bắt đầu thu bóng
+   */
+  trail(playerIndex) {
+    const color = this.auraColor[playerIndex];
+    const spr = this.tokens[playerIndex];
+    if (!color || !spr) return () => {};
+    const N = 7;
+    const GAP = 18;            // ms giữa hai bóng liền nhau; quân đi một ô mất ~190ms
+    const src = spr.texture.getSourceImage();
+    const tex = `ghost-${spr.texture.key}-${color}`;
+    if (!this.textures.exists(tex)) this.textures.addCanvas(tex, paintGhost(src, color));
+    const ghosts = Array.from({ length: N }, () => {
+      const g = this.add.image(spr.x, spr.y, tex)
+        .setOrigin(spr.originX, spr.originY).setVisible(false);
+      this.auraLayer.add(g);
+      return g;
+    });
+    /** Các lần ghi, cũ trước mới sau. */
+    const hist = [];
+    /** Quân ở đâu vào thời điểm `t`; trước lần ghi đầu tiên thì chưa có bóng. */
+    const at = (t) => {
+      for (let i = hist.length - 1; i > 0; i--) {
+        const a = hist[i - 1], b = hist[i];
+        if (a.t > t) continue;
+        const f = b.t === a.t ? 1 : (t - a.t) / (b.t - a.t);
+        return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, a: a.a + (b.a - a.a) * f,
+          w: a.w + (b.w - a.w) * f, h: a.h + (b.h - a.h) * f };
+      }
+      return null;
+    };
+    let stopping = false;
+    let stopAt = 0;
+    const tick = (time) => {
+      hist.push({ t: time, x: spr.x, y: spr.y, a: spr.angle, w: spr.displayWidth, h: spr.displayHeight });
+      while (hist.length > 2 && hist[1].t < time - N * GAP) hist.shift();
+      ghosts.forEach((g, k) => {
+        const h = at(time - (k + 1) * GAP);
+        if (!h) { g.setVisible(false); return; }
+        g.setVisible(true).setPosition(h.x, h.y).setAngle(h.a).setDisplaySize(h.w, h.h)
+          .setAlpha(0.75 * (1 - k / N) ** 1.5);
+      });
+      if (stopping && !stopAt) stopAt = time;
+      if (stopAt && time - stopAt > N * GAP + 40) {
+        this.events.off('update', tick);
+        ghosts.forEach((g) => g.destroy());
+      }
+    };
+    this.events.on('update', tick);
+    return () => { stopping = true; };
   }
 
   // ------------------------------------------------------------- xí ngầu
@@ -860,6 +992,7 @@ export default class BoardScene extends Phaser.Scene {
          hình khối nào che mất chữ. Muốn biết mấy căn thì rê chuột vào. */
       if (!state.isMortgaged(t.id)) this.addTileGlow(t.id, p, state.housesOn(t.id));
     }
+    this.syncAuras(state);
     this.placeTokens();
     this.updateHousePlaque();
   }
