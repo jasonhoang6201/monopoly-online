@@ -522,6 +522,9 @@
 .sk-bet { display: flex; flex-direction: column; gap: 12px; align-items: center; font-family: var(--serif); }
 .sk-bet-row { display: flex; gap: 8px; }
 .sk-bet-row .btn.on { border-color: var(--gold-light); color: #FFF8E6; background: rgba(200, 160, 72, .28); }
+/* Xổ Số: 11 nút số, xếp lưới 4 cột để vừa màn điện thoại nằm ngang */
+.sk-lotto { display: grid; grid-template-columns: repeat(4, 1fr); }
+.sk-lotto .btn { padding-inline: 6px; white-space: nowrap; }
 .sk-bet-note { font-size: 13px; color: var(--paper-deep); text-align: center; }
 
 .pcard-skill {
@@ -578,3 +581,87 @@
 /* Điều kiện lên level ghi dưới dòng level chưa có */
 .sd-need { display: block; font-style: normal; font-size: .82em; opacity: .7; margin-top: 1px; }
 .sd-card.feat .sd-icon { border-radius: 26%; }
+
+/* Kho kỹ năng bấm để dùng: lưới ô, viền màu nhánh; ô chưa dùng được mờ đi
+   nhưng vẫn đọc được lý do */
+.kit { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; font-family: var(--serif); }
+.kit-item {
+  display: flex; align-items: center; gap: 10px; text-align: left; padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--c) 70%, transparent); border-radius: 10px;
+  background: color-mix(in srgb, var(--c) 14%, rgba(0, 0, 0, .35)); color: var(--paper); cursor: pointer;
+}
+.kit-item:hover:not([disabled]) { background: color-mix(in srgb, var(--c) 28%, rgba(0, 0, 0, .35)); }
+.kit-item.off { opacity: .5; cursor: default; }
+.kit-ico { width: 34px; height: 34px; flex: none; display: grid; place-items: center; color: var(--c); }
+.kit-ico .sk-ico { width: 100%; height: 100%; }
+.kit-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kit-text small { font-size: 12.5px; opacity: .8; line-height: 1.3; }
+@media (max-height: 500px) {
+  .kit { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; }
+  .kit-item { padding: 6px 8px; }
+  .kit-ico { width: 26px; height: 26px; }
+}
+
+/* Kỹ năng bật / tắt đang tắt: nền xám, icon xám; vẫn bấm được để bật */
+.kit-item.is-off { --c: #7d7a74; background: rgba(125, 122, 116, .16); }
+.kit-item.is-off .kit-ico { filter: grayscale(1); }
+.kit-item.is-off:hover:not([disabled]) { background: rgba(125, 122, 116, .28); }
+
+/* Góp Vốn: chip màu quân, chọn một người thì những người còn lại xám đi */
+.stake-list { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 14px; }
+.stake-chip {
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; cursor: pointer;
+  border: 2px solid var(--pc); background: color-mix(in srgb, var(--pc) 18%, rgba(0, 0, 0, .35));
+  color: var(--paper); transition: filter .15s, opacity .15s, background .15s;
+}
+.stake-chip input { accent-color: var(--pc); margin: 0; }
+.stake-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--pc); flex: none; }
+.stake-name { font-weight: 700; }
+.stake-meta { font-size: 12px; opacity: .75; }
+.stake-chip.on { background: color-mix(in srgb, var(--pc) 34%, rgba(0, 0, 0, .35)); }
+.stake-list.has-pick .stake-chip:not(.on) { filter: grayscale(1); opacity: .5; }
+.stake-chip:focus-within { outline: 2px solid var(--gold-light); outline-offset: 2px; }
+
+/* Bài Tẩy: các lá rút được xếp hàng ngang, khung viền màu theo hạng thẻ,
+   dải trên cùng màu theo bộ (Cơ Hội vàng, Khí Vận xanh) */
+.hand { display: flex; gap: 16px; justify-content: center; align-items: stretch; flex-wrap: nowrap; padding: 4px 2px 8px; }
+.hand-card {
+  flex: 1 1 0; max-width: 230px; min-width: 0; min-height: 300px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 0 14px 14px; cursor: pointer; text-align: center; color: var(--paper); font-family: var(--serif);
+  border: 2px solid var(--r); border-radius: 14px; overflow: hidden;
+  background:
+    radial-gradient(120% 60% at 50% 18%, color-mix(in srgb, var(--r) 30%, transparent), transparent 70%),
+    linear-gradient(180deg, rgba(30, 20, 12, .95), rgba(14, 9, 6, .98));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .5), 0 10px 24px rgba(0, 0, 0, .45), inset 0 0 18px color-mix(in srgb, var(--r) 22%, transparent);
+  transition: transform .18s var(--ease-soft, ease), box-shadow .18s;
+}
+.hand-card:hover, .hand-card:focus-visible {
+  transform: translateY(-6px);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .5), 0 16px 30px rgba(0, 0, 0, .5), 0 0 22px color-mix(in srgb, var(--r) 60%, transparent);
+  outline: none;
+}
+.hand-deck {
+  align-self: stretch; margin: 0 -14px; padding: 6px 0; font-size: 12px; letter-spacing: .14em; font-weight: 700;
+  background: color-mix(in srgb, var(--d) 70%, #000); color: #FFF4DA;
+}
+.hand-sigil {
+  width: 72px; height: 72px; display: grid; place-items: center; margin-top: 8px; font-size: 38px; line-height: 1;
+  border-radius: 50%; color: var(--r); border: 2px solid color-mix(in srgb, var(--r) 70%, transparent);
+  background: radial-gradient(circle, color-mix(in srgb, var(--r) 22%, transparent), transparent 72%);
+}
+.hand-label { font-size: 20px; letter-spacing: .04em; color: #FFF4DA; }
+.hand-label.up { color: #7FD69A; }
+.hand-label.down { color: #FF8A7A; }
+.hand-does { font-size: 14px; font-weight: 700; line-height: 1.35; color: var(--paper); }
+.hand-flavor { font-size: 12.5px; font-style: italic; line-height: 1.4; opacity: .7; flex: 1; }
+.hand-rank { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--r); }
+@media (max-height: 500px) {
+  .hand { gap: 10px; }
+  .hand-card { min-height: 0; gap: 5px; padding: 0 8px 8px; }
+  .hand-deck { margin: 0 -8px; padding: 3px 0; font-size: 10px; }
+  .hand-sigil { width: 44px; height: 44px; font-size: 24px; margin-top: 4px; }
+  .hand-label { font-size: 15px; }
+  .hand-does { font-size: 12px; }
+  .hand-flavor { display: none; }
+}

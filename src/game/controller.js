@@ -1096,7 +1096,8 @@ export class Game {
   async takeRoll() {
     const st = this.state;
     const p = st.current;
-    const first = rollDice();
+    // Xe Đạp: đi theo viên nhỏ hơn — nắn kết quả trước mọi hộp hỏi sau khi lắc
+    const first = this.skills.shape(p, rollDice());
     this.netEmit('dice', first);
     await this.scene.rollDiceAnim(first.a, first.b);
 
@@ -1162,15 +1163,17 @@ export class Game {
          tính cả lần qua này. */
       const landed = p.pos === 0;      // dừng đúng ô 0, không chỉ đi ngang
       const points = this.skills.lapStart(p);
-      const { total: pay, parts } = st.payslip(landed, p);
+      const { total: base, parts } = st.payslip(landed, p);
+      // Cò Quay Lương: quay gấp đôi hoặc một nửa
+      const { pay, note: spinNote } = this.skills.spinPay(p, base);
       const cut = st.modMult('salary') !== 1;
       st.laps += 1;
       addPressure(st, PRESSURE.lap);
       const note = landed
-        ? ` — đạp trúng ô Bắt Đầu nên lương ×${GO_LANDING_MULT}${cut ? ', đã trừ mất mùa' : ''}`
-        : (cut ? ' — mất mùa nên chỉ còn bấy nhiêu' : '');
+        ? `, đạp trúng ô Bắt Đầu nên lương ×${GO_LANDING_MULT}${cut ? ', đã trừ mất mùa' : ''}`
+        : (cut ? ', mất mùa nên chỉ còn bấy nhiêu' : '');
       await this.bc.show(landed ? 'ĐẠP Ô BẮT ĐẦU' : 'QUA Ô BẮT ĐẦU',
-        `<b>${p.name}</b> lãnh lương <span class="up">${money(pay)}</span>${note}
+        `<b>${p.name}</b> lãnh lương <span class="up">${money(pay)}</span>${note}${spinNote}
          · <b>+${points} điểm kỹ năng</b>${points > 1 ? ' (có Lão Làng)' : ''} (đang có ${p.skillPoints}).`,
         { ms: landed ? 2800 : 2400 });
       await this.receiveFromBank(idx, pay);
@@ -1178,6 +1181,13 @@ export class Game {
       await this.skills.lapEnd(p);
       if (st.over || p.bankrupt) return;
     }
+
+    // Trạm Thu Phí BOT: tính sau lương, để người vừa lãnh lương có tiền nộp phí
+    await this.skills.tolls(p, from, steps);
+    if (st.over || p.bankrupt) return;
+    // Dẫn Tour: người bị vượt qua trả phí
+    await this.skills.tours(p, from, steps);
+    if (st.over || p.bankrupt) return;
 
     // Dừng chung ô với người khác: thành tựu và Hai Ngón chạy trước khi xử lý ô
     await this.skills.landed(p);
@@ -1248,6 +1258,7 @@ export class Game {
     // Chưa ai sở hữu → hỏi mua (không có luật đấu giá)
     if (ownerId === undefined) {
       if (p.money < t.price) {
+        st.passUp(t.id, p.id);
         await this.bc.show('KHÔNG ĐỦ TIỀN',
           `<b>${p.name}</b> dừng ở <b>${tileLabel(t.id)}</b> nhưng chỉ có ${money(p.money)}.`, { ms: 2600 });
         return;
@@ -1267,6 +1278,8 @@ export class Game {
         await this.skills.brokerFees(p.id, t.id);
         await this.skills.bought(p, t.id);
       } else {
+        st.passUp(t.id, p.id);
+        this.sync();
         await this.bc.show('BỎ QUA', `<b>${p.name}</b> không mua <b>${tileLabel(t.id)}</b>.`, { ms: 2200 });
       }
       return;
@@ -1294,7 +1307,10 @@ export class Game {
     await this.bc.show('TRẢ TIỀN THUÊ',
       `<b>${p.name}</b> trả <span class="down">${money(rent)}</span> cho <b>${owner.name}</b>
        tại <b>${tileLabel(t.id)}</b>${this.skills.rentNote(p, t.id, bill)}.`, { kind: 'bad' });
-    if (await this.payPlayer(p.id, ownerId, rent)) this.skills.rentPaid(owner, bill);
+    if (await this.payPlayer(p.id, ownerId, rent)) {
+      this.skills.rentPaid(owner, bill);
+      await this.skills.stakeShare(owner, rent);
+    }
   }
 
   /**
@@ -1311,9 +1327,12 @@ export class Game {
        coi như ghé ngang ô, không rút thêm — không thì một ván xấu số có thể
        chạy vòng vòng mãi. */
     if (this.cardChain >= MAX_CARD_CHAIN) return;
-    const drawn = st.decks[kind].draw((c) => usableCard(st, c, p.id));
+    // Bài Tẩy rút nhiều lá cho người đang đi chọn; không có thì rút một lá như thường
+    const drawn = await this.skills.drawCard(p, kind, (c) => usableCard(st, c, p.id));
     // Cả bộ không lá nào dùng được: coi như ghé qua, đừng bày một tấm thẻ rỗng
     if (!drawn) return;
+    // Bảo Hộ Lao Động: thẻ xấu có lúc được bỏ qua
+    if (!isKeepable(drawn.card) && await this.skills.dodgeCard(p, drawn.card)) return;
 
     /* Tiếng bóc thẻ nay do băng chuyền phát, đúng lúc mặt thẻ hiện ra — phát
        ở đây nữa thì kêu hai lần. Seed sinh một lần rồi gửi kèm, để dải trên
@@ -1377,9 +1396,12 @@ export class Game {
   async cardMoney(p, kind, card, title, seed) {
     await this.showFateCard(kind, card, { amount: card.amount, seed });
     if (card.amount > 0) {
+      // Bảo Hộ Lao Động: thẻ nhận tiền nhận thêm
+      const extra = this.skills.cardBonus(p, card.amount);
       await this.bc.show(title,
-        `<b>${p.name}</b>: ${card.text} <span class="up">+${money(card.amount)}</span>`);
-      await this.receiveFromBank(p.id, card.amount);
+        `<b>${p.name}</b>: ${card.text} <span class="up">+${money(card.amount + extra)}</span>${
+          extra ? ` (gồm ${money(extra)} của <b>Bảo Hộ Lao Động</b>)` : ''}`);
+      await this.receiveFromBank(p.id, card.amount + extra);
     } else {
       const fine = this.skills.cut(p, -card.amount);
       await this.bc.show(title,
@@ -1421,7 +1443,7 @@ export class Game {
     const due = this.skills.cut(p, bill.amount);
     await this.bc.show(title,
       `<b>${p.name}</b> nộp thuế nhà cửa <span class="down">${money(due)}</span>
-       — ${parts.join(', ')}${this.skills.cutNote(p)}.`, { kind: 'bad' });
+       (${parts.join(', ')})${this.skills.cutNote(p)}.`, { kind: 'bad' });
     await this.payBank(p.id, due);
   }
 
@@ -1912,6 +1934,9 @@ export class Game {
     const st = this.state;
     const p = st.players[playerId];
     if (p.money >= amount) return true;
+    // Bảo Hiểm Xã Hội trả hộ trước khi hỏi bán nhà / thế chấp
+    await this.skills.insure(p, amount);
+    if (p.money >= amount) return true;
 
     // Con nợ ngồi máy khác → hỏi sang đó; ván gốc vẫn nằm lại máy này.
     if (this.net && playerId !== this.net.mySeat) {
@@ -2214,6 +2239,7 @@ export class Game {
   async useJailCard(pull = true) {
     const st = this.state;
     const p = st.current;
+    await this.skills.jailWage(p);
     // Gọi từ túi thẻ thì lá bài đã rời tay rồi, đừng rút thêm tấm nữa
     if (pull) {
       const at = st.jailCardAt(p.id);
@@ -2228,12 +2254,25 @@ export class Game {
     await this.takeRoll();
   }
 
+  /** Ở Tù Cho Lành: ngồi yên trong tù, hết lượt ngay. */
+  async sitInJail() {
+    const p = this.state.current;
+    await this.skills.jailWage(p);
+    if (!this.skills.canSit(p)) { this.restoreActions(); return; }
+    p.jailSits = (p.jailSits ?? 0) + 1;
+    this.sync();
+    await this.bc.show('NGỒI YÊN',
+      `<b>${p.name}</b> ở lại Khám Lớn cho lành — không tính vào hạn 3 lượt.`, { ms: 2200 });
+    await this.endTurn();
+  }
+
   async payOutOfJail() {
     const st = this.state;
     const p = st.current;
+    await this.skills.jailWage(p);
     if (this.skills.freeBail(p, JAIL_FINE)) {
       await this.bc.show('RA TÙ MIỄN PHÍ',
-        `<b>${p.name}</b> là <b>Khách Quen Nhà Đá</b> — ra tù không mất đồng nào.`);
+        `<b>${p.name}</b> là <b>Khách Quen Nhà Đá</b>, ra tù không mất đồng nào.`);
     } else {
       await this.bc.show('NỘP TIỀN RA TÙ',
         `<b>${p.name}</b> nộp <span class="down">${money(JAIL_FINE)}</span> để được tự do.`);
@@ -2252,6 +2291,7 @@ export class Game {
   async rollInJail() {
     const st = this.state;
     const p = st.current;
+    await this.skills.jailWage(p);
     const d = rollDice();
     this.netEmit('dice', d);
     await this.scene.rollDiceAnim(d.a, d.b);
@@ -2277,7 +2317,7 @@ export class Game {
       const free = this.skills.freeBail(p, JAIL_FINE);
       await this.bc.show('HẾT HẠN 3 LƯỢT',
         free
-          ? `<b>${p.name}</b> cầu đôi hụt lần thứ ${MAX_JAIL_TURNS} — là <b>Khách Quen Nhà Đá</b> nên khỏi nộp phạt, đi ${d.sum} ô.`
+          ? `<b>${p.name}</b> cầu đôi hụt lần thứ ${MAX_JAIL_TURNS}, là <b>Khách Quen Nhà Đá</b> nên khỏi nộp phạt, đi ${d.sum} ô.`
           : `<b>${p.name}</b> cầu đôi hụt lần thứ ${MAX_JAIL_TURNS} — phải nộp
          <span class="down">${money(JAIL_FINE)}</span> rồi đi ${d.sum} ô.`,
         { kind: 'bad' });

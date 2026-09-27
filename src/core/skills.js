@@ -7,7 +7,7 @@
  */
 import {
   SKILLS, BRANCHES, TIER_COST, LEVEL_COST, MAX_LEVEL, RESPEC_FEE, ULT_MIX, ULT_SPECIAL,
-  FEATS, BROKE_LINE,
+  FEATS, BROKE_LINE, WAYS,
 } from '../data/skills.js';
 import { BOARD, money } from '../data/board.js';
 
@@ -126,7 +126,7 @@ const sunk = (p, s) => {
 export function skillState(player, id) {
   const s = skillById(id);
   if (player.skills.includes(id)) return 'learned';
-  if (!prereqMet(player, s) || !featMet(player, s)) return 'locked';
+  if (!prereqMet(player, s) || !featMet(player, s) || rivalUlt(player, s)) return 'locked';
   return player.skillPoints >= skillCost(s) ? 'ready' : 'poor';
 }
 
@@ -146,6 +146,19 @@ function prereqMet(player, s) {
 }
 
 /**
+ * Tối thượng còn lại của nhánh này mà người chơi đã học, nếu có. Mỗi nhánh
+ * hai tối thượng, chỉ được giữ một: hai cái phục vụ hai tình huống khác nhau
+ * của ván (đang thắng / đang thua, có bến / không có bến…), cho giữ cả hai thì
+ * không còn phải chọn. Muốn đổi thì tẩy điểm.
+ * @returns {?object}
+ */
+export function rivalUlt(player, s) {
+  if (s.tier !== 4) return null;
+  return SKILLS.find((x) => x.tier === 4 && x.branch === s.branch && x.id !== s.id
+    && player.skills.includes(x.id)) ?? null;
+}
+
+/**
  * Học ô mới hoặc lên level cho ô đã học.
  * @returns {{ok:boolean, reason?:string, cost:number, level:number}}
  *   `level` là level sẽ đạt được nếu bấm.
@@ -161,8 +174,12 @@ export function canLearn(player, id) {
     const names = s.requires.map((r) => `"${skillById(r).name}"`).join(' hoặc ');
     return { ok: false, reason: `Cần học ${names} trước.`, cost, level };
   }
+  const rival = !lv && rivalUlt(player, s);
+  if (rival) {
+    return { ok: false, reason: `Đã chọn tối thượng "${rival.name}". Mỗi nhánh chỉ một tối thượng; tẩy điểm để đổi.`, cost, level };
+  }
   if (!lv && !featMet(player, s)) {
-    return { ok: false, reason: `Chưa mở khoá — ${featText(player, s)}.`, cost, level };
+    return { ok: false, reason: `Chưa mở khoá: ${featText(player, s)}.`, cost, level };
   }
   const need = lv ? growNeed(player, s, level) : null;
   if (need) {
@@ -389,6 +406,11 @@ export function levyEach(p) {
   return Math.min(Math.floor(p.money * levyRate(p)), each * (p.laps ?? 0));
 }
 
+/** Ô ngay trước hoặc ngay sau `tileId` trên bàn cờ cũng của `seat` — Hàng Xóm Láng Giềng. */
+export function hasNeighbor(st, tileId, seat) {
+  return [(tileId + 39) % 40, (tileId + 1) % 40].some((id) => st.owner.get(id) === seat);
+}
+
 /** Số màu đất khác nhau người chơi có ít nhất một ô — cho Đất Nhiều Màu. */
 export function colorsOwned(st, seat) {
   const set = new Set();
@@ -425,37 +447,64 @@ export function ownerRentParts(st, tileId) {
     out.ac2a = 1 + Math.min(cap, perLap * (owner.laps ?? 0));
   }
   if (has(owner, 'ac2b')) out.ac2b = 1 + param(owner, 'ac2b').perColor * colorsOwned(st, owner.id);
+  if (has(owner, 'acS2') && hasNeighbor(st, tileId, owner.id)) out.acS2 = 1 + param(owner, 'acS2').bonus;
   if (st.heritage?.has(tileId)) out.heritage = param(owner, 'acU').mult;
   return out;
 }
 
 /**
- * Chủ đất vừa thu `rent`: mỗi kỹ năng thuê của chủ đất mang về phần chênh
- * giữa số thu được và số sẽ thu nếu thiếu đúng hệ số của kỹ năng ấy.
+ * Khoản **cộng thẳng** vào tiền thuê do kỹ năng của chủ đất, theo id kỹ năng:
+ * Vé Tháng (mỗi bến/ga đang có) và Mặt Tiền (mỗi màu đất đang có). Cộng sau
+ * mọi hệ số nhân — số này nhỏ, nhân lên cùng Cơn Sốt Đất thì người có cả hai
+ * lời gấp đôi cho cùng một điểm.
+ */
+export function ownerRentFlat(st, tileId) {
+  const owner = st.ownerOf(tileId);
+  const out = {};
+  if (!owner) return out;
+  if (BOARD[tileId].type === 'station' && has(owner, 'dh1')) {
+    out.dh1 = param(owner, 'dh1').own * st.stationCount(owner.id);
+  }
+  if (has(owner, 'acV')) out.acV = param(owner, 'acV').per * colorsOwned(st, owner.id);
+  return out;
+}
+
+/**
+ * Chủ đất vừa thu `rent`: mỗi kỹ năng nhân tiền thuê mang về phần chênh giữa
+ * số thu được và số sẽ thu nếu thiếu đúng hệ số của kỹ năng ấy; kỹ năng cộng
+ * thẳng mang về đúng số nó cộng, nhưng không quá số thực thu (người trả có Vé
+ * Tháng, Sống Sót thì số thu nhỏ lại).
  * @returns {Array<[string, number]>}
  */
 export function rentGains(st, tileId, rent) {
-  return Object.entries(ownerRentParts(st, tileId))
-    .filter(([id, f]) => id !== 'heritage' && f > 1)
-    .map(([id, f]) => [id, rent - rent / f]);
+  const flat = Object.entries(ownerRentFlat(st, tileId)).filter(([, n]) => n > 0);
+  const flatSum = flat.reduce((n, [, x]) => n + x, 0);
+  const core = Math.max(0, rent - flatSum);
+  return [
+    ...Object.entries(ownerRentParts(st, tileId))
+      .filter(([id, f]) => id !== 'heritage' && f > 1)
+      .map(([id, f]) => [id, core - core / f]),
+    ...flat.map(([id, n]) => [id, Math.min(n, rent)]),
+  ];
 }
 
 /** Hệ số tiền thuê do kỹ năng của **người trả**. */
 export function payerRentMult(st, payer, tileId) {
   let k = 1;
   if (BOARD[tileId].type === 'station' && has(payer, 'dh1')) k *= param(payer, 'dh1').pay;
-  if (has(payer, 'acX1') && payer.money < BROKE_LINE) k *= param(payer, 'acX1').pay;
+  if (has(payer, 'acX1') && payer.money < param(payer, 'acX1').under) k *= param(payer, 'acX1').pay;
   return k;
 }
 
 /**
- * Chủ Nợ: người trả thuê có ít tiền mặt hơn tiền thuê thì cộng phạt chậm.
- * Tính **sau** các hệ số của người trả — Sống Sót bớt trước, số còn lại mới
- * là số đem so với tiền mặt.
+ * Chủ Nợ: người trả thuê đang có ô thế chấp ở ngân hàng thì trả thêm. Tính
+ * **sau** các hệ số của người trả — Sống Sót bớt trước, phần thêm tính trên
+ * số còn lại.
  */
 export function lateFee(st, payer, tileId, rent) {
   const owner = st.ownerOf(tileId);
-  if (!has(owner, 'dcX1') || owner.id === payer.id || payer.money >= rent || rent <= 0) return 0;
+  if (!has(owner, 'dcX1') || owner.id === payer.id || rent <= 0) return 0;
+  if (!st.propertiesOf(payer.id).some((id) => st.isMortgaged(id))) return 0;
   return Math.round(rent * param(owner, 'dcX1').late);
 }
 
@@ -477,6 +526,81 @@ export function freeHouseTarget(st, seat) {
     .filter((id) => st.canBuild(seat, id, { free: true }).ok);
   picks.sort((a, b) => st.housesOn(a) - st.housesOn(b) || BOARD[b].price - BOARD[a].price);
   return picks[0] ?? null;
+}
+
+/**
+ * Xổ Số Kiến Thiết: tiền người lắc ra tổng `n` phải trả người đã chọn số ấy.
+ * Kỳ vọng như nhau cho mọi số (xem `lotto` trong data/skills.js).
+ */
+export function lottoPrize(p, n) {
+  if (n < 2 || n > 12) return 0;
+  return Math.round((param(p, 'ddV').ev * 36) / WAYS(n) / 5) * 5;
+}
+
+/**
+ * Trạm Thu Phí BOT: những ô người này đi **ngang** (không tính ô xuất phát và
+ * ô dừng) mà là bến/ga hoặc công ty của người khác có kỹ năng, còn thu thuê
+ * được. Gom theo chủ để mỗi chủ thu một lần cho cả chuyến.
+ *
+ * Tính bằng số học trên `from` và `steps` chứ không nghe từng bước của hoạt
+ * cảnh: bản online và các bài test đi quân không qua hoạt cảnh.
+ * @returns {Array<{owner:object, tiles:number[], amount:number}>}
+ */
+export function tollStops(st, payer, from, steps) {
+  const dir = Math.sign(steps);
+  const byOwner = new Map();
+  for (let i = 1; i < Math.abs(steps); i++) {
+    const id = ((from + dir * i) % 40 + 40) % 40;
+    const t = BOARD[id];
+    if (t.type !== 'station' && t.type !== 'utility') continue;
+    const owner = st.ownerOf(id);
+    if (!owner || owner.id === payer.id || !has(owner, 'dhV')) continue;
+    if (st.isMortgaged(id) || st.isFrozen(id)) continue;
+    if (!byOwner.has(owner)) byOwner.set(owner, []);
+    byOwner.get(owner).push(id);
+  }
+  return [...byOwner].map(([owner, tiles]) => ({ owner, tiles, amount: tiles.length * param(owner, 'dhV').toll }));
+}
+
+/**
+ * Dẫn Tour: những người đứng trên ô người này đi **ngang** (không tính ô xuất
+ * phát và ô dừng), trừ người đang ngồi tù — họ không đứng trên đường đi.
+ * @returns {object[]}
+ */
+export function tourPassed(st, p, from, steps) {
+  if (!has(p, 'dhS2')) return [];
+  const dir = Math.sign(steps);
+  const cells = new Set();
+  for (let i = 1; i < Math.abs(steps); i++) cells.add(((from + dir * i) % 40 + 40) % 40);
+  return st.alive().filter((q) => q.id !== p.id && !q.inJail && cells.has(q.pos));
+}
+
+/**
+ * Nhặt Hàng Thừa: ô chưa có chủ mà **người khác** đã bỏ qua, người này đủ
+ * tiền mua với giá kỹ năng.
+ * @returns {Array<{id:number, price:number}>}
+ */
+export function leftoverOffers(st, p) {
+  if (!has(p, 'dcS1')) return [];
+  const { price } = param(p, 'dcS1');
+  return [...st.passedUp]
+    .filter(([id, seats]) => !st.owner.has(id) && seats.some((x) => x !== p.id))
+    .map(([id]) => ({ id, price: Math.round(BOARD[id].price * price) }))
+    .filter((x) => x.price <= p.money);
+}
+
+/**
+ * Siết Nợ: các ô đang thế chấp của người khác mà người này đủ tiền mua đứt.
+ * Giá = số thế chấp trả ngân hàng + `premium` × số đó trả chủ cũ.
+ * @returns {Array<{id:number, bank:number, owner:number}>}
+ */
+export function forecloseOffers(st, p) {
+  if (!has(p, 'dcV')) return [];
+  const { premium } = param(p, 'dcV');
+  return [...st.mortgaged]
+    .filter((id) => { const o = st.ownerOf(id); return o && o.id !== p.id && !o.bankrupt; })
+    .map((id) => ({ id, bank: BOARD[id].mortgage, owner: Math.round(BOARD[id].mortgage * premium) }))
+    .filter((x) => x.bank + x.owner <= p.money);
 }
 
 /**

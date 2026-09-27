@@ -23,7 +23,7 @@ import { BRANCHES, SKILLS, KINDS, RESPEC_FEE, MAX_LEVEL } from '../data/skills.j
 import {
   skillById, branchByKey, skillCost, skillState, canLearn, learnSkill, levelOf,
   canLevelUp, nextCost, lvParams, levelLine, spentIn, branchMax, fillText,
-  canRespec, respec, featMet, featText, growNeed, growText, usage, progressText,
+  canRespec, respec, featMet, featText, growNeed, growText, usage, progressText, rivalUlt,
 } from '../core/skills.js';
 import { audio } from '../audio/audio.js';
 import { money } from '../data/board.js';
@@ -40,18 +40,32 @@ import { money } from '../data/board.js';
 const W = 1400;
 const H = 700;
 const COL_X = [140, 420, 700, 980, 1260];
-const TIER_Y = { 4: 166, 3: 300, 2: 428, 1: 544 };
-const ROOT = { x: 700, y: 650 };
+/* Hàng nhánh phụ (ô cấp 3 slot 'c' / 'd') đứng riêng giữa cấp 2 và cấp 3:
+   mỗi cột chỉ đủ chỗ cho 3 ô cạnh nhau, dồn 4 ô lên một hàng thì ô đè sang
+   cột bên cạnh. */
+const TIER_Y = { 4: 166, 3: 296, side: 392, 2: 488, 1: 588 };
+const ROOT = { x: 700, y: 664 };
 /**
- * Độ lệch khỏi trục cột theo `slot`: cấp 2 rẽ ba, cấp 3 rẽ đôi. Ô cấp 3 đứng
- * giữa hai ô cấp 2 nó mọc ra, nên đường nối đi chéo ngắn, không cắt nhau.
+ * Độ lệch khỏi trục cột theo `slot`. Mỗi ô một cha (xem `requires` trong
+ * data/skills.js), nên ô con đứng gần thẳng trên ô cha và đường nối gần như
+ * dựng đứng: 2a → 3a → tối thượng a ở bên trái, 2b → 3b → tối thượng b ở giữa,
+ * 2b → nhánh phụ c chếch trái giữa hai đường ấy, 2c → nhánh phụ d bên phải.
+ * Khoảng hở giữa đường nối và ô gần nhất ≥ 11 đơn vị (ô rộng 68).
  */
-const SLOT_DX = { 2: { a: -82, b: 0, c: 82 }, 3: { a: -50, b: 50 } };
+const SLOT_DX = {
+  2: { a: -90, b: 0, c: 90 },
+  3: { a: -80, b: 10, c: -40, d: 90 },
+  // Ô tối thượng xoay 45°: đường chéo ≈ 116, hai ô phải cách nhau hơn thế
+  4: { a: -80, b: 45 },
+};
+
+/** Ô nhánh phụ: cấp 3 slot 'c' / 'd' — 2 điểm, không dẫn lên tối thượng. */
+const isSide = (s) => s.tier === 3 && (s.slot === 'c' || s.slot === 'd');
 
 /** Toạ độ của một ô trong hệ 1400×700. */
 function posOf(s) {
   const col = BRANCHES.findIndex((b) => b.key === s.branch);
-  return { x: COL_X[col] + (SLOT_DX[s.tier]?.[s.slot] ?? 0), y: TIER_Y[s.tier] };
+  return { x: COL_X[col] + (SLOT_DX[s.tier]?.[s.slot] ?? 0), y: TIER_Y[isSide(s) ? 'side' : s.tier] };
 }
 
 const pct = ({ x, y }) => `left:${(x / W) * 100}%;top:${(y / H) * 100}%`;
@@ -70,7 +84,8 @@ const EDGES = SKILLS.flatMap((s) => (s.requires?.length
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const TIER_NAME = { 1: 'Cấp 1', 2: 'Cấp 2', 3: 'Cấp 3', 4: 'Tối thượng' };
-const tierName = (s) => (s.feat ? `${TIER_NAME[s.tier]} · Thành tựu` : TIER_NAME[s.tier]);
+const tierName = (s) => (s.feat ? `${TIER_NAME[s.tier]} · Thành tựu`
+  : isSide(s) ? `${TIER_NAME[s.tier]} · Nhánh phụ` : TIER_NAME[s.tier]);
 
 /** Tiến độ tới level kế tiếp của ô đã học: "Kiếm được 150$ từ kỹ năng này (120/150$)". */
 function growLine(player, s, lv) {
@@ -80,8 +95,8 @@ function growLine(player, s, lv) {
 }
 
 /** Nhãn thời hạn: vĩnh viễn, reset ở ô Bắt Đầu, hoặc số lần dùng. */
-const spanTag = (s) => (s.kind === 'active' ? s.uses
-  : s.span === 'lap' ? 'Reset mỗi lần qua ô Bắt Đầu' : 'Vĩnh viễn');
+const spanTag = (s) => (s.uses
+  ?? (s.span === 'lap' ? 'Reset mỗi lần qua ô Bắt Đầu' : 'Vĩnh viễn'));
 
 /* ------------------------------------------------------------ dựng cây */
 
@@ -169,7 +184,11 @@ function detailHtml(player, s, readOnly) {
     conds.push({ ok: true, text: 'Không cần học kỹ năng nào trước' });
   }
   if (s.feat) {
-    conds.push({ ok: featMet(player, s), text: `Mở khoá — ${esc(featText(player, s))}` });
+    conds.push({ ok: featMet(player, s), text: `Mở khoá: ${esc(featText(player, s))}` });
+  }
+  if (s.tier === 4 && !lv) {
+    const other = SKILLS.find((x) => x.tier === 4 && x.branch === s.branch && x.id !== s.id);
+    conds.push({ ok: !rivalUlt(player, s), text: `Chưa học tối thượng kia: <b>${esc(other.name)}</b>` });
   }
   if (lv && !maxed) {
     conds.push({ ok: !growNeed(player, s, lv + 1), text: `Lên level ${lv + 1}: ${esc(growLine(player, s, lv + 1))}` });
@@ -184,12 +203,18 @@ function detailHtml(player, s, readOnly) {
   /* Người chơi hỏi nhiều nhất là "có phải bấm không, bấm mấy lần" — nên nói
      thẳng ra thay vì chỉ ghi nhãn. */
   const featNote = s.feat ? ' Đây là kỹ năng thành tựu: làm đủ việc ghi ở Điều kiện thì mới học được.' : '';
-  const howto = s.kind === 'passive'
+  const ultNote = s.tier === 4 ? ' Mỗi nhánh có hai tối thượng, <b>chỉ được học một</b>; muốn đổi thì tẩy điểm.'
+    : isSide(s) ? ' Ô nhánh phụ: không dẫn lên tối thượng, học vì tác dụng của chính nó.' : '';
+  const howto = (s.kind === 'passive'
     ? (s.span === 'lap'
       ? 'Tự động, không cần bấm. Hiệu ứng <b>reset và chạy lại mỗi lần bạn qua ô Bắt Đầu</b>.'
-      : 'Tự động, không cần bấm. Hiệu ứng <b>vĩnh viễn</b> từ lúc học tới hết ván.')
-    : `Học xong sẽ có nút <b>${esc(s.name)}</b> hiện ra ${esc(s.when)}. `
-      + `Muốn dùng thì bấm, không thì bỏ qua. <b>${esc(s.uses)}</b>.`;
+      : s.span === 'cooldown'
+        ? `Tự động, không cần bấm. <b>${esc(s.uses)}</b>.`
+        : 'Tự động, không cần bấm. Hiệu ứng <b>vĩnh viễn</b> từ lúc học tới hết ván.')
+    : s.auto
+      ? `Học xong, game tự hỏi bạn ${esc(s.when)}; muốn dùng thì chọn, không thì bỏ qua. <b>${esc(s.uses)}</b>.`
+      : `Học xong, kỹ năng nằm trong kho <b>Dùng kỹ năng</b> trên thanh nút; dùng được ${esc(s.when)}. `
+      + `Muốn dùng thì mở kho rồi bấm, không thì bỏ qua. <b>${esc(s.uses)}</b>.`) + ultNote;
 
   /* Ba level xếp thành ba dòng: level đang có tô sáng, level kế tiếp đánh dấu
      để người chơi so được mình sẽ nhận thêm gì trước khi bấm. Số dạng khoảng
@@ -360,10 +385,10 @@ export function mountSkillTree(player, o = {}) {
     const note = readOnly
       ? (lv ? `Level ${lv}/${MAX_LEVEL}` : 'Chưa học')
       : {
-        learned: lv >= MAX_LEVEL ? `Level ${lv}/${MAX_LEVEL} — tối đa`
-          : canLevelUp(player, s.id) ? `Level ${lv}/${MAX_LEVEL} — bấm để lên level`
-            : growNeed(player, s, lv + 1) ? `Level ${lv}/${MAX_LEVEL} — ${growLine(player, s, lv + 1)}`
-              : `Level ${lv}/${MAX_LEVEL} — cần 1 điểm để lên level`,
+        learned: lv >= MAX_LEVEL ? `Level ${lv}/${MAX_LEVEL} · tối đa`
+          : canLevelUp(player, s.id) ? `Level ${lv}/${MAX_LEVEL} · bấm để lên level`
+            : growNeed(player, s, lv + 1) ? `Level ${lv}/${MAX_LEVEL} · ${growLine(player, s, lv + 1)}`
+              : `Level ${lv}/${MAX_LEVEL} · cần 1 điểm để lên level`,
         ready: 'Bấm để nâng cấp',
         poor: `Thiếu ${skillCost(s) - player.skillPoints} điểm`,
         locked: s.requires?.some((r) => player.skills.includes(r)) && s.feat ? featText(player, s)

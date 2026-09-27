@@ -173,6 +173,60 @@ const ICONS = {
     + '<path d="M15 5.5l4.5 1.5v14.5"/>' + dot(12, 13, 1),
 
   /* ---------------------------------------------------------- phụ trợ */
+  /* ---------------------------------------------------------- tối thượng thứ hai */
+  insurance: // chiếc ô che đồng xu
+    '<path d="M3 11.5a9 9 0 0 1 18 0z"/><path d="M12 2.5v9"/>'
+    + '<path d="M12 11.5v6.2a2 2 0 0 1-4 0"/>'
+    + '<circle cx="17.5" cy="18" r="2.6"/>',
+  tollgate: // chòi gác và thanh chắn ngang đường
+    '<path d="M3.5 21V9.5h5V21"/><path d="M2.5 9.5 6 6l3.5 3.5"/>'
+    + '<path d="M8.5 14h12.5" stroke-width="2.4"/><path d="M12 14v0M16 14v0" stroke-dasharray="1 3"/>'
+    + '<path d="M2 21h20"/>',
+  lottery:  // tờ vé số có hai con số và mép xé
+    '<path d="M4 4.5h16v15H4z"/><path d="M4 9h16" stroke-dasharray="1.4 1.8"/>'
+    + '<path d="M7.5 12.5h2.6l-2.3 4.5M13.5 13.2a1.5 1.5 0 1 1 2.7.9l-2.7 2.9h3.1"/>',
+  foreclose: // ổ khoá móc vào mái nhà
+    '<path d="M3 12 12 4l9 8"/><path d="M5.5 10v10.5h13V10"/>'
+    + '<rect x="9" y="14" width="6" height="5" rx="1"/><path d="M10.2 14v-1.6a1.8 1.8 0 0 1 3.6 0V14"/>',
+  storefront: // mái hiên sọc trên cửa hàng
+    '<path d="M4 9.5 5.5 4h13L20 9.5"/>'
+    + '<path d="M4 9.5a2 2 0 0 0 4 0 2 2 0 0 0 4 0 2 2 0 0 0 4 0 2 2 0 0 0 4 0"/>'
+    + '<path d="M5.5 12v8.5h13V12"/><path d="M10 20.5v-5h4v5"/>',
+
+  /* ---------------------------------------------------------- nhánh phụ */
+  helmet:   // mũ bảo hộ có vành
+    '<path d="M4 16.5a8 8 0 0 1 16 0"/><path d="M2.5 16.5h19v2.5h-19z"/>'
+    + '<path d="M10 8.8V6h4v2.8"/><path d="M8 16.5v-4M16 16.5v-4"/>',
+  cell:     // song sắt và đồng xu nằm trong
+    '<rect x="3.5" y="3.5" width="17" height="17" rx="1.5"/>'
+    + '<path d="M8 3.5v17M12 3.5v4.5M12 16v4.5M16 3.5v17"/><circle cx="12" cy="12" r="2.6"/>',
+  bicycle:  // xe đạp hai bánh
+    '<circle cx="6" cy="16" r="3.8"/><circle cx="18" cy="16" r="3.8"/>'
+    + '<path d="M6 16 9.5 9h6L18 16M9.5 9l3 7h-6.5M15.5 9l-1.2-2.5h-2.3"/>',
+  guide:    // lá cờ dẫn đoàn và hai người đi sau
+    '<path d="M5 21V3.5l9 3-9 3"/>'
+    + '<circle cx="14.5" cy="13" r="1.8"/><path d="M12 21v-2.5a2.5 2.5 0 0 1 5 0V21"/>'
+    + '<circle cx="19.5" cy="15" r="1.4"/><path d="M18 21v-1.8a1.6 1.6 0 0 1 3 0V21"/>',
+  cards:    // ba lá bài xoè
+    '<rect x="8" y="3.5" width="9" height="13" rx="1.4" transform="rotate(12 12.5 10)"/>'
+    + '<rect x="5.5" y="5.5" width="9" height="13" rx="1.4"/>'
+    + '<path d="M10 9.5l-1.5 2.5 1.5 2.5 1.5-2.5z"/>',
+  wheel:    // vòng quay có kim chỉ
+    '<circle cx="12" cy="13" r="8"/><path d="M12 5v16M4 13h16M6.3 7.3l11.4 11.4M17.7 7.3 6.3 18.7"/>'
+    + '<path d="M10.5 2.5h3L12 5z"/>' + dot(12, 13, 1.4),
+  basket:   // giỏ hàng có quai
+    '<path d="M3 9.5h18l-2 10.5H5z"/><path d="M8 9.5 11 4M16 9.5 13 4"/>'
+    + '<path d="M9 13v4M12 13v4M15 13v4"/>',
+  handshake: // hai bàn tay bắt nhau
+    '<path d="M2.5 12 6 8.5l3 1.2 3-1.7 3 1.7 3-1.2 3.5 3.5"/>'
+    + '<path d="M6 8.5v5.5l4 3.5a1.4 1.4 0 0 0 2-2"/><path d="M18 8.5v5.5l-4 3.5"/><path d="M12 15.5l2 2"/>',
+  apartment: // khối nhà nhiều tầng đứng một mình
+    '<path d="M6 21V4h12v17"/><path d="M3.5 21h17"/>'
+    + '<path d="M9 7.5h2M13 7.5h2M9 11h2M13 11h2M9 14.5h2M13 14.5h2"/><path d="M10.5 21v-3h3v3"/>',
+  neighbors: // hai mái nhà sát vách
+    '<path d="M2.5 12 7 7.5l4.5 4.5M12.5 12 17 7.5l4.5 4.5"/>'
+    + '<path d="M4 11v9.5h6.5V11M13.5 11v9.5H20V11"/><path d="M11.5 20.5h2"/>',
+
   lock:
     '<rect x="5" y="10.5" width="14" height="10.5" rx="2.2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>'
     + '<path d="M12 14.5v2.5"/>',

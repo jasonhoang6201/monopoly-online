@@ -571,7 +571,7 @@ await page.locator('.ptab[data-tab="skills"]').waitFor({ timeout: 5000 });
 check(await page.locator('.ppane-skills .st-node').count() === 0, 'cây chưa dựng khi chưa mở tab');
 await page.locator('.ptab[data-tab="skills"]').click();
 await page.waitForTimeout(300);
-check(await page.locator('.ppane-skills .st-node').count() === 35, 'mở tab: đủ 35 ô (5 nhánh × 7)');
+check(await page.locator('.ppane-skills .st-node').count() === 40, 'mở tab: đủ 40 ô (5 nhánh × 8)');
 check(await page.locator('.ppane-skills .st-node.is-learned').count() === 4, '4 ô đã học sáng lên');
 check(await page.locator('.ppane-skills .st-node[data-id="dd1"] .st-lv i.on').count() === 3, 'Chẵn Lẻ hiện 3 chấm level');
 check(await page.locator('.ppane-skills .st-node.is-ready, .ppane-skills .st-node.can-up').count() === 0,
@@ -614,7 +614,7 @@ check(!lock.before && lock.why.includes('Dừng chung ô với người khác: 0
   `có ô đứng trước, Hai Ngón vẫn khoá tới khi dừng chung ô 5 lần (${lock.why})`);
 check(lock.state1 === 'ready' && lock.ok && lock.pts === 3 && lock.cost === 2, 'đủ 5 lần thì học được, tốn 2 điểm như ô cấp 3');
 
-// Hình cây: mỗi nhánh 1 → 3 → 2 → tối thượng, ô thành tựu nằm trong đó
+// Hình cây: mỗi nhánh 1 → 3 → 2 → 2 tối thượng, ô thành tựu nằm trong đó
 const treeShape = await run(`
   const { SKILLS, BRANCHES } = await import('/src/data/skills.js');
   return BRANCHES.map((b) => {
@@ -623,11 +623,11 @@ const treeShape = await run(`
     return { rows: [1, 2, 3, 4].map((t) => row(t).length).join(''),
              feats: mine.filter((x) => x.feat).map((x) => x.tier + (x.slot ?? '')).join(','),
              orphan: mine.filter((x) => x.tier > 1 && !x.requires?.length).length,
-             ult: row(4)[0].requires.length };
+             ult: row(4).map((x) => x.requires.length).join('') };
   });
 `);
-check(treeShape.every((b) => b.rows === '1321' && b.feats.split(',').sort().join(',') === '2c,3b' && !b.orphan && b.ult === 2),
-  `5 nhánh đều 1 → 3 → 2 → tối thượng, thành tựu ở 2c và 3b, không ô nào đứng riêng (${JSON.stringify(treeShape)})`);
+check(treeShape.every((b) => b.rows === '1322' && b.feats.split(',').sort().join(',') === '2c,3b' && !b.orphan && b.ult === '22'),
+  `5 nhánh đều 1 → 3 → 2 → 2 tối thượng, thành tựu ở 2c và 3b, không ô nào đứng riêng (${JSON.stringify(treeShape)})`);
 
 // Dừng chung ô: đếm thành tựu, Hai Ngón móc túi người giàu nhất trên ô
 await reset();

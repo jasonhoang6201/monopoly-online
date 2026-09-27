@@ -36,6 +36,10 @@ export function snapshot(st) {
       jails: p.jails,
       skillUse: copyUse(p.skillUse),
       feats: { ...p.feats },
+      lotto: p.lotto,
+      spin: p.spin,
+      stake: p.stake,
+      jailSits: p.jailSits,
     })),
     turn: st.turn,
     order: st.order ? [...st.order] : null,
@@ -68,6 +72,7 @@ export function snapshot(st) {
     eventPile: [...st.eventPile],
     /* Cây kỹ năng: biển Di Sản và bộ đếm lượt cho kỹ năng "mỗi lượt 1 lần". */
     heritage: [...st.heritage],
+    passedUp: [...st.passedUp].map(([id, seats]) => [id, [...seats]]),
     turnNo: st.turnNo,
   };
 }
@@ -111,6 +116,10 @@ export function applySnapshot(st, snap) {
     p.jails = s.jails ?? p.jails;
     p.skillUse = copyUse(s.skillUse ?? p.skillUse);
     p.feats = { ...(s.feats ?? p.feats) };
+    p.lotto = s.lotto ?? null;
+    p.spin = !!s.spin;
+    p.stake = s.stake ?? null;
+    p.jailSits = s.jailSits ?? 0;
   });
   st.turn = snap.turn;
   st.order = snap.order ? [...snap.order] : null;
@@ -140,6 +149,7 @@ export function applySnapshot(st, snap) {
   /* Ảnh chụp cũ mang hai chồng chia theo kỳ (`eventPiles`). Gộp lại thành một
      chồng thay vì bỏ đi, để ván đang chơi giữa lúc cập nhật không bị xáo lại. */
   if (snap.heritage) st.heritage = new Set(snap.heritage);
+  st.passedUp = new Map((snap.passedUp ?? []).map(([id, seats]) => [id, [...seats]]));
   st.turnNo = snap.turnNo ?? st.turnNo;
   if (snap.eventPile) st.eventPile = [...snap.eventPile];
   else if (snap.eventPiles) st.eventPile = [...(snap.eventPiles[1] ?? []), ...(snap.eventPiles[2] ?? [])];

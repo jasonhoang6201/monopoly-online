@@ -10,7 +10,7 @@ import {
 } from '../data/board.js';
 import { CHANCE, CHEST, Deck } from '../data/cards.js';
 import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
-import { has, param, roll, ownerRentMult, houseImmune, credit } from './skills.js';
+import { has, param, roll, ownerRentMult, ownerRentFlat, houseImmune, credit } from './skills.js';
 
 /**
  * Bảng màu quân — quân cờ chỉ phân biệt bằng MÀU, không mang biểu tượng riêng.
@@ -101,6 +101,14 @@ export class Player {
     this.skillUse = {};
     /** Bộ đếm thành tựu mở khoá kỹ năng ẩn (xem `FEATS` trong data/skills.js). */
     this.feats = {};
+    /** Tổng xí ngầu đã chọn cho Xổ Số Kiến Thiết; `null` là chưa chọn. */
+    this.lotto = null;
+    /** Cò Quay Lương đang bật — lương lần qua ô Bắt Đầu tới được quay. */
+    this.spin = false;
+    /** Ghế người mình đang góp vốn (Góp Vốn); `null` là chưa góp ai. */
+    this.stake = null;
+    /** Số lượt đã ngồi yên trong lần vào tù này (Ở Tù Cho Lành). */
+    this.jailSits = 0;
   }
 }
 
@@ -191,6 +199,12 @@ export class GameState {
      * Biển gỡ khi khách sạn trên ô bị hạ. @type {Set<number>}
      */
     this.heritage = new Set();
+    /**
+     * Ô chưa có chủ mà có người dừng chân rồi không mua: tileId → mảng ghế đã
+     * bỏ qua. Nhặt Hàng Thừa chỉ sáng những ô **người khác** bỏ qua. Ô có chủ
+     * rồi thì xoá khỏi đây. @type {Map<number, number[]>}
+     */
+    this.passedUp = new Map();
     /**
      * Đếm lượt từ đầu ván, tăng ở `nextTurn`. Kỹ năng "mỗi lượt 1 lần" đánh dấu
      * bằng con số này thay vì một cờ bật/tắt: `beginTurn` chạy lại nhiều lần
@@ -378,21 +392,19 @@ export class GameState {
     if (ownerId === undefined || this.isMortgaged(tileId) || this.isFrozen(tileId)) return 0;
 
     const k = this.rentMult(tileId) * ownerRentMult(this, tileId);
-    if (t.type === 'station') {
-      return Math.round(STATION_RENT[this.stationCount(ownerId)] * k);
-    }
-    if (t.type === 'utility') {
-      return Math.round(diceSum * UTILITY_MULT[this.utilityCount(ownerId)] * k);
-    }
-    if (t.type === 'property') {
+    // Vé Tháng, Mặt Tiền cộng sau hệ số nhân — xem `ownerRentFlat`
+    const flat = Object.values(ownerRentFlat(this, tileId)).reduce((n, x) => n + x, 0);
+    let base = 0;
+    if (t.type === 'station') base = STATION_RENT[this.stationCount(ownerId)];
+    else if (t.type === 'utility') base = diceSum * UTILITY_MULT[this.utilityCount(ownerId)];
+    else if (t.type === 'property') {
       const h = this.housesOn(tileId);
       // Đủ bộ màu mà chưa xây nhà → giá thuê gấp đôi.
-      const base = h > 0
+      base = h > 0
         ? t.rents[h]
         : (this.hasFullGroup(ownerId, t.color_group) ? t.rents[0] * 2 : t.rents[0]);
-      return Math.round(base * k);
-    }
-    return 0;
+    } else return 0;
+    return Math.round(base * k) + flat;
   }
 
   // ---------------------------------------------------------- xây nhà
@@ -410,7 +422,17 @@ export class GameState {
     if (t.type !== 'property') return { ok: false, reason: 'Chỉ đất mới xây được nhà.' };
     if (!o.free && this.hasMod('freeze-build')) return { ok: false, reason: 'Đang giới nghiêm — thợ thuyền nghỉ hết.' };
     if (this.owner.get(tileId) !== playerId) return { ok: false, reason: 'Không phải đất của bạn.' };
-    const group = this.buildGroup(playerId, t.color_group);
+    let group = this.buildGroup(playerId, t.color_group);
+    /* Chung Cư Mini: chưa đủ bộ thì ô này đứng riêng một mình — luật xây đều
+       tay chỉ xét chính nó, không đụng tới ô cùng màu trong tay người khác. */
+    const p = this.players[playerId];
+    const mini = !group.length && has(p, 'acS1');
+    if (mini) {
+      group = [tileId];
+      if (this.housesOn(tileId) >= param(p, 'acS1').cap) {
+        return { ok: false, reason: `Đất lẻ chỉ xây được ${param(p, 'acS1').cap} căn (Chung Cư Mini).` };
+      }
+    }
     if (!group.length) {
       return { ok: false, reason: `Cần đủ bộ ${GROUPS[t.color_group].name}.` };
     }
@@ -433,10 +455,10 @@ export class GameState {
       return { ok: false, reason: 'Ngân hàng đã hết nhà (32 căn).' };
     }
 
-    const cost = o.free ? 0 : this.buildCost(tileId);
-    if (this.players[playerId].money < cost) return { ok: false, reason: 'Không đủ tiền.' };
+    const cost = o.free ? 0 : Math.ceil(this.buildCost(tileId) * (mini ? param(p, 'acS1').mult : 1));
+    if (p.money < cost) return { ok: false, reason: 'Không đủ tiền.' };
 
-    return { ok: true, isHotel, cost };
+    return { ok: true, isHotel, cost, mini };
   }
 
   /** Xây 1 nhà, hoặc lên khách sạn (trả lại 4 căn nhà cho ngân hàng). */
@@ -449,7 +471,8 @@ export class GameState {
     if (!o.free && has(p, 'ac1')) {
       credit(p, 'ac1', Math.ceil(BOARD[tileId].house_cost * this.modMult('build')) - check.cost);
     }
-    if (!this.hasFullGroup(playerId, BOARD[tileId].color_group)) credit(p, 'ac3');
+    if (check.mini) credit(p, 'acS1');
+    else if (!this.hasFullGroup(playerId, BOARD[tileId].color_group)) credit(p, 'ac3');
     if (check.isHotel) {
       this.houses.set(tileId, 5);
       this.bankHouses += 4;   // trả 4 căn nhà về kho
@@ -498,8 +521,9 @@ export class GameState {
     if (cur === 5 && this.bankHouses < 4) {
       return { ok: false, reason: 'Ngân hàng không đủ 4 căn nhà để đổi.' };
     }
-    // Phá đều tay.
-    const max = Math.max(...GROUP_TILES[t.color_group].map((id) => this.housesOn(id)));
+    // Phá đều tay — trong những ô mình được xây; nhà trên đất lẻ (Chung Cư Mini) đứng riêng
+    const group = this.buildGroup(playerId, t.color_group);
+    const max = Math.max(...(group.length ? group : [tileId]).map((id) => this.housesOn(id)));
     if (cur < max) return { ok: false, reason: 'Phải bán đều các ô trong bộ.' };
     // Sổ Hồng level 2–3 bán lại được hơn nửa giá xây
     const owner = this.players[playerId];
@@ -611,7 +635,25 @@ export class GameState {
     if (!t.ownable || this.owner.has(tileId) || p.money < t.price) return false;
     p.money -= t.price;
     this.owner.set(tileId, playerId);
+    this.passedUp.delete(tileId);
     return true;
+  }
+
+  /** Mua ô chưa có chủ với giá khác giá gốc (Nhặt Hàng Thừa). */
+  buyAt(playerId, tileId, price) {
+    const p = this.players[playerId];
+    if (!BOARD[tileId].ownable || this.owner.has(tileId) || p.money < price) return false;
+    p.money -= price;
+    this.owner.set(tileId, playerId);
+    this.passedUp.delete(tileId);
+    return true;
+  }
+
+  /** Có người dừng ở ô chưa có chủ mà không mua — ghi lại cho Nhặt Hàng Thừa. */
+  passUp(tileId, seat) {
+    if (!BOARD[tileId].ownable || this.owner.has(tileId)) return;
+    const seats = this.passedUp.get(tileId) ?? [];
+    if (!seats.includes(seat)) this.passedUp.set(tileId, [...seats, seat]);
   }
 
   /** Chuyển quyền sở hữu (dùng cho trading). Nhà cửa không đi kèm — luật buộc bán hết trước. */
@@ -627,6 +669,7 @@ export class GameState {
     player.jailTurns = 0;
     player.jails = (player.jails ?? 0) + 1;
     player.doubles = 0;
+    player.jailSits = 0;
   }
 
   releaseFromJail(player) {

@@ -27,7 +27,9 @@
  * và một chốt canh: ván phải sang lượt mới trong vòng 90 giây, không thì coi
  * như bị kẹt và in ra đang đứng ở hộp thoại / nút nào.
  *
- * `node tests/skills-play.mjs [số lượt] [seed]` — mặc định 48 lượt.
+ * `node tests/skills-play.mjs [số lượt] [seed] [b]` — mặc định 48 lượt. Thêm
+ * `b` thì mọi ghế học tối thượng thứ hai của nhánh (Bảo Hiểm Xã Hội, Trạm Thu
+ * Phí BOT, Xổ Số Kiến Thiết, Siết Nợ, Mặt Tiền) thay cho tối thượng thứ nhất.
  * Cần dev server ở cổng 5178.
  */
 import { launchChrome } from './launch.mjs';
@@ -36,7 +38,8 @@ import { pickOnBoard, picking } from './pick.mjs';
 
 const TURNS = Number(process.argv[2] ?? 48);
 let seed = Number(process.argv[3] ?? Date.now() % 100000);
-console.log(`seed ${seed} — chạy lại đúng ván này: node tests/skills-play.mjs ${TURNS} ${seed}`);
+const ULT_B = process.argv[4] === 'b';
+console.log(`seed ${seed} — chạy lại đúng ván này: node tests/skills-play.mjs ${TURNS} ${seed}${ULT_B ? ' b' : ''}`);
 const rand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
 const pick = (arr) => arr[Math.floor(rand() * arr.length)];
 
@@ -64,7 +67,7 @@ await playRollOff(page);
 
 /* ---- chia build và dựng thế cờ có đủ chỗ cho kỹ năng đụng nhau ---- */
 const lvRolls = Array.from({ length: 40 }, () => 1 + Math.floor(rand() * 3));
-await page.evaluate((lvRolls) => {
+await page.evaluate(([lvRolls, ultB]) => {
   const c = window.__monopoly.controller;
   const s = c.state;
   const builds = [
@@ -74,6 +77,8 @@ await page.evaluate((lvRolls) => {
     ['dd1', 'dd2a', 'dd2b', 'dd3', 'ddU', 'ac1', 'ddX1', 'ddX2', 'acX2'],
     ['dc1', 'dc2a', 'dc2b', 'dc3', 'dcU', 'ac1', 'ac2a', 'ac2b', 'ac3', 'acU', 'dcX1', 'dcX2', 'acX1'],
   ];
+  // Tối thượng thứ hai: đổi mọi id 'xxU' thành 'xxV'
+  if (ultB) builds.forEach((b) => b.forEach((id, j) => { if (/U$/.test(id)) b[j] = id.replace(/U$/, 'V'); }));
   s.players.forEach((p, i) => { p.skills = builds[i]; p.money = 2000; p.skillPoints = 2; });
   // Level: ghế 0 toàn level 3, ghế 2 toàn level 1, ghế 1 và 3 rút theo seed
   let k = 0;
@@ -105,7 +110,7 @@ await page.evaluate((lvRolls) => {
   // Ô thứ ba của bộ đỏ trong tay Công Nhân — không ai đủ bộ đỏ
   s.owner.set(24, 0);
   c.hud.refresh(); c.scene.refresh(s); c.restoreActions();
-}, lvRolls);
+}, [lvRolls, ULT_B]);
 
 /* ================================================================ lái tự động */
 
@@ -150,6 +155,15 @@ async function answerModal() {
     }
     await top.locator('.st-close').click();
     return 'cây kỹ năng';
+  }
+
+  // Xổ Số: chọn một tổng ngẫu nhiên. Đứng trước hộp cược vì cũng nằm trong `.sk-bet`
+  if (await top.locator('.sk-lotto').count()) {
+    const nums = top.locator('.sk-lotto button');
+    await nums.nth(Math.floor(rand() * await nums.count())).click();
+    await top.locator('.modal-foot button', { hasText: 'Chọn số này' }).click();
+    count('chọn số Xổ Số');
+    return 'xổ số';
   }
 
   // Hộp cược: chọn cửa + số tiền ngẫu nhiên

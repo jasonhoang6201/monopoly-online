@@ -8,7 +8,7 @@
     "dev": "vite --port 5174",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node tests/play-through.mjs && node tests/features.mjs && node tests/endgame.mjs && node tests/jail-debt.mjs && node tests/creditor-paid.mjs && node tests/audio.mjs && node tests/ui-v2.mjs && node tests/events.mjs && node tests/cards.mjs && node tests/meme-hotkey.mjs && node tests/mobile.mjs && node tests/tile-fx.mjs && node tests/skills.mjs && node tests/skills-mobile.mjs && node tests/skills-play.mjs 48 4242",
+    "test": "node tests/play-through.mjs && node tests/features.mjs && node tests/endgame.mjs && node tests/jail-debt.mjs && node tests/creditor-paid.mjs && node tests/audio.mjs && node tests/ui-v2.mjs && node tests/events.mjs && node tests/cards.mjs && node tests/meme-hotkey.mjs && node tests/mobile.mjs && node tests/tile-fx.mjs && node tests/skills.mjs && node tests/skills-mobile.mjs && node tests/skills-play.mjs 48 4242 && node tests/skills-ult2.mjs && node tests/skills-play.mjs 48 4242 b",
     "test:online": "node tests/online.mjs && node tests/rejoin.mjs && node tests/events-online.mjs && node tests/creditor-online.mjs && node tests/cards-online.mjs && node tests/skills-online.mjs",
     "test:rules": "node tests/endgame.mjs && node tests/jail-debt.mjs && node tests/creditor-paid.mjs",
     "test:audio": "node tests/audio.mjs",

@@ -54,7 +54,7 @@ export function rankOf(kind, card) {
 }
 
 /** Dòng chữ in trên ô trong dải — đọc lướt được trong một phần mười giây. */
-function shortLabel(kind, card) {
+export function shortLabel(kind, card) {
   if (kind === 'event') return card.title;
   switch (card.type) {
     case 'collect':       return 'TIỀN MỪNG';

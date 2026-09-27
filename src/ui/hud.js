@@ -483,7 +483,7 @@ export class Hud {
     for (const b of buttons) {
       if (!b) continue;
       const btn = document.createElement('button');
-      btn.className = `btn ${b.cls ?? ''}${b.pulse ? ' pulse' : ''}`;
+      btn.className = `btn ${b.cls ?? ''}${b.pulse ? ' pulse' : ''}${b.half ? ' half' : ''}`;
       btn.disabled = !!b.disabled;
       const hint = b.key ? `Phím tắt: ${b.key.toUpperCase()}` : '';
       btn.title = b.title ? (hint ? `${b.title} · ${hint}` : b.title) : hint;
