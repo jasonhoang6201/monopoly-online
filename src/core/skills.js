@@ -203,8 +203,12 @@ export function learnSkill(player, id) {
   const check = canLearn(player, id);
   if (!check.ok) return check;
   player.skillPoints -= check.cost;
-  if (check.level === 1) player.skills.push(id);
-  else player.skillLv = { ...player.skillLv, [id]: check.level };
+  if (check.level === 1) {
+    player.skills.push(id);
+    /* Kỹ năng bấm để dùng học xong thì nằm tắt: bật lúc nào là việc của người
+       chơi trong lượt mình. Kỹ năng tự động không có công tắc, học là chạy. */
+    if (switchable(skillById(id))) player.skillOff = [...(player.skillOff ?? []), id];
+  } else player.skillLv = { ...player.skillLv, [id]: check.level };
   return check;
 }
 
@@ -285,6 +289,7 @@ export function respec(player) {
   player.skillPoints += check.refund;
   player.skills = [];
   player.skillLv = {};
+  player.skillOff = [];
   return check;
 }
 
@@ -293,14 +298,54 @@ export function respec(player) {
    Phần cần hỏi người chơi hay diễn hoạt cảnh nằm ở game/skillPlay.js.
    ================================================================ */
 
-/** Người chơi đã học kỹ năng này chưa. Người phá sản thì mọi kỹ năng tắt. */
-export const has = (p, id) => !!p && !p.bankrupt && p.skills.includes(id);
+/**
+ * Kỹ năng đang có tác dụng: đã học, đang bật, người chơi chưa phá sản. Mọi
+ * chỗ tính tác dụng đều hỏi hàm này, nên tắt một kỹ năng là nó ngừng hẳn —
+ * không lương, không hệ số thuê, không ghi tiến độ lên level.
+ */
+export const has = (p, id) => !!p && !p.bankrupt && p.skills.includes(id) && !isOff(p, id);
+
+/**
+ * Kỹ năng đã học mà đang tắt. Ghi danh sách **tắt** chứ không ghi danh sách
+ * bật: ảnh chụp của ván trước khi có công tắc không mang trường này, dựng lại
+ * thì mọi kỹ năng đã học vẫn bật như lúc ấy.
+ */
+export const isOff = (p, id) => !!p?.skillOff?.includes(id);
+
+/** Chỉ kỹ năng bấm để dùng có công tắc; kỹ năng tự động học là có tác dụng. */
+export const switchable = (s) => s?.kind === 'active';
+
+/**
+ * Bật / tắt một kỹ năng đã học. Chỉ gọi trong lượt của chính người đó (xem
+ * `SkillPlay.toggle`) — tắt giữa lượt người khác là né được khoản phải trả.
+ * Bộ đếm hồi, số lần đã dùng và tiến độ giữ nguyên: tắt rồi bật lại không
+ * hồi được kỹ năng đang chờ.
+ * @returns {boolean} đổi được hay không
+ */
+export function setSkillOn(p, id, on) {
+  if (!p?.skills.includes(id) || !switchable(skillById(id)) || isOff(p, id) === !on) return false;
+  p.skillOff = on ? p.skillOff.filter((x) => x !== id) : [...(p.skillOff ?? []), id];
+  return true;
+}
 
 /**
  * Bộ số của kỹ năng theo level người này đang có. Chưa học thì trả bộ level 1
  * — biển Di Sản vẫn cần hệ số thuê dù chủ đất đã tẩy mất Phố Cổ.
  * Số dạng khoảng còn nguyên `[a, b]`; chỗ trao tiền phải qua `roll`.
  */
+/**
+ * Cuối lượt: kỹ năng bật / tắt đã dùng hết lượt (đang chờ hồi) tự về tắt.
+ * Hồi xong người chơi tự bật lại, không tự chạy tiếp khi họ đã quên nó.
+ * Để tới cuối lượt chứ không tắt ngay lúc `spend`, vì phần còn lại của
+ * nước đi ấy (đi tiếp, lắc lại) có thể vẫn đọc has().
+ * @returns {string[]} những ô vừa tắt
+ */
+export function offSpent(p) {
+  const out = p.skills.filter((id) => !isOff(p, id) && p.cooldowns?.[id] > 0 && switchable(skillById(id)));
+  if (out.length) p.skillOff = [...(p.skillOff ?? []), ...out];
+  return out;
+}
+
 export const param = (p, id) => lvParams(skillById(id), levelOf(p, id));
 
 /**

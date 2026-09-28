@@ -28,6 +28,7 @@ export function snapshot(st) {
       cards: p.cards.map((c) => ({ ...c })),
       skillPoints: p.skillPoints,
       skills: [...p.skills],
+      skillOff: [...p.skillOff],
       laps: p.laps,
       cooldowns: { ...p.cooldowns },
       usedTurn: { ...p.usedTurn },
@@ -37,7 +38,7 @@ export function snapshot(st) {
       skillUse: copyUse(p.skillUse),
       feats: { ...p.feats },
       lotto: p.lotto,
-      spin: p.spin,
+      betSet: p.betSet ? { ...p.betSet } : null,
       stake: p.stake,
       jailSits: p.jailSits,
     })),
@@ -108,6 +109,10 @@ export function applySnapshot(st, snap) {
     // Ảnh chụp của ván mở trước khi có cây kỹ năng không mang mấy trường này
     p.skillPoints = s.skillPoints ?? p.skillPoints;
     p.skills = [...(s.skills ?? p.skills)];
+    // Ảnh chụp trước khi có công tắc: mọi kỹ năng đã học đều đang bật
+    /* Ảnh chụp cũ: chưa có skillOff, Cò Quay bật tắt bằng cờ `spin` riêng.
+       Giờ công tắc của kỹ năng chính là công tắc quay lương. */
+    p.skillOff = s.skillOff ? [...s.skillOff] : (s.skills ?? []).includes('ddS2') && !s.spin ? ['ddS2'] : [];
     p.laps = s.laps ?? p.laps;
     p.cooldowns = { ...(s.cooldowns ?? p.cooldowns) };
     p.usedTurn = { ...(s.usedTurn ?? p.usedTurn) };
@@ -117,7 +122,7 @@ export function applySnapshot(st, snap) {
     p.skillUse = copyUse(s.skillUse ?? p.skillUse);
     p.feats = { ...(s.feats ?? p.feats) };
     p.lotto = s.lotto ?? null;
-    p.spin = !!s.spin;
+    p.betSet = s.betSet ? { ...s.betSet } : null;
     p.stake = s.stake ?? null;
     p.jailSits = s.jailSits ?? 0;
   });

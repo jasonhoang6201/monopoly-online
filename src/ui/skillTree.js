@@ -15,6 +15,10 @@
  * năng trong bảng tài sản của người chơi (`mountSkillTree` với `readOnly`) —
  * bản chỉ xem không có nút học, không có tẩy điểm, ô chưa học đều mờ như nhau
  * vì "học được ngay" chỉ có nghĩa với chính chủ cây.
+ *
+ * Kỹ năng bấm để dùng học xong thì nằm **tắt**; kỹ năng tự động học là chạy.
+ * Bật / tắt và tẩy điểm chỉ có trong lượt của chính chủ cây (`manage`); ngoài
+ * lượt vẫn mở cây để học và lên level.
  */
 import './skillTree.css';
 import { openModal } from './modal.js';
@@ -24,6 +28,7 @@ import {
   skillById, branchByKey, skillCost, skillState, canLearn, learnSkill, levelOf,
   canLevelUp, nextCost, lvParams, levelLine, spentIn, branchMax, fillText,
   canRespec, respec, featMet, featText, growNeed, growText, usage, progressText, rivalUlt,
+  isOff, setSkillOn, switchable,
 } from '../core/skills.js';
 import { audio } from '../audio/audio.js';
 import { money } from '../data/board.js';
@@ -100,7 +105,7 @@ const spanTag = (s) => (s.uses
 
 /* ------------------------------------------------------------ dựng cây */
 
-function buildTree(player, readOnly) {
+function buildTree(player, readOnly, manage) {
   const el = document.createElement('div');
   el.className = 'st' + (readOnly ? ' st-view' : '');
 
@@ -140,9 +145,10 @@ function buildTree(player, readOnly) {
         <span class="st-plabel">điểm kỹ năng</span>
       </div>
       <span class="st-hint">${readOnly ? 'Bấm vào một ô để xem tác dụng và level'
-        : '+1 điểm mỗi lần đi qua ô Bắt Đầu · rê chuột để xem tên, bấm để xem chi tiết'}</span>
+        : manage ? '+1 điểm mỗi lần đi qua ô Bắt Đầu · kỹ năng bấm để dùng học xong nằm tắt, bấm vào ô để bật'
+          : 'Chưa tới lượt bạn: học và lên level được, bật / tắt và tẩy điểm thì chờ tới lượt'}</span>
       <span class="st-count"></span>
-      ${readOnly ? '' : `<button type="button" class="btn btn-sm btn-ghost st-respec" data-act="respec-open"
+      ${readOnly || !manage ? '' : `<button type="button" class="btn btn-sm btn-ghost st-respec" data-act="respec-open"
               title="Hoàn lại toàn bộ điểm đã tiêu để học lại từ đầu">Tẩy điểm</button>`}
       <button type="button" class="st-close" data-act="close" title="Đóng (Esc)" aria-label="Đóng cây kỹ năng">✕</button>
     </div>
@@ -164,7 +170,7 @@ function buildTree(player, readOnly) {
 
 /* ------------------------------------------------------------ thẻ chi tiết */
 
-function detailHtml(player, s, readOnly) {
+function detailHtml(player, s, readOnly, manage) {
   const b = branchByKey(s.branch);
   const state = skillState(player, s.id);
   const lv = levelOf(player, s.id);
@@ -212,9 +218,10 @@ function detailHtml(player, s, readOnly) {
         ? `Tự động, không cần bấm. <b>${esc(s.uses)}</b>.`
         : 'Tự động, không cần bấm. Hiệu ứng <b>vĩnh viễn</b> từ lúc học tới hết ván.')
     : s.auto
-      ? `Học xong, game tự hỏi bạn ${esc(s.when)}; muốn dùng thì chọn, không thì bỏ qua. <b>${esc(s.uses)}</b>.`
-      : `Học xong, kỹ năng nằm trong kho <b>Dùng kỹ năng</b> trên thanh nút; dùng được ${esc(s.when)}. `
-      + `Muốn dùng thì mở kho rồi bấm, không thì bỏ qua. <b>${esc(s.uses)}</b>.`) + ultNote;
+      ? `Học xong kỹ năng nằm <b>tắt</b>; bật lên (trong lượt của bạn) thì game tự hỏi bạn ${esc(s.when)}, muốn dùng thì chọn, không thì bỏ qua. <b>${esc(s.uses)}</b>. Dùng hết lượt thì cuối lượt tự về tắt.`
+      : `Học xong kỹ năng nằm <b>tắt</b> trong kho <b>Dùng kỹ năng</b> trên thanh nút. Trong kho, bấm vào ô để bật (ô có màu) `
+      + `hoặc chọn cách dùng, chọn "Không" là tắt; bấm Chốt để áp dụng. Dùng được ${esc(s.when)}. <b>${esc(s.uses)}</b>. `
+      + 'Dùng hết lượt thì cuối lượt tự về tắt.') + ultNote;
 
   /* Ba level xếp thành ba dòng: level đang có tô sáng, level kế tiếp đánh dấu
      để người chơi so được mình sẽ nhận thêm gì trước khi bấm. Số dạng khoảng
@@ -227,20 +234,31 @@ function detailHtml(player, s, readOnly) {
 
   const after = player.skillPoints - cost;
   const upLabel = lv ? `Lên level ${lv + 1}` : 'Nâng cấp';
+  const off = lv && isOff(player, s.id);
+  const onTag = lv && switchable(s) ? `<span class="sd-onoff ${off ? 'is-off' : 'is-on'}">${off ? 'Đang tắt' : 'Đang bật'}</span>` : '';
+  /* Công tắc chỉ có trong lượt của chủ cây. Ngoài lượt vẫn hiện trạng thái
+     để người chơi biết phải bật cái gì khi tới lượt. */
+  const toggle = !lv || readOnly || !switchable(s) ? ''
+    : manage
+      ? `<button type="button" class="btn ${off ? 'btn-jade' : 'btn-ghost'} sd-toggle" data-act="toggle"${maxed ? ' data-primary' : ''}>
+           ${off ? 'Bật kỹ năng' : 'Tắt kỹ năng'}</button>`
+      : '<span class="sd-wait">Bật / tắt trong lượt của bạn</span>';
   const foot = readOnly
-    ? `${lv ? `<div class="sd-learned">${skillIcon('check')} Level ${lv}/${MAX_LEVEL}</div>` : '<div class="sd-learned sd-not">Chưa học</div>'}
+    ? `${lv ? `<div class="sd-learned">${skillIcon('check')} Level ${lv}/${MAX_LEVEL}${onTag}</div>` : '<div class="sd-learned sd-not">Chưa học</div>'}
        <button type="button" class="btn btn-ghost" data-act="cancel" data-primary>Đóng</button>`
     : maxed
-      ? `<div class="sd-learned">${skillIcon('check')} Đã đạt level ${MAX_LEVEL}</div>
+      ? `<div class="sd-learned">${skillIcon('check')} Đã đạt level ${MAX_LEVEL}${onTag}</div>
+         ${toggle}
          <button type="button" class="btn btn-ghost" data-act="cancel">Đóng</button>`
-      : `${lv ? `<div class="sd-learned">${skillIcon('check')} Level ${lv}/${MAX_LEVEL}</div>` : ''}
+      : `${lv ? `<div class="sd-learned">${skillIcon('check')} Level ${lv}/${MAX_LEVEL}${onTag}</div>` : ''}
+         ${toggle}
          <button type="button" class="btn btn-ghost" data-act="cancel">Huỷ<kbd class="btn-key">Esc</kbd></button>
          <button type="button" class="btn btn-gold" data-act="learn" data-primary ${check.ok ? '' : 'disabled'}>
            ${upLabel} · −${cost} điểm${check.ok ? '<kbd class="btn-key">⏎</kbd>' : ''}
          </button>`;
 
   return `
-    <div class="sd-card${s.tier === 4 ? ' ult' : ''}${s.feat ? ' feat' : ''} is-${readOnly && !lv ? 'locked' : state}" style="--c:${b.color}" role="dialog"
+    <div class="sd-card${s.tier === 4 ? ' ult' : ''}${s.feat ? ' feat' : ''}${off ? ' off' : ''} is-${readOnly && !lv ? 'locked' : state}" style="--c:${b.color}" role="dialog"
          aria-label="${esc(s.name)}">
       <div class="sd-top">
         <span class="sd-icon">${skillIcon(s.icon)}</span>
@@ -273,7 +291,8 @@ function detailHtml(player, s, readOnly) {
           <ul class="sd-conds">
             ${conds.map((c) => `<li class="${c.ok ? 'ok' : 'no'}">${c.ok ? '✓' : '✕'} ${c.text}</li>`).join('')}
           </ul>
-          ${!maxed && check.ok ? `<p class="sd-after">Nâng xong còn <b>${after}</b> điểm.</p>` : ''}
+          ${!maxed && check.ok ? `<p class="sd-after">Nâng xong còn <b>${after}</b> điểm.${
+            lv || !switchable(s) ? '' : ' Học xong kỹ năng nằm <b>tắt</b>, bật lên trong lượt của bạn thì mới dùng được.'}</p>` : ''}
           ${!maxed && !check.ok ? `<p class="sd-why">${esc(check.reason)}</p>` : ''}
         </section>`}
       </div>
@@ -327,14 +346,19 @@ function respecHtml(player) {
  *   bị sửa trực tiếp khi nâng cấp hay tẩy điểm (không bao giờ ở `readOnly`).
  * @param {object} [o]
  * @param {boolean} [o.readOnly] chỉ xem — không nút học, không tẩy điểm
- * @param {()=>void} [o.onChange] gọi sau mỗi lần nâng cấp hoặc tẩy điểm
+ * @param {boolean} [o.manage=true] được bật / tắt và tẩy điểm — `false` khi
+ *   mở cây ngoài lượt của mình: chỉ học và lên level
+ * @param {()=>void} [o.onChange] gọi sau mỗi lần nâng cấp, bật / tắt hoặc tẩy điểm
+ * @param {(id:string)=>void} [o.onLearn] gọi sau mỗi lần học ô mới hoặc lên level
  * @param {()=>void} [o.onClose] bấm nút ✕ trên thanh điểm
- * @returns {{el:HTMLElement, onKey:(e:KeyboardEvent)=>boolean}}
+ * @returns {{el:HTMLElement, onKey:(e:KeyboardEvent)=>boolean, refresh:()=>void}}
  *   `onKey` trả true nếu đã xử lý phím (Esc đóng thẻ chi tiết, Enter bấm nút chính).
+ *   `refresh` vẽ lại theo `player` — gọi khi ảnh chụp mới vừa ghi đè lên nó.
  */
 export function mountSkillTree(player, o = {}) {
   const readOnly = !!o.readOnly;
-  const tree = buildTree(player, readOnly);
+  const manage = !readOnly && o.manage !== false;
+  const tree = buildTree(player, readOnly, manage);
   const $ = (sel) => tree.querySelector(sel);
   const tip = $('.st-tip');
   const detail = $('.st-detail');
@@ -346,7 +370,7 @@ export function mountSkillTree(player, o = {}) {
     pnum.textContent = player.skillPoints;
     $('.st-points').classList.toggle('empty', player.skillPoints === 0);
     $('.st-count').textContent = `Đã học ${player.skills.length}/${SKILLS.length}`;
-    if (!readOnly) $('.st-respec').hidden = player.skills.length === 0;
+    if (manage) $('.st-respec').hidden = player.skills.length === 0;
 
     for (const n of tree.querySelectorAll('.st-node')) {
       const id = n.dataset.id;
@@ -356,6 +380,7 @@ export function mountSkillTree(player, o = {}) {
       const shown = readOnly && st !== 'learned' ? 'locked' : st;
       n.className = n.className.replace(/\bis-\w+/g, '').replace(/\bcan-up\b/, '').trim() + ` is-${shown}`;
       n.classList.toggle('can-up', !readOnly && canLevelUp(player, id));
+      n.classList.toggle('off', lv > 0 && isOff(player, id));
       n.dataset.lv = lv;
       n.querySelector('.st-cost').textContent = lv ? `+${nextCost(player, skillById(id))}` : skillCost(skillById(id));
       n.querySelectorAll('.st-lv i').forEach((i, k) => i.classList.toggle('on', k < lv));
@@ -395,11 +420,12 @@ export function mountSkillTree(player, o = {}) {
           : `Cần học ${s.requires?.map((r) => skillById(r).name).join(' hoặc ')}`,
       }[st];
     const noteCls = readOnly ? (lv ? 'learned' : 'locked') : st;
+    const offNote = lv && isOff(player, s.id) ? ' · đang tắt' : '';
     tip.innerHTML = `
       <b>${esc(s.name)}</b>
       <span class="tip-meta">${tierName(s)} · ${skillCost(s)} điểm · ${KINDS[s.kind].name}</span>
       <span class="tip-short">${esc(fillText(s.short, lvParams(s, lv || 1)))}</span>
-      <span class="tip-note n-${noteCls}">${esc(note)}</span>`;
+      <span class="tip-note n-${noteCls}">${esc(note + offNote)}</span>`;
     tip.style.left = node.style.left;
     tip.style.top = node.style.top;
     tip.style.setProperty('--c', branchByKey(s.branch).color);
@@ -412,7 +438,7 @@ export function mountSkillTree(player, o = {}) {
   function openDetail(id) {
     openId = id;
     hideTip();
-    detail.innerHTML = id === 'respec' ? respecHtml(player) : detailHtml(player, skillById(id), readOnly);
+    detail.innerHTML = id === 'respec' ? respecHtml(player) : detailHtml(player, skillById(id), readOnly, manage);
     detail.hidden = false;
     requestAnimationFrame(() => detail.classList.add('show'));
     tree.querySelector(`.st-node[data-id="${id}"]`)?.classList.add('focus');
@@ -441,6 +467,18 @@ export function mountSkillTree(player, o = {}) {
     closeDetail();
     refresh();
     celebrate(id, before - player.skillPoints, res.level);
+    o.onLearn?.(id);
+    o.onChange?.();
+  }
+
+  /** Bật / tắt ô đang mở. Thẻ chi tiết giữ nguyên, chỉ vẽ lại nút và nhãn. */
+  function doToggle() {
+    if (!manage || !openId) return;
+    if (!setSkillOn(player, openId, isOff(player, openId))) return;
+    refresh();
+    detail.innerHTML = detailHtml(player, skillById(openId), readOnly, manage);
+    detail.querySelector('[data-act="toggle"]')?.focus({ preventScroll: true });
+    audio.sfx(isOff(player, openId) ? 'click' : 'build');
     o.onChange?.();
   }
 
@@ -516,6 +554,7 @@ export function mountSkillTree(player, o = {}) {
     if (act === 'close') o.onClose?.();
     else if (act === 'cancel') closeDetail();
     else if (act === 'learn') doLearn();
+    else if (act === 'toggle') doToggle();
     else if (act === 'respec-open') openDetail('respec');
     else if (act === 'respec') doRespec();
     // Bấm ra vùng tối quanh thẻ = huỷ
@@ -533,23 +572,44 @@ export function mountSkillTree(player, o = {}) {
     return false;
   }
 
-  return { el: tree, onKey };
+  /** Ảnh chụp mới ghi đè lên `player`: vẽ lại cây, cả thẻ chi tiết đang mở. */
+  function resync() {
+    refresh();
+    if (openId && openId !== 'respec') detail.innerHTML = detailHtml(player, skillById(openId), readOnly, manage);
+  }
+
+  return { el: tree, onKey, refresh: resync };
 }
 
 /* ------------------------------------------------------------ mở hộp thoại */
 
+/** Cây trong hộp học kỹ năng đang mở, để ảnh chụp mới tới thì vẽ lại được. */
+let liveView = null;
+
 /**
- * Hộp học kỹ năng của người đang đi.
+ * Ảnh chụp vừa ghi đè lên người chơi: hộp cây đang mở (nếu có) vẽ lại theo.
+ * Cần cho lúc học ngoài lượt — máy cầm lái có thể phát một ảnh chụp chưa kịp
+ * có ô vừa học, rồi ảnh kế tiếp mới có.
+ */
+export function refreshSkillTree() { liveView?.refresh(); }
+
+/**
+ * Hộp học kỹ năng.
  * @param {object} player xem `mountSkillTree`
  * @param {object} [o]
- * @param {()=>void} [o.onChange] gọi sau mỗi lần nâng cấp hoặc tẩy điểm
+ * @param {boolean} [o.manage=true] xem `mountSkillTree`
+ * @param {()=>void} [o.onChange] gọi sau mỗi lần nâng cấp, bật / tắt hoặc tẩy điểm
+ * @param {(id:string)=>void} [o.onLearn] gọi sau mỗi lần học ô mới hoặc lên level
  * @param {string} [o.color] màu quân của người chơi, tô lên tiêu đề
  * @returns {Promise<void>} xong khi đóng hộp
  */
 export function openSkillTree(player, o = {}) {
   let closeModal = null;
   let scrimEl = null;
-  const view = mountSkillTree(player, { onChange: o.onChange, onClose: () => closeModal?.(null) });
+  const view = mountSkillTree(player, {
+    manage: o.manage, onChange: o.onChange, onLearn: o.onLearn, onClose: () => closeModal?.(null),
+  });
+  liveView = view;
 
   /* Hộp thoại chung (modal.js) nghe Esc/Enter ở pha capture của window và
      được gắn trước, nên nó luôn bắt phím trước mọi listener gắn sau. Ở đây
@@ -584,5 +644,8 @@ export function openSkillTree(player, o = {}) {
       window.addEventListener('keydown', onKey, true);
     },
   });
-  return done.then(() => { window.removeEventListener('keydown', onKey, true); });
+  return done.then(() => {
+    window.removeEventListener('keydown', onKey, true);
+    if (liveView === view) liveView = null;
+  });
 }

@@ -189,7 +189,7 @@ async function answerModal() {
      dưới cùng bấm trúng nút giá nhanh (chỉ điền số, không đóng hộp) và
      bấm mãi tới khi chốt canh 90 giây báo kẹt. */
   const order = ['Mua ', 'Nhận tiền', 'Đành chịu', 'Tiếp tục', 'Chấp nhận', 'Lên đường', 'Cất vào túi',
-    'Chốt giá', 'Xong', 'Đóng', 'Đã rõ', 'Bỏ qua', 'Để sau', 'Chơi tiếp', 'Bán nhà', 'Thôi', 'Huỷ'];
+    'Chốt giá', 'Xong', 'Đóng', 'Đã rõ', 'Bỏ qua', 'Để sau', 'Chơi tiếp', 'Bán nhà', 'Thôi', 'Không cược', 'Chưa đạp', 'Huỷ'];
   // Đấu giá: thỉnh thoảng ghi giá thật để phiên có người thắng — Môi Giới ăn hoa hồng cả lúc này
   if (await top.locator('#bid-input').count() && rand() < 0.5) {
     const q = top.locator('.bid-q:not([disabled])');

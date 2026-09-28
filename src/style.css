@@ -2535,6 +2535,18 @@ html, body {
    chọn xong ảnh nổi lên thành bong bóng vuông trên đầu quân cờ.
    ------------------------------------------------------------ */
 #meme-btn[hidden] { display: none; }
+/* Nút cây kỹ năng: hình gốc cây, huy hiệu số điểm chưa tiêu ở góc */
+#skill-btn[hidden] { display: none; }
+#skill-btn .sk-ico { width: 60%; height: 60%; }
+#skill-btn.has-pts { border-color: var(--gold-light); box-shadow: var(--shadow-md), 0 0 10px rgba(232, 190, 90, .55); }
+.skill-btn-n {
+  position: absolute; top: -5px; right: -5px;
+  min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px;
+  display: grid; place-items: center;
+  font-size: 10px; font-weight: 700; line-height: 1;
+  color: #2A1408; background: var(--gold-light);
+}
+.skill-btn-n[hidden] { display: none; }
 /* Bấm lúc hết lượt: lắc một cái cho biết nút vẫn ăn, chỉ là chưa gửi được */
 #meme-btn.deny { animation: meme-deny .34s var(--ease-soft); }
 @keyframes meme-deny {

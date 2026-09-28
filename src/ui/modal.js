@@ -273,7 +273,8 @@ export function openModal(o) {
   root().appendChild(scrim);
   // Ép trình duyệt tính layout trước khi bật transition
   void scrim.offsetHeight;
-  requestAnimationFrame(() => scrim.classList.add('show'));
+  // Đóng ngay trong frame đầu thì thôi, kẻo hộp đang ẩn bị gắn lại `show`
+  requestAnimationFrame(() => { if (!settled) scrim.classList.add('show'); });
 
   if (o.onMount) o.onMount(body, close, modal, foot, stash);
 

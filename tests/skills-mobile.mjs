@@ -79,7 +79,7 @@ for (const [W, H] of SIZES) {
   await page.waitForTimeout(2400);
   await playRollOff(page);
 
-  /* ---- thanh nút chật nhất: 9 nút ---- */
+  /* ---- thanh nút chật nhất: 7 nút (kỹ năng kích hoạt đã gom vào kho "Dùng kỹ năng") ---- */
   await run(page, `
     const p = s.current;
     p.skills = ['dd1','dd2a','dd2b','dd3','ddU','dh1','dh2a','dh3','dhU'];
@@ -101,7 +101,7 @@ for (const [W, H] of SIZES) {
       console.log(`    nút ${i} «${await page.locator('#actions button').nth(i).getAttribute('aria-label')}» ${JSON.stringify(b2.rect)} ${b2.topEl}`);
     }
   }
-  ok(`${tag} · ${n} nút trên thanh đều chạm được (kể cả sau khi cuộn)`, all && n >= 9);
+  ok(`${tag} · ${n} nút trên thanh đều chạm được (kể cả sau khi cuộn)`, all && n >= 7);
   await shot('1-actions');
 
   /* ---- cây kỹ năng ---- */
@@ -157,17 +157,38 @@ for (const [W, H] of SIZES) {
   await page.waitForTimeout(3400);
   ok(`${tag} · đóng cây xong thanh nút bày lại`, await page.locator('#actions button[data-key="r"]').count() === 1);
 
-  /* ---- hộp cược ---- */
-  await page.locator('#actions button[data-key="c"]').scrollIntoViewIfNeeded();
-  await page.locator('#actions button[data-key="c"]').tap();
+  /* ---- kho kỹ năng rồi hộp cược ---- */
+  await page.locator('#actions button[data-key="u"]').scrollIntoViewIfNeeded();
+  await page.locator('#actions button[data-key="u"]').tap();
+  await page.locator('.kit-item').first().waitFor({ timeout: 5000 });
+  await page.waitForTimeout(400);
+  await shot('5a-kit');
+  const kitN = await page.locator('.kit-item:not([disabled])').count();
+  for (let i = 0; i < kitN; i++) {
+    await page.locator('.kit-item:not([disabled])').nth(i).scrollIntoViewIfNeeded();
+    await tappable(tag, `kho kỹ năng: ô ${i + 1}/${kitN}`, page, '.kit-item:not([disabled])', i);
+  }
+  for (const t of ['Chốt', 'Huỷ']) {
+    const i = await page.evaluate((t) => [...document.querySelectorAll('#modal-root .scrim.show .modal-foot button')]
+      .findIndex((b) => b.textContent.includes(t)), t);
+    await tappable(tag, `kho kỹ năng: nút «${t}»`, page, '#modal-root .scrim.show .modal-foot button', i);
+  }
+  await page.locator('.kit-item', { hasText: 'Cược Chẵn Lẻ' }).tap();
+  await page.locator('.sk-bet').waitFor({ timeout: 5000 });
   await page.waitForTimeout(600);
   await shot('5-bet');
-  for (const t of ['Chẵn', 'Lẻ', '200$', 'Đặt cược', 'Thôi']) {
-    const i = await page.evaluate((t) => [...document.querySelectorAll('#modal-root .scrim.show button')]
-      .findIndex((b) => b.textContent.includes(t)), t);
-    await tappable(tag, `hộp cược: nút «${t}»`, page, '#modal-root .scrim.show button', i);
+  const top = '#modal-root .scrim.show:not(.stashed) button';
+  for (const t of ['Không', 'Chẵn', 'Lẻ', '200$', 'Xong', 'Huỷ']) {
+    const i = await page.evaluate(([t, sel]) => [...document.querySelectorAll(sel)]
+      .findIndex((b) => b.textContent.trim().startsWith(t)), [t, top]);
+    await tappable(tag, `hộp cược: nút «${t}»`, page, top, i);
   }
-  await modalBtn(page, 'Thôi').tap();
+  await page.locator(top, { hasText: 'Lẻ' }).first().tap();
+  await page.locator(top, { hasText: 'Xong' }).tap();
+  await page.waitForTimeout(400);
+  ok(`${tag} · chọn cược xong về lại kho, ô Cược ghi cửa vừa chọn`,
+    (await page.locator('.kit-item', { hasText: 'Cược Chẵn Lẻ' }).textContent()).includes('Lẻ'));
+  await modalBtn(page, 'Huỷ').tap();
   await page.waitForTimeout(500);
 
   /* ---- sau khi lắc: chọn ô đi tới / đi lùi trên bàn cờ, 3 nút phụ ---- */

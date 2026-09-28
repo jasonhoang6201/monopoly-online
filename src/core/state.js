@@ -82,6 +82,8 @@ export class Player {
     this.skillPoints = 0;
     /** Id các kỹ năng đã học. Mảng chứ không Set để đi thẳng vào ảnh chụp. */
     this.skills = [];
+    /** Id các kỹ năng đã học mà đang tắt — học xong nằm ở đây, bật trong lượt mình. */
+    this.skillOff = [];
     /** Số lần đã qua ô Bắt Đầu — Thâm Niên và Nhà Lâu Năm tính theo nó. */
     this.laps = 0;
     /** id kỹ năng → số lần qua ô Bắt Đầu còn phải chờ trước khi dùng lại. */
@@ -103,8 +105,8 @@ export class Player {
     this.feats = {};
     /** Tổng xí ngầu đã chọn cho Xổ Số Kiến Thiết; `null` là chưa chọn. */
     this.lotto = null;
-    /** Cò Quay Lương đang bật — lương lần qua ô Bắt Đầu tới được quay. */
-    this.spin = false;
+    /** Cửa và tiền Cược Chẵn Lẻ tự đặt mỗi lượt; `null` là chưa chọn. @type {?{pick:string, amount:number}} */
+    this.betSet = null;
     /** Ghế người mình đang góp vốn (Góp Vốn); `null` là chưa góp ai. */
     this.stake = null;
     /** Số lượt đã ngồi yên trong lần vào tù này (Ở Tù Cho Lành). */

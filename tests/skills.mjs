@@ -52,7 +52,7 @@ const run = (fn, arg) => page.evaluate(async ([src, a]) => {
 const reset = () => run(`
   for (const p of s.players) {
     p.money = 1500; p.skills = []; p.skillPoints = 0; p.laps = 0; p.cooldowns = {}; p.usedTurn = {};
-    p.skillLv = {}; p.lapUses = {}; p.jails = 0; p.skillUse = {}; p.feats = {};
+    p.skillLv = {}; p.skillOff = []; p.betSet = null; p.lapUses = {}; p.jails = 0; p.skillUse = {}; p.feats = {};
     p.pos = 5; p.inJail = false; p.bankrupt = false;
   }
   s.owner.clear(); s.houses.clear(); s.mortgaged.clear(); s.heritage.clear();
@@ -61,6 +61,15 @@ const reset = () => run(`
 `);
 
 /** Bấm nút trong hộp thoại đang mở trên cùng. */
+/** Kho "Dùng kỹ năng": ô của kỹ năng tên `name`, ô xám (tắt) hay không, mở kho, nút ở chân hộp trên cùng. */
+const item = (name) => page.locator('.kit-item', { hasText: name });
+const isGray = (name) => item(name).evaluate((e) => e.classList.contains('is-off'));
+const openKit = async () => { await page.locator('#actions button[data-key="u"]').click(); await item('').first().waitFor({ timeout: 5000 }); };
+/** Nút chân hộp: có bảng chọn đang mở thì là hộp ấy, không thì là hộp kho. */
+const topBtn = (text) => page.locator('#modal-root .scrim.show:not(.stashed):not(.hide)').last().locator('.modal-foot button', { hasText: text });
+/** Bấm nút trong bảng chọn đang mở (Chẵn, Lẻ, 100$, Không…). */
+const pickIn = (text) => page.locator('.sk-bet button', { hasText: text }).first().click();
+
 async function clickModal(text) {
   const btn = page.locator('#modal-root .scrim.show').last().locator('button', { hasText: text }).first();
   await btn.waitFor({ timeout: 8000 });
@@ -118,7 +127,7 @@ check(lv.keptUse === 400, 'tẩy điểm giữ tiến độ lên level');
 check(lv.a === 1 && lv.b === 2 && lv.c === 3 && lv.d === false, `lên level 1 → 2 → 3, level 4 bị chặn (${JSON.stringify(lv)})`);
 check(lv.spent === 3 && lv.pts === 3, 'mỗi level tốn 1 điểm, tổng 3 điểm cho ô cấp 1 lên level 3');
 check(lv.refund === 3 && lv.after === 6 && lv.money === 850 && lv.lvAfter === 0, 'tẩy điểm hoàn đủ cả điểm level, phí 50$/điểm');
-check(lv.line === '35% khả năng nhặt 10–40$', `chữ level 1 hiện khoảng "10–40$" (${lv.line})`);
+check(lv.line === '35% khả năng nhặt 10–30$', `chữ level 1 hiện khoảng "10–30$" (${lv.line})`);
 
 await reset();
 const rent = await run(`
@@ -140,10 +149,10 @@ const rent = await run(`
   return { base, fever, payer, payer3, fever3, colors };
 `);
 check(rent.base === 50, `vé 2 bến ga gốc $50 (được ${rent.base})`);
-check(rent.fever === 100, `Cơn Sốt Đất ×2 → $100 (được ${rent.fever})`);
-check(rent.payer === 60, `Vé Tháng level 1 trả 60% → $60 (được ${rent.payer})`);
-check(rent.payer3 === 20, `Vé Tháng level 3 trả 20% → $20 (được ${rent.payer3})`);
-check(rent.fever3 === 125, `Cơn Sốt Đất level 3 ×2.5 → $125 (được ${rent.fever3})`);
+check(rent.fever === 125, `Cơn Sốt Đất ×2.5 → $125 (được ${rent.fever})`);
+check(rent.payer === 75, `Vé Tháng level 1 trả 60% của $125 → $75 (được ${rent.payer})`);
+check(rent.payer3 === 25, `Vé Tháng level 3 trả 20% của $125 → $25 (được ${rent.payer3})`);
+check(rent.fever3 === 150, `Cơn Sốt Đất level 3 ×3 → $150 (được ${rent.fever3})`);
 check(rent.colors === 54, `Đất Nhiều Màu level 1, 2 màu +8% → $54 (được ${rent.colors})`);
 
 await reset();
@@ -167,7 +176,7 @@ const build = await run(`
   return { before, cost, after, ok: res.ok, contractor, gone, houses: s.housesOn(21), refund1, refund3 };
 `);
 check(!build.before, 'không có Sổ Hồng: 2/3 bộ không xây được');
-check(build.cost === 135, `Mái Ấm level 1: căn $150 còn $135 (được ${build.cost})`);
+check(build.cost === 128, `Xây Rẻ level 1 giảm 15%: căn $150 còn $128, làm tròn lên (được ${build.cost})`);
 check(build.after && build.ok, 'Sổ Hồng: xây được với 2/3 bộ');
 check(build.contractor === 25, `Thầu Vật Liệu level 2: người khác xây → +$25 (được ${build.contractor})`);
 check(build.gone === 0 && build.houses === 1, 'Sổ Hồng: nhà không bị dỡ');
@@ -206,7 +215,7 @@ check(!lap.cd.dd3, 'Xí Ngầu Gian hồi lại sau khi qua ô Bắt Đầu');
 log('\n=== 3. HỌC KỸ NĂNG ===');
 await reset();
 await run(`s.current.skillPoints = 3; c.restoreActions();`);
-const kbtn = page.locator('#actions button', { hasText: 'Kỹ năng' });
+const kbtn = page.locator('#actions button[data-key="k"]');
 check(await kbtn.count() === 1, 'thanh nút có nút Kỹ năng');
 check((await kbtn.textContent()).includes('3 điểm chưa dùng'), 'nút ghi số điểm chưa dùng');
 await kbtn.click();
@@ -219,6 +228,8 @@ await page.keyboard.press('Enter');
 await page.waitForTimeout(400);
 const learned = await run('return { skills: s.current.skills, pts: s.current.skillPoints };');
 check(JSON.stringify(learned.skills) === '["cn1","cn2a"]' && learned.pts === 1, `học Nhặt Tiền Rơi + Tăng Ca, còn 1 điểm (${JSON.stringify(learned)})`);
+check(await run(`return K.has(s.current, 'cn1') && !s.current.skillOff.length;`), 'kỹ năng tự động học xong là có tác dụng, không nằm tắt');
+check(await page.locator('.st-node[data-id="cn1"].off').count() === 0, 'ô tự động không tô xám');
 check(await page.locator('.st-node[data-id="cn1"].can-up').count() === 0, 'còn điểm mà chưa đạt điều kiện thì chưa có dấu lên level');
 await page.locator('.st-node[data-id="cn1"]').click();
 check(await page.locator('[data-act="learn"]:disabled').count() === 1, 'nút Lên level mờ khi chưa đạt điều kiện');
@@ -241,6 +252,114 @@ await page.keyboard.press('Escape');
 await page.waitForTimeout(3200);
 check(await page.locator('.st').count() === 0, 'Esc đóng cây kỹ năng');
 check(await page.locator('#actions button', { hasText: 'Lắc xí ngầu' }).count() === 1, 'thanh nút bày lại sau khi đóng');
+
+/* ------------------------------------------------ 3b. công tắc kỹ năng bấm để dùng */
+log('\n=== 3b. BẬT / TẮT ===');
+await reset();
+await run(`const p = s.current; p.skills = ['dd1']; p.skillPoints = 2; c.restoreActions();`);
+await page.locator('#actions button[data-key="k"]').click();
+await page.locator('.st-node[data-id="dd2a"]').click();
+await page.locator('[data-act="learn"]').click();
+await page.waitForTimeout(400);
+check(await run(`return s.current.skills.includes('dd2a') && !K.has(s.current, 'dd2a');`), 'kỹ năng bấm để dùng học xong nằm tắt');
+check(await page.locator('.st-node[data-id="dd2a"].off').count() === 1, 'ô đang tắt tô xám');
+await page.locator('.st-node[data-id="dd2a"]').click();
+check(await page.locator('[data-act="toggle"]', { hasText: 'Bật kỹ năng' }).count() === 1, 'thẻ chi tiết có nút Bật kỹ năng');
+await page.locator('[data-act="toggle"]').click();
+await page.waitForTimeout(300);
+check(await run(`return K.has(s.current, 'dd2a');`), 'bấm Bật thì kỹ năng có tác dụng');
+check(await page.locator('[data-act="toggle"]', { hasText: 'Tắt kỹ năng' }).count() === 1, 'nút đổi thành Tắt kỹ năng');
+await page.locator('[data-act="toggle"]').click();
+await page.waitForTimeout(300);
+check(await run(`return !K.has(s.current, 'dd2a');`), 'bấm Tắt thì kỹ năng ngừng');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(3200);
+// Kho kỹ năng: ô có màu là bật, xám là tắt; mọi thao tác là bản nháp, Chốt mới áp dụng
+await reset();
+await run(`const p = s.current; p.skills = ['dd1','dd2a','dd2b','dd3','ddS2']; p.skillOff = ['dd2a','dd3','ddS2']; c.restoreActions();`);
+await openKit();
+check(await page.locator('.kit-sw').count() === 0, 'kho kỹ năng không còn công tắc');
+check(await isGray('Cược Chẵn Lẻ') && await isGray('Xí Ngầu Gian'), 'kỹ năng đang tắt: ô xám');
+// Cược: bấm ô mở bảng chọn có "Không"; chọn xong về lại kho
+await item('Cược Chẵn Lẻ').click();
+await page.locator('.sk-bet').waitFor({ timeout: 3000 });
+check(await page.locator('.sk-bet [data-v="none"]', { hasText: 'Không' }).count() === 1, 'bảng cược có lựa chọn Không');
+await pickIn('Lẻ');
+await pickIn('100$');
+await topBtn('Xong').click();
+await page.waitForTimeout(400);
+check(await page.locator('.sk-bet').count() === 0 && await item('Cược Chẵn Lẻ').isVisible(), 'chọn xong thì về lại kho');
+check(!(await isGray('Cược Chẵn Lẻ')) && (await item('Cược Chẵn Lẻ').textContent()).includes('Lẻ 100$'), 'ô Cược có màu, ghi cửa và tiền vừa chọn');
+await item('Xí Ngầu Gian').click();
+check(!(await isGray('Xí Ngầu Gian')), 'bấm ô bật / tắt: ô có màu ngay');
+check(await run(`return !K.has(s.current, 'dd2a') && !K.has(s.current, 'dd3') && !s.current.betSet;`), 'chưa Chốt: trên ván chưa đổi gì');
+await topBtn('Huỷ').click();
+await page.waitForTimeout(500);
+check(await run(`return !K.has(s.current, 'dd2a') && !K.has(s.current, 'dd3') && !s.current.betSet;`), 'Huỷ: đóng kho, không đổi gì');
+await openKit();
+check(await isGray('Cược Chẵn Lẻ') && await isGray('Xí Ngầu Gian'), 'mở lại sau Huỷ: ô về như cũ');
+await item('Cược Chẵn Lẻ').click();
+await page.locator('.sk-bet').waitFor({ timeout: 3000 });
+await pickIn('Lẻ');
+await pickIn('100$');
+await topBtn('Xong').click();
+await page.waitForTimeout(300);
+await item('Xí Ngầu Gian').click();
+await item('Cò Quay').click();
+await item('Cò Quay').click(); // bấm hai lần: coi như không đổi
+await page.keyboard.press('Enter');
+await page.waitForTimeout(400);
+check(await run(`const p = s.current; return K.has(p, 'dd2a') && K.has(p, 'dd3') && !K.has(p, 'ddS2') && p.betSet?.pick === 'odd' && p.betSet?.amount === 100;`),
+  'Enter: áp dụng cả hai ô trong một lần, lưu cửa Lẻ 100$');
+const note = await page.locator('.bcast').last().textContent().catch(() => '');
+check(note.includes('Cược Chẵn Lẻ') && note.includes('Xí Ngầu Gian') && note.includes('Lẻ 100$') && !note.includes('Cò Quay'),
+  `loan tin một lần (${note.replace(/\s+/g, ' ').trim().slice(0, 100)})`);
+await page.waitForTimeout(2400);
+// Tự cược mỗi lượt, lúc bấm Lắc; đổ đôi lắc lại không cược thêm
+const auto = await run(`const p = s.current; await c.skills.beforeRoll(p); const b1 = { ...c.skills.bet };
+  c.skills.bet = null; await c.skills.beforeRoll(p); return { b1, again: c.skills.bet };`);
+check(auto.b1.pick === 'odd' && auto.b1.amount === 100 && !auto.again, `lúc lắc tự cược Lẻ 100$, mỗi lượt một lần (${JSON.stringify(auto)})`);
+const nextTurn = await run(`const p = s.current; s.turnNo += 1; c.skills.bet = null; await c.skills.beforeRoll(p); return c.skills.bet;`);
+check(nextTurn?.pick === 'odd' && nextTurn?.amount === 100, 'lượt sau tự cược lại như cũ');
+const poor = await run(`const p = s.current; s.turnNo += 1; c.skills.bet = null; p.money = 60; await c.skills.beforeRoll(p); const r = { bet: c.skills.bet, on: K.has(p, 'dd2a') }; p.money = 1500; return r;`);
+check(!poor.bet && poor.on, 'không đủ tiền thì bỏ lượt ấy, kỹ năng vẫn bật');
+await run('c.skills.bet = null; c.restoreActions();');
+await page.waitForTimeout(2000);
+// Chọn Không rồi Chốt: tắt
+await openKit();
+await item('Cược Chẵn Lẻ').click();
+await page.locator('.sk-bet').waitFor({ timeout: 3000 });
+await pickIn('Không');
+await topBtn('Xong').click();
+await page.waitForTimeout(300);
+check(await isGray('Cược Chẵn Lẻ'), 'chọn Không: ô xám lại');
+await topBtn('Chốt').click();
+await page.waitForTimeout(2600);
+check(await run(`return !K.has(s.current, 'dd2a');`), 'chọn Không rồi Chốt: Cược tắt');
+
+// Cò Quay: kỹ năng bật là lương được quay
+check(await run(`return c.skills.spinPay(s.current, 200).pay === 200;`), 'Cò Quay tắt: lương giữ nguyên');
+await run(`s.current.skillOff = []; c.restoreActions();`);
+check(await run(`return [100, 400].includes(c.skills.spinPay(s.current, 200).pay);`), 'Cò Quay bật: lương được quay (gấp đôi hoặc một nửa)');
+
+// Xe Đạp: bật thì tự đạp mỗi lượt tới khi hết lượt dùng; hết lượt thì cuối lượt tự tắt
+await reset();
+await run(`const p = s.current; p.skills = ['dh1','dh2b','dhS1']; p.skillOff = ['dhS1']; c.restoreActions();`);
+await openKit();
+await item('Xe Đạp').click();
+await topBtn('Chốt').click();
+await page.waitForTimeout(2400);
+const bike = await run(`const p = s.current; await c.skills.beforeRoll(p); const d = c.skills.shape(p, { a: 5, b: 2, sum: 7, isDouble: false });
+  const cd = p.cooldowns.dhS1; const off = K.offSpent(p); return { sum: d.sum, cd, off, on: K.has(p, 'dhS1') };`);
+check(bike.sum === 2 && bike.cd === 2, `Xe Đạp bật: lúc lắc tự đạp, đi theo viên nhỏ (${JSON.stringify(bike)})`);
+check(bike.off.includes('dhS1') && !bike.on, 'dùng hết lượt: cuối lượt Xe Đạp tự về tắt');
+await run('c.restoreActions();');
+await openKit();
+check(await item('Xe Đạp').isDisabled() && (await item('Xe Đạp').textContent()).includes('Chờ 2'), 'đang chờ hồi: ô Xe Đạp không bấm được, ghi thời gian chờ');
+await topBtn('Huỷ').click();
+await page.waitForTimeout(400);
 
 /* ------------------------------------------------ 4. kỹ năng bấm để dùng */
 log('\n=== 4. BẤM ĐỂ DÙNG ===');
@@ -301,16 +420,22 @@ const qd3 = await run('const r = await window.__ar; return { a: r.d.a, back: r.b
 check(qd3.a === 3 && !qd3.back && qd3.dd3 === 1, `nút phụ "Lắc lại viên 4" chạy Xí Ngầu Gian rồi hỏi lại (${JSON.stringify(qd3)})`);
 
 await run('c.restoreActions();');
-const bet = page.locator('#actions button', { hasText: 'Cược Chẵn Lẻ' });
-check(await bet.count() === 1, 'nút Cược Chẵn Lẻ hiện trước khi lắc');
-await bet.click();
-await clickModal('Lẻ');
-await clickModal('100$');
-await clickModal('Đặt cược');
+await openKit();
+await item('Cược Chẵn Lẻ').click();
+await page.locator('.sk-bet').waitFor({ timeout: 3000 });
+await pickIn('Lẻ');
+await pickIn('100$');
+await topBtn('Xong').click();
+await topBtn('Chốt').click();
 await page.waitForTimeout(2800);
+await run('await c.skills.beforeRoll(s.current);');
 const b1 = await run('return c.skills.bet;');
 check(b1 && b1.pick === 'odd' && b1.amount === 100, `đã cược Lẻ $100 (${JSON.stringify(b1)})`);
-check(await page.locator('#actions button', { hasText: 'Đã cược Lẻ' }).count() === 1, 'nút đổi thành "Đã cược Lẻ"');
+await run('c.restoreActions();');
+await openKit();
+check((await item('Cược Chẵn Lẻ').textContent()).includes('Lượt này đã cược Lẻ'), 'ô trong kho ghi "Lượt này đã cược Lẻ"');
+await topBtn('Huỷ').click();
+await page.waitForTimeout(400);
 const settle = await run(`
   const p = s.current; p.skills = ['dd2a']; const m0 = p.money;
   await c.skills.settleBets(p, { a: 2, b: 5, sum: 7, isDouble: false });
@@ -323,7 +448,7 @@ const settle2 = await run(`
   await c.skills.settleBets(p, { a: 3, b: 5, sum: 8, isDouble: false });
   return p.money - m0;
 `);
-check(settle2 === 120, `đoán đúng ở level 2: +120% tiền cược = $120 (được ${settle2})`);
+check(settle2 === 105, `đoán đúng ở level 2: +105% tiền cược = $105 (được ${settle2})`);
 
 await reset();
 await run(`
@@ -357,25 +482,33 @@ const fees = await run(`
   return { broke, cut: broker.money - m1, swapped: s.owner.get(1) === b.id && s.owner.get(3) === a.id };
 `);
 check(fees.broke === 48, `Môi Giới level 2: người khác mua lô 400$ → +12% = 48$ (được ${fees.broke})`);
-check(fees.swapped && fees.cut === 14, `Cò Đất level 2: hai người khác đổi 2 lô 60$ → +12% = 14$ (được ${fees.cut})`);
+check(fees.swapped && fees.cut === 30, `Cò Đất level 2: hai người khác đổi 2 lô 60$ → +25% = 30$ (được ${fees.cut})`);
 
 /* ------------------------------------------------ 4c. Chuyến Tàu Xuyên Việt */
 log('\n=== 4c. XUYÊN VIỆT ===');
 await reset();
 await run(`const p = s.current; p.pos = 5; p.skills = ['dh1','dh2a','dh3','dhU']; c.restoreActions();`);
-await page.locator('#actions button[data-key="x"]').click();
+await openKit();
+await item('Chuyến Tàu Xuyên Việt').click();
 await page.locator('.tile-pick').waitFor({ timeout: 5000 });
 const tp = await page.locator('.tile-pick').textContent();
 check(!/undefined/.test(tp) && tp.includes('Đi tới ô nào'), 'bảng chọn ô có tiêu đề, không chữ "undefined"');
-check(await page.locator('.tp-cancel').count() === 1, 'bảng chọn ô có nút bỏ ngang');
+check(await page.locator('.tp-cancel', { hasText: 'Không' }).count() === 1, 'bảng chọn ô có nút Không');
 await page.locator('.tp-cancel').click();
 await page.waitForTimeout(600);
-check(await run('return !s.current.cooldowns.dhU;'), 'bỏ ngang thì chưa tốn lượt dùng');
-await page.locator('#actions button[data-key="x"]').click();
+check(await isGray('Chuyến Tàu Xuyên Việt'), 'chọn Không: về lại kho, ô xám');
+await topBtn('Chốt').click();
+await page.waitForTimeout(600);
+check(await run('return !s.current.cooldowns.dhU && s.current.pos === 5;'), 'Chốt khi ô xám: chưa đi, chưa tốn lượt dùng');
+await openKit();
+await item('Chuyến Tàu Xuyên Việt').click();
 await page.locator('.tile-pick').waitFor({ timeout: 5000 });
 await page.evaluate(() => { window.__monopoly.scene.onTileClick(20); });
 await page.waitForTimeout(400);
-await page.locator('.scrim.show .modal-foot button.btn').first().click();
+await page.locator('#modal-root .scrim.show:not(.stashed)').last().locator('.modal-foot button.btn').first().click();
+await page.waitForTimeout(600);
+check((await item('Chuyến Tàu Xuyên Việt').textContent()).includes('khi Chốt'), 'chọn ô xong về lại kho, ô ghi "Đi tới … khi Chốt"');
+await topBtn('Chốt').click();
 for (let i = 0; i < 20 && !(await run('return s.current.pos === 20 && !c.busy;')); i++) await wait(500);
 const tele = await run('return { pos: s.current.pos, cd: s.current.cooldowns.dhU };');
 check(tele.pos === 20 && tele.cd === 4, `đi thẳng tới Bến Đậu, chờ 4 lần qua ô Bắt Đầu (${JSON.stringify(tele)})`);
@@ -466,7 +599,7 @@ for (let i = 0; i < 40; i++) {
   if (await skip.count()) await skip.click().catch(() => {});
 }
 const ex = await run('return { pos: s.current.pos, money: s.current.money };');
-check(ex.pos === 35 && ex.money >= 1600, `đi thẳng tới ga cuối (ô 35), nhận thêm 100$ lên tàu (${JSON.stringify(ex)})`);
+check(ex.pos === 35 && ex.money === 1575, `đi thẳng tới ga cuối (ô 35), nhận thêm 75$ lên tàu (${JSON.stringify(ex)})`);
 
 await reset();
 await run(`
@@ -571,7 +704,7 @@ await page.locator('.ptab[data-tab="skills"]').waitFor({ timeout: 5000 });
 check(await page.locator('.ppane-skills .st-node').count() === 0, 'cây chưa dựng khi chưa mở tab');
 await page.locator('.ptab[data-tab="skills"]').click();
 await page.waitForTimeout(300);
-check(await page.locator('.ppane-skills .st-node').count() === 40, 'mở tab: đủ 40 ô (5 nhánh × 8)');
+check(await page.locator('.ppane-skills .st-node').count() === 50, 'mở tab: đủ 50 ô (5 nhánh × 10)');
 check(await page.locator('.ppane-skills .st-node.is-learned').count() === 4, '4 ô đã học sáng lên');
 check(await page.locator('.ppane-skills .st-node[data-id="dd1"] .st-lv i.on').count() === 3, 'Chẵn Lẻ hiện 3 chấm level');
 check(await page.locator('.ppane-skills .st-node.is-ready, .ppane-skills .st-node.can-up').count() === 0,
@@ -608,13 +741,13 @@ const lock = await run(`
   return { noRoot: noRoot.reason, before: before.ok, why: before.reason, state0, state1, ok: ok.ok, pts: p.skillPoints,
            cost: K.skillCost(K.skillById('dhX1')) };
 `);
-check(lock.noRoot.includes('Cần học') && lock.noRoot.includes('Phượt Thủ'),
+check(lock.noRoot.includes('Cần học') && lock.noRoot.includes('Về Nhà'),
   `đủ bộ đếm mà chưa học ô cấp 2 đứng trước thì vẫn khoá (${lock.noRoot})`);
 check(!lock.before && lock.why.includes('Dừng chung ô với người khác: 0/5 lần') && lock.state0 === 'locked',
   `có ô đứng trước, Hai Ngón vẫn khoá tới khi dừng chung ô 5 lần (${lock.why})`);
 check(lock.state1 === 'ready' && lock.ok && lock.pts === 3 && lock.cost === 2, 'đủ 5 lần thì học được, tốn 2 điểm như ô cấp 3');
 
-// Hình cây: mỗi nhánh 1 → 3 → 2 → 2 tối thượng, ô thành tựu nằm trong đó
+// Hình cây: mỗi nhánh 1 → 3 → 4 (2 ô dẫn lên + 2 nhánh phụ) → 2 tối thượng, mỗi ô một cha
 const treeShape = await run(`
   const { SKILLS, BRANCHES } = await import('/src/data/skills.js');
   return BRANCHES.map((b) => {
@@ -626,15 +759,15 @@ const treeShape = await run(`
              ult: row(4).map((x) => x.requires.length).join('') };
   });
 `);
-check(treeShape.every((b) => b.rows === '1322' && b.feats.split(',').sort().join(',') === '2c,3b' && !b.orphan && b.ult === '22'),
-  `5 nhánh đều 1 → 3 → 2 → 2 tối thượng, thành tựu ở 2c và 3b, không ô nào đứng riêng (${JSON.stringify(treeShape)})`);
+check(treeShape.every((b) => b.rows === '1342' && b.feats.split(',').sort().join(',') === '2c,3b' && !b.orphan && b.ult === '11'),
+  `5 nhánh đều 1 → 3 → 4 → 2 tối thượng, thành tựu ở 2c và 3b, mỗi tối thượng một ô cha (${JSON.stringify(treeShape)})`);
 
 // Dừng chung ô: đếm thành tựu, Hai Ngón móc túi người giàu nhất trên ô
 await reset();
 const pick = await run(`
   const me = s.current, a = s.players[(s.turn + 1) % 3], b = s.players[(s.turn + 2) % 3];
   me.pos = 12; a.pos = 12; b.pos = 12; a.money = 1000; b.money = 2000;
-  const r0 = Math.random; Math.random = () => 0;          // trúng 30%, rút đáy khoảng 5%
+  const r0 = Math.random; Math.random = () => 0;          // trúng 40%, rút đáy khoảng 6%
   await c.skills.landed(me);
   const share1 = me.feats.share;
   me.skills = ['dhX1'];
@@ -644,8 +777,8 @@ const pick = await run(`
   return { share1, share2: me.feats.share, got: me.money - m0, lost: b0 - b.money, use: me.skillUse.dhX1 };
 `);
 check(pick.share1 === 1 && pick.share2 === 2, 'dừng chung ô với người khác: bộ đếm +1 mỗi lần');
-check(pick.got === 100 && pick.lost === 100 && pick.use.gain === 100,
-  `Hai Ngón level 1: lấy 5% của người giàu nhất (2000$ → 100$), ghi vào tiến độ (${JSON.stringify(pick)})`);
+check(pick.got === 120 && pick.lost === 120 && pick.use.gain === 120,
+  `Hai Ngón level 1: lấy 6% (đáy khoảng 6–12%) của người giàu nhất (2000$ → 120$), ghi vào tiến độ (${JSON.stringify(pick)})`);
 
 await reset();
 const alone = await run(`
@@ -687,20 +820,23 @@ const bets = await run(`
   return { big, seven, pot: s.pot, feats: me.feats, use: me.skillUse };
 `);
 check(bets.big === 200, `Tài trúng ở level 3: +200% tiền cược = 200$ (được ${bets.big})`);
-check(bets.seven === -50 && bets.pot === 100, `ra 7 thì Xỉu thua; Hoàn Lương level 3 trả lại 50% (${bets.seven}, quỹ ${bets.pot})`);
+check(bets.seven === -70 && bets.pot === 100, `ra 7 thì Xỉu thua; Hoàn Lương level 3 trả lại 30% (${bets.seven}, quỹ ${bets.pot})`);
 check(bets.feats.betWin === 200 && bets.feats.betLose === 100, `bộ đếm thắng/thua cược (${JSON.stringify(bets.feats)})`);
-check(bets.use.dd2a.n === 2 && bets.use.ddX1.gain === 200 && bets.use.ddX2.gain === 50, 'mỗi lần cược ghi tiến độ đúng kỹ năng');
+check(bets.use.dd2a.n === 2 && bets.use.ddX1.gain === 200 && bets.use.ddX2.gain === 30, `mỗi lần cược ghi tiến độ đúng kỹ năng (${JSON.stringify(bets.use)})`);
 
 await reset();
 await run(`const p = s.current; p.skills = ['dd2a', 'ddX1']; c.lastRolled = false; c.restoreActions();`);
-await page.locator('#actions button', { hasText: 'Cược Chẵn Lẻ' }).click();
+await openKit();
+await item('Cược Chẵn Lẻ').click();
 await page.locator('.sk-bet').waitFor({ timeout: 5000 });
 check(await page.locator('.sk-bet [data-v="big"]').count() === 1 && await page.locator('.sk-bet [data-v="small"]').count() === 1,
   'hộp cược có thêm cửa Tài và Xỉu');
 await page.locator('.sk-bet [data-v="small"]').click();
-await clickModal('Đặt cược');
+await topBtn('Xong').click();
+await topBtn('Chốt').click();
 await page.waitForTimeout(2600);
-check(await page.locator('#actions button', { hasText: 'Đã cược Xỉu' }).count() === 1, 'đặt cửa Xỉu: nút đổi thành "Đã cược Xỉu"');
+await run('await c.skills.beforeRoll(s.current);');
+check(await run(`return c.skills.bet?.pick === 'small';`), 'đặt cửa Xỉu: lúc lắc tự cược cửa Xỉu');
 await run('c.skills.bet = null;');
 
 // Khách Quen Nhà Đá: bồi thường khi vào tù, ra tù miễn phí
@@ -718,7 +854,7 @@ const jail = await run(`
   return { jails, locked, comp };
 `);
 check(jail.jails === 3 && jail.locked === 'poor', `đã học Nhặt Tiền Rơi, vào tù lần 3 thì mở khoá Khách Quen Nhà Đá (${JSON.stringify(jail)})`);
-check(jail.comp === 60, `Khách Quen level 2: vào tù nhận 60$ (được ${jail.comp})`);
+check(jail.comp === 70, `Khách Quen level 2: vào tù nhận 70$ (được ${jail.comp})`);
 const bailBtn = page.locator('#actions button', { hasText: 'Ra tù miễn phí' });
 check(await bailBtn.count() === 1, 'nút nộp phạt đổi thành "Ra tù miễn phí"');
 const bail = await run(`
@@ -729,28 +865,29 @@ const bail = await run(`
   c.takeRoll = tr;
   return { paid: m0 - s.current.money, jail: s.current.inJail, gain: s.current.skillUse.cnX2.gain };
 `);
-check(!bail.jail && bail.paid === 0 && bail.gain === 110, `ra tù không mất 50$, tiến độ cộng 60 + 50 (${JSON.stringify(bail)})`);
+check(!bail.jail && bail.paid === 0 && bail.gain === 120, `ra tù không mất 50$, tiến độ cộng 70 + 50 (${JSON.stringify(bail)})`);
 
-// Chủ Nợ, Sống Sót, tiến độ kỹ năng thuê của chủ đất
+// Chủ Nợ (phạt người đang có ô thế chấp), Sống Sót, tiến độ kỹ năng thuê của chủ đất
 await reset();
 const rentx = await run(`
   const me = s.current, owner = s.players[(s.turn + 1) % 3];
   s.owner.set(39, owner.id);                                  // Dinh Toàn Quyền, thuê gốc 50$
+  s.owner.set(1, me.id); s.mortgaged.add(1);                  // người trả đang nợ ngân hàng
   owner.skills = ['dcX1', 'dcU']; me.money = 40;
   const late = c.skills.rentBill(me, 39, null);
   me.skills = ['acX1'];
   const both = c.skills.rentBill(me, 39, null);
-  me.money = 1000;
+  me.money = 1000; s.mortgaged.delete(1);
   const rich = c.skills.rentBill(me, 39, null);
   c.skills.rentPaid(owner, rich);
-  return { late: late.total, lateFee: late.late, both: both.total, rich: rich.total,
+  return { late: late.total, lateFee: late.late, both: both.total, bothLate: both.late, rich: rich.total, richLate: rich.late,
            note: c.skills.rentNote(me, 39, both), dcU: owner.skillUse.dcU, rentIn: owner.feats.rentIn };
 `);
-check(rentx.late === 110 && rentx.lateFee === 10, `Chủ Nợ: thuê 100$ (Cơn Sốt ×2) mà chỉ có 40$ → +10% = 110$ (${rentx.late})`);
-check(rentx.both === 55, `Sống Sót dưới 100$ trả 50% = 50$, Chủ Nợ phạt 10% phần còn lại = 55$ (${rentx.both})`);
-check(rentx.rich === 100, 'đủ tiền thì không có phạt chậm, không giảm');
-check(rentx.note.includes('Sống Sót') && rentx.note.includes('phạt chậm'), 'dòng loan tin ghi cả giảm và phạt chậm');
-check(rentx.dcU.gain === 50 && rentx.rentIn === 100, `Cơn Sốt Đất ghi 50$ tiền thuê thu thêm; chủ đất đếm 100$ tiền thuê (${JSON.stringify(rentx)})`);
+check(rentx.late === 150 && rentx.lateFee === 25, `Chủ Nợ: thuê 125$ (Cơn Sốt ×2.5), người trả có ô thế chấp → +20% = 150$ (${rentx.late})`);
+check(rentx.both === 76 && rentx.bothLate === 13, `Sống Sót dưới 200$ trả 50% = 63$, Chủ Nợ phạt 20% phần còn lại = 76$ (${rentx.both})`);
+check(rentx.rich === 125 && rentx.richLate === 0, 'không còn ô thế chấp, đủ tiền thì không phạt, không giảm');
+check(rentx.note.includes('Sống Sót') && rentx.note.includes('Chủ Nợ'), 'dòng loan tin ghi cả giảm và tiền thêm của Chủ Nợ');
+check(rentx.dcU.gain === 75 && rentx.rentIn === 125, `Cơn Sốt Đất ghi 75$ tiền thuê thu thêm; chủ đất đếm 125$ tiền thuê (${JSON.stringify(rentx)})`);
 
 // Sống Sót: tiền mặt tụt dưới 100$ mới đếm; nằm lì dưới vạch không đếm thêm
 await reset();
@@ -768,12 +905,12 @@ check(broke.once === 1 && broke.twice === 2, `bộ đếm "tụt dưới 100$" c
 // Lão Làng: đếm lần qua từ lúc học, tặng điểm theo nhịp
 await reset();
 const vet = await run(`
-  const me = s.current; me.laps = 6; me.skills = ['cnX1']; me.skillLv = { cnX1: 3 };   // mỗi 2 lần
+  const me = s.current; me.laps = 6; me.skills = ['cnX1']; me.skillLv = { cnX1: 3 };   // mỗi 3 lần
   const got = [K.onLap(me), K.onLap(me), K.onLap(me), K.onLap(me)];
   return { got, pts: me.skillPoints, use: me.skillUse.cnX1 };
 `);
-check(JSON.stringify(vet.got) === '[1,2,1,2]' && vet.pts === 6, `Lão Làng level 3: cứ 2 lần qua được thêm 1 điểm (${JSON.stringify(vet)})`);
-check(vet.use.n === 2, 'Lão Làng: mỗi lần tặng điểm là một lần chạy');
+check(JSON.stringify(vet.got) === '[1,1,2,1]' && vet.pts === 5, `Lão Làng level 3: cứ 3 lần qua được thêm 1 điểm, tính từ lúc học (${JSON.stringify(vet)})`);
+check(vet.use.n === 1, 'Lão Làng: mỗi lần tặng điểm là một lần chạy');
 
 // Khách Sộp: mua ô trống thì đếm, học rồi thì ngân hàng hoàn tiền
 await reset();
@@ -798,8 +935,8 @@ const buy2 = await run(`
            owner: s.owner.get(39) === me.id };
 `);
 check(buy.locked === 'locked' && buy2.owner && buy2.n1 === 1, `mua ô trống qua hộp Mua: bộ đếm "buys" = 1 (${JSON.stringify(buy2)})`);
-check(buy2.n2 === 2 && buy2.back === Math.round(buy2.price * 0.12) && buy2.use.gain === buy2.back,
-  'Khách Sộp level 2: hoàn 12% giá mua, ghi vào tiến độ');
+check(buy2.n2 === 2 && buy2.back === Math.round(buy2.price * 0.18) && buy2.use.gain === buy2.back,
+  `Khách Sộp level 2: hoàn 18% giá mua, ghi vào tiến độ (${buy2.back})`);
 
 // Chủ Nhà: dừng trên đất của mình
 await reset();
@@ -827,11 +964,11 @@ check(snapUse.use.cn1.n === 2 && snapUse.use.cn1.gain === 70 && snapUse.feats.sh
 // Giao diện: ô thành tựu mọc từ ô cấp 2, khoá có tiến độ
 await reset();
 await run(`s.current.skillPoints = 2; s.current.skills = ['dh1', 'dh2b']; s.current.feats = { share: 3 }; c.restoreActions();`);
-await page.locator('#actions button', { hasText: 'Kỹ năng' }).click();
+await page.locator('#actions button[data-key="k"]').click();
 await page.locator('.st-node[data-id="dhX1"]').waitFor({ timeout: 5000 });
 check(await page.locator('.st-node.feat').count() === 10, 'cây có 10 ô thành tựu');
-check(await page.locator('.st-edge[data-to="dhX1"]').count() === 2, 'Hai Ngón có 2 đường nối từ cấp 2');
-check(await page.locator('.st-edge[data-to="dhU"]').count() === 2, 'tối thượng nối từ cả hai ô cấp 3');
+check(await page.locator('.st-edge[data-to="dhX1"]').count() === 1, 'Hai Ngón có đúng 1 đường nối, từ Về Nhà');
+check(await page.locator('.st-edge[data-to="dhU"]').count() === 1, 'mỗi tối thượng nối từ đúng 1 ô cấp 3');
 /* Không ô nào đè lên ô khác: so hình chữ nhật của mọi cặp ô trong cùng cột */
 const overlap = await page.evaluate(() => {
   const r = [...document.querySelectorAll('.st .st-node')].map((n) => [n.dataset.id, n.getBoundingClientRect()]);

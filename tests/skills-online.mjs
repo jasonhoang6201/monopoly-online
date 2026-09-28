@@ -51,7 +51,7 @@ async function bootToLobby(page, ms = 90000) {
 const skillView = (page) => page.evaluate(() => {
   const s = window.__monopoly.controller.state;
   return JSON.stringify({
-    players: s.players.map((p) => ({ money: p.money, pts: p.skillPoints, skills: p.skills, lv: p.skillLv, laps: p.laps,
+    players: s.players.map((p) => ({ money: p.money, pts: p.skillPoints, skills: p.skills, off: p.skillOff, lv: p.skillLv, laps: p.laps,
       cd: p.cooldowns, uses: p.lapUses, jails: p.jails })),
     heritage: [...s.heritage], turnNo: s.turnNo, pot: s.pot,
   });
@@ -68,7 +68,7 @@ async function drain(page, ms = 20000) {
       continue;
     }
     let clicked = false;
-    for (const label of ['Đi tới', 'Bỏ qua', 'Đành chịu', 'Nhận tiền', 'Tiếp tục', 'Lên đường', 'Cất vào túi', 'Đóng', 'Đã rõ', 'Thôi']) {
+    for (const label of ['Đi tới', 'Bỏ qua', 'Đành chịu', 'Nhận tiền', 'Tiếp tục', 'Lên đường', 'Cất vào túi', 'Đóng', 'Đã rõ', 'Thôi', 'Không cược', 'Chưa đạp']) {
       const b = top.locator('.modal-foot button.btn:not([disabled])', { hasText: label }).first();
       if (await b.count()) { await b.click().catch(() => {}); clicked = true; break; }
     }
@@ -139,18 +139,67 @@ ok(await until(async () => O.evaluate((seat) => {
   return p.skills.join() === 'dd1,dd2a' && p.skillPoints === 1;
 }, seat)), 'máy kia có đúng 2 kỹ năng vừa học, còn 1 điểm');
 
+/* ============================================================ học ngoài lượt */
+
+console.log('\n▸ 2b. Người ngồi xem học kỹ năng ngoài lượt');
+const oSeat = await O.evaluate(() => window.__monopoly.controller.mySeat);
+await D.evaluate((s) => {
+  const c = window.__monopoly.controller;
+  c.state.players[s].skillPoints = 3;
+  c.hud.refresh(); c.sync();
+}, oSeat);
+await O.bringToFront();
+ok(await until(async () => O.evaluate((s) => window.__monopoly.controller.state.players[s].skillPoints === 3, oSeat)),
+  'máy ngồi xem nhận 3 điểm');
+ok((await O.locator('#actions button').count()) === 0, 'máy ngồi xem không còn bảng "Tới lượt …" giữa bàn');
+ok(await O.locator('#skill-btn:not([hidden]) .skill-btn-n', { hasText: '3' }).count() === 1, 'nút cây kỹ năng ở hàng tiện ích ghi 3 điểm');
+await O.locator('#skill-btn').click();
+await O.locator('.st-node[data-id="dh1"]').waitFor({ timeout: 8000 });
+ok(await O.locator('.st-respec').count() === 0, 'cây mở ngoài lượt không có nút Tẩy điểm');
+for (const id of ['dh1', 'dh2a']) {
+  await O.locator(`.st-node[data-id="${id}"]`).click();
+  await O.locator('[data-act="learn"]').click();
+  await O.waitForTimeout(500);
+}
+await O.locator('.st-node[data-id="dh2a"]').click();
+ok(await O.locator('[data-act="toggle"]').count() === 0 && await O.locator('.sd-wait').count() === 1,
+  'ngoài lượt: thẻ chi tiết không có nút bật / tắt, ghi "Bật / tắt trong lượt của bạn"');
+await O.keyboard.press('Escape');
+await O.waitForTimeout(300);
+await O.locator('.st-close').click();
+await D.bringToFront();
+ok(await until(async () => D.evaluate((s) => {
+  const p = window.__monopoly.controller.state.players[s];
+  return p.skills.join() === 'dh1,dh2a' && p.skillPoints === 1 && p.skillOff.join() === 'dh2a';
+}, oSeat)), 'máy cầm lái ghi đúng 2 kỹ năng học ngoài lượt, còn 1 điểm, Tàu Tốc Hành nằm tắt');
+ok(await D.evaluate((s) => {
+  const p = window.__monopoly.controller.state.players[s];
+  return !p.skillOff.includes('dh1');
+}, oSeat), 'kỹ năng tự động (Vé Tháng) học xong là bật');
+ok(await until(async () => (await skillView(A)) === (await skillView(B)), 15000), 'hai máy khớp nhau sau khi học ngoài lượt');
+
 /* ============================================================ cược + lắc */
 
 console.log('\n▸ 3. Cược rồi lắc — tiền hai máy khớp nhau');
 await D.bringToFront();
-await until(async () => (await D.locator('#actions button[data-key="c"]:not([disabled])').count()) === 1, 8000);
-ok((await D.locator('#actions button[data-key="c"]').count()) === 1, 'máy cầm lái có nút Cược Chẵn Lẻ');
-ok((await O.locator('#actions button[data-key="c"]').count()) === 0, 'máy ngồi xem không có nút Cược');
-await D.locator('#actions button[data-key="c"]').click();
+// Cược Chẵn Lẻ học xong nằm tắt: bật trong kho kỹ năng rồi mới cược được
+await until(async () => (await D.locator('#actions button[data-key="u"]:not([disabled])').count()) === 1, 8000);
+ok((await O.locator('#actions button[data-key="u"]').count()) === 0, 'máy ngồi xem không có nút Dùng kỹ năng');
+await D.locator('#actions button[data-key="u"]').click();
+const offItem = D.locator('.kit-item.is-off', { hasText: 'Cược Chẵn Lẻ' });
+ok(await until(async () => (await offItem.count()) === 1, 5000), 'kho kỹ năng có Cược Chẵn Lẻ đang tắt (ô xám)');
+await offItem.click();
 await D.locator('.sk-bet').waitFor({ timeout: 5000 });
-await D.locator('[data-row="amount"] button', { hasText: '100$' }).click();
-await D.locator('.modal-foot button', { hasText: 'Đặt cược' }).click();
-await D.waitForTimeout(3000);
+const topD = D.locator('#modal-root .scrim.show:not(.stashed)').last();
+await topD.locator('[data-row="amount"] button', { hasText: '100$' }).click();
+await topD.locator('.modal-foot button', { hasText: 'Xong' }).click();
+await D.waitForTimeout(400);
+await D.locator('#modal-root .scrim.show .modal-foot button', { hasText: 'Chốt' }).click();
+ok(await until(async () => O.evaluate((s) => {
+  const p = window.__monopoly.controller.state.players[s];
+  return !p.skillOff.includes('dd2a') && p.betSet?.pick === 'even' && p.betSet?.amount === 100;
+}, seat)), 'Chốt: máy kia thấy Cược bật, cửa Chẵn 100$');
+await D.waitForTimeout(2600);
 await until(async () => (await D.locator('#actions button[data-key="r"]').count()) === 1, 8000);
 await D.locator('#actions button[data-key="r"]').click();
 await D.waitForTimeout(2500);
@@ -159,6 +208,7 @@ await until(async () => !(await D.evaluate(() => window.__monopoly.controller.bu
 ok(await until(async () => (await skillView(A)) === (await skillView(B)), 15000),
   'sau khi chốt cược, tiền và kỹ năng hai máy khớp nhau');
 ok(await D.evaluate(() => window.__monopoly.controller.skills.bet === null), 'cược đã chốt, không còn treo');
+ok(await D.evaluate((s) => window.__monopoly.controller.state.players[s].usedTurn?.dd2a != null, seat), 'bấm Lắc thì tự cược');
 
 /* ============================================================ sang lượt người kia */
 
@@ -214,7 +264,7 @@ const seat2 = await D.evaluate(() => window.__monopoly.controller.state.turn);
 await O.bringToFront();
 ok(await until(async () => O.evaluate((s) => {
   const p = window.__monopoly.controller.state.players[s];
-  return p.skills.join() === 'cn1' && p.skillLv?.cn1 === 2 && p.skillPoints === 0 && p.skillUse?.cn1?.gain === 150;
+  return p.skills.join() === 'dh1,dh2a,cn1' && p.skillLv?.cn1 === 2 && p.skillPoints === 0 && p.skillUse?.cn1?.gain === 150;
 }, seat2)), 'máy đầu thấy người kia vừa học Nhặt Tiền Rơi, lên level 2, hết điểm');
 
 console.log('\n▸ 5. Học tối thượng — máy ngồi xem cũng thấy hào quang');

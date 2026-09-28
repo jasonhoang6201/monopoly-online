@@ -17,7 +17,7 @@
     "test:mobile": "node tests/mobile.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.58.0",
+    "@supabase/supabase-js": "^2.117.2",
     "phaser": "^3.90.0"
   },
   "devDependencies": {

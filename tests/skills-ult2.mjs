@@ -62,7 +62,8 @@ log('\n=== 1. CHỌN MỘT TRONG HAI ===');
 await reset();
 const pick = await run(`
   const p = s.current;
-  p.skills = ['dh1', 'dh2a', 'dh3']; p.skillPoints = 10;
+  // Cây một cha: Xuyên Việt mọc từ dh3, BOT mọc từ ô thành tựu dhX1
+  p.skills = ['dh1', 'dh2a', 'dh3', 'dh2b', 'dhX1']; p.skillPoints = 10;
   const first = K.learnSkill(p, 'dhV').ok;
   const second = K.canLearn(p, 'dhU');
   const other = K.canLearn(p, 'cnU').reason;      // nhánh khác không bị ảnh hưởng
@@ -75,7 +76,7 @@ check(!/tối thượng/.test(pick.other ?? ''), 'nhánh khác không bị khoá
 const re = await run(`
   const p = s.current; p.money = 2000;
   K.respec(p);
-  p.skills = ['dh1', 'dh2a', 'dh3'];
+  p.skills = ['dh1', 'dh2a', 'dh3', 'dh2b', 'dhX1'];
   return K.canLearn(p, 'dhU').ok && K.canLearn(p, 'dhV').ok;
 `);
 check(re, 'tẩy điểm xong chọn lại được cả hai');
@@ -132,8 +133,8 @@ const rent = await run(`
 check(rent.plain === 50 && rent.lv1 === 70 && rent.lv3 === 90,
   `2 bến: 50$ → Vé Tháng lv1 +10×2 = 70$, lv3 +20×2 = 90$ (${rent.plain}/${rent.lv1}/${rent.lv3})`);
 check(rent.bill === 54, `người trả có Vé Tháng lv1 trả 60% của 90$ = 54$ (được ${rent.bill})`);
-check(rent.front === 2 + 18 && rent.gains.some(([id, n]) => id === 'acV' && n === 18),
-  `Mặt Tiền lv1, 3 màu: đất 2$ +6×3 = 20$, ghi 18$ vào tiến độ (${rent.front}, ${JSON.stringify(rent.gains)})`);
+check(rent.front === 2 + 27 && rent.gains.some(([id, n]) => id === 'acV' && n === 27),
+  `Mặt Tiền lv1, 3 màu: đất 2$ +9×3 = 29$, ghi 27$ vào tiến độ (${rent.front}, ${JSON.stringify(rent.gains)})`);
 check(rent.mort === 0, 'ô thế chấp vẫn không thu thuê');
 
 /* ------------------------------------------------ 3. Bảo Hiểm Xã Hội */
@@ -158,7 +159,7 @@ const cover = await run(`
   await c.skills.insure(me, 500);
   return me.money;
 `);
-check(cover === 300, `thiếu 500$ → trả hộ tối đa 300$, phần còn lại mới phải xoay tiền (tiền mặt ${cover})`);
+check(cover === 400, `thiếu 500$ → trả hộ tối đa 400$, phần còn lại mới phải xoay tiền (tiền mặt ${cover})`);
 
 /* ------------------------------------------------ 4. Trạm Thu Phí BOT */
 log('\n=== 4. TRẠM THU PHÍ BOT ===');
@@ -182,25 +183,32 @@ const toll = await run(`
 check(JSON.stringify(toll.list) === '[[5,12]]', `đi ngang bến 5 và công ty 12, bỏ bến 15 đang thế chấp (${JSON.stringify(toll.list)})`);
 check(toll.stop === 0, 'dừng đúng trên bến thì không thu phí (trả thuê như thường)');
 check(JSON.stringify(toll.back) === '[[12,5]]', 'đi lùi ngang trạm cũng thu');
-check(toll.paid === 60, `level 1: 2 trạm × 30$ = 60$ (${toll.paid})`);
+check(toll.paid === 40, `level 1: 2 trạm × 20$ = 40$ (${toll.paid})`);
 check(toll.poor === 20 && toll.left === 0, 'người chỉ có 20$ nộp hết 20$, không bị đẩy vào nợ');
-check(toll.gain === 80, `tiến độ lên level ghi 80$ (${toll.gain})`);
+check(toll.gain === 60, `tiến độ lên level ghi 40$ + 20$ = 60$ (${toll.gain})`);
 
 /* ------------------------------------------------ 5. Xổ Số Kiến Thiết */
 log('\n=== 5. XỔ SỐ KIẾN THIẾT ===');
 await reset();
 await run(`const me = s.current; me.skills = ['ddV']; c.restoreActions();`);
-const lottoBtn = page.locator('#actions button', { hasText: 'Chọn số Xổ Số' });
-check(await lottoBtn.count() === 1, 'vừa học xong có nút chọn số');
-await lottoBtn.click();
+/** Kho "Dùng kỹ năng": ô theo tên, mở kho, nút ở chân hộp trên cùng. */
+const item = (name) => page.locator('.kit-item', { hasText: name });
+const openKit = async () => { await page.locator('#actions button[data-key="u"]').click(); await item('').first().waitFor({ timeout: 5000 }); };
+const topBtn = (text) => page.locator('#modal-root .scrim.show:not(.stashed)').last().locator('.modal-foot button', { hasText: text });
+await openKit();
+check((await item('Xổ Số Kiến Thiết').textContent()).includes('Bật nhưng chưa chọn số'), 'vừa học xong (bật sẵn trong bài), ô ghi chưa chọn số');
+await item('Xổ Số Kiến Thiết').click();
 await page.locator('.sk-lotto').waitFor({ timeout: 5000 });
 const lottoText = await page.locator('.sk-lotto').textContent();
 check(lottoText.includes('30$') && lottoText.includes('180$'), 'nút ghi tiền thưởng: 7 → 30$, 2/12 → 180$');
+check(await page.locator('.sk-bet [data-v="none"]', { hasText: 'Không' }).count() === 1, 'bảng chọn số có lựa chọn Không');
 await page.locator('.sk-lotto button[data-v="9"]').click();
-await page.locator('#modal-root .scrim.show button', { hasText: 'Chọn số này' }).click();
+await topBtn('Xong').click();
+await page.waitForTimeout(300);
+check((await item('Xổ Số Kiến Thiết').textContent()).includes('Số 9'), 'chọn xong về lại kho, ô ghi số 9');
+await topBtn('Chốt').click();
 for (let i = 0; i < 12 && (await run('return c.busy;')); i++) await wait(400);
-check(await run('return s.current.lotto;') === 9, 'đã ghi số 9');
-check(await lottoBtn.count() === 0, 'chọn rồi thì nút biến mất');
+check(await run('return s.current.lotto;') === 9, 'Chốt: đã ghi số 9');
 const hit = await run(`
   const me = s.current;
   const q = s.players.find((x) => x.id !== me.id);
@@ -215,12 +223,19 @@ const hit = await run(`
 `);
 check(hit.got === hit.need && hit.need === 45 && hit.miss === 0 && hit.self === 0,
   `người khác lắc ra 9 trả 45$ (5×36/4), ra 8 không trả, tự lắc không tính (${JSON.stringify(hit)})`);
-// Qua ô Bắt Đầu: số cũ hết hạn, hỏi chọn lại
-const lap = run(`await c.skills.lapEnd(s.current); return s.current.lotto;`);
-await page.locator('.sk-lotto').waitFor({ timeout: 8000 });
-await page.keyboard.press('Escape');
-check(await lap === 7, 'qua ô Bắt Đầu hỏi chọn số mới; bấm Esc thì lấy 7');
-await wait(2600);
+// Đổi số: một lần giữa hai lần qua ô Bắt Đầu; qua rồi thì đổi lại được
+await run(`s.current.lapUses = { ddVpick: 1 }; c.restoreActions();`);
+await openKit();
+check((await item('Xổ Số Kiến Thiết').textContent()).includes('Đã đổi số trong vòng này'), 'đã đổi số trong vòng này: ô ghi rõ');
+await item('Xổ Số Kiến Thiết').click();
+await page.locator('.sk-lotto').waitFor({ timeout: 5000 });
+check(await page.locator('.sk-lotto button:not([disabled])').count() === 1 && await page.locator('.sk-bet [data-v="none"]').isEnabled(),
+  'đã đổi số trong vòng này: chỉ còn số đang giữ và Không');
+await topBtn('Huỷ').click();
+await topBtn('Huỷ').click();
+await wait(500);
+const lap = await run(`K.onLap(s.current); return { lotto: s.current.lotto, pick: s.current.lapUses.ddVpick ?? 0 };`);
+check(lap.lotto === 9 && lap.pick === 0, `qua ô Bắt Đầu giữ số 9 và được đổi lại (${JSON.stringify(lap)})`);
 
 /* ------------------------------------------------ 6. Siết Nợ */
 log('\n=== 6. SIẾT NỢ ===');
@@ -231,23 +246,30 @@ await run(`
   s.owner.set(39, q.id); s.owner.set(1, q.id); s.mortgaged.add(39);
   c.restoreActions();
 `);
-const fcBtn = page.locator('#actions button', { hasText: 'Siết Nợ' });
-check(await fcBtn.count() === 1, 'có đất thế chấp của người khác thì nút Siết Nợ hiện');
-await fcBtn.click();
+await openKit();
+check(await item('Siết Nợ').isEnabled(), 'có đất thế chấp của người khác thì ô Siết Nợ trong kho bấm được');
+await item('Siết Nợ').click();
 await page.locator('.tile-pick').waitFor({ timeout: 5000 });
 check(JSON.stringify(await markedTiles(page)) === '[39]', 'chỉ ô đang thế chấp mới sáng');
 const before = await run(`const q = s.ownerOf(39); return { me: s.current.money, q: q.money, qid: q.id };`);
 await page.evaluate(() => { window.__monopoly.scene.onTileClick(39); });
 await page.waitForTimeout(400);
-await page.locator('.scrim.show .modal-foot button.btn').first().click();
+await page.locator('#modal-root .scrim.show:not(.stashed)').last().locator('.modal-foot button.btn').first().click();
+await page.waitForTimeout(400);
+await topBtn('Chốt').click();
 for (let i = 0; i < 20 && !(await run('return s.owner.get(39) === s.turn && !c.busy;')); i++) await wait(500);
 const fc = await run(`const q = s.players[a]; return {
   owner: s.owner.get(39), me: s.current.money, q: q.money, mort: s.isMortgaged(39), turn: s.turn,
   uses: K.usesLeft(s.current, 'dcV') };`, before.qid);
-// Ô 39 giá 400$, thế chấp 200$: trả ngân hàng 200$, trả chủ cũ 30% = 60$
+// Ô 39 giá 400$, thế chấp 200$: trả ngân hàng 200$, trả chủ cũ 20% = 40$
 check(fc.owner === fc.turn && !fc.mort, 'ô về tay người siết nợ, hết thế chấp');
-check(before.me - fc.me === 260 && fc.q - before.q === 60, `trả tổng 260$, chủ cũ nhận 60$ (${before.me - fc.me}/${fc.q - before.q})`);
-check(fc.uses === 0 && await fcBtn.count() === 0, 'dùng hết lượt thì nút ẩn tới lần qua ô Bắt Đầu sau');
+check(before.me - fc.me === 240 && fc.q - before.q === 40, `trả tổng 240$, chủ cũ nhận 40$ (${before.me - fc.me}/${fc.q - before.q})`);
+await run('c.restoreActions();');
+await openKit();
+check(fc.uses === 0 && !(await item('Siết Nợ').isEnabled()) && (await item('Siết Nợ').textContent()).includes('Chờ'),
+  'dùng hết lượt thì ô mờ, ghi chờ tới lần qua ô Bắt Đầu sau');
+await topBtn('Huỷ').click();
+await wait(500);
 
 /* ------------------------------------------------ 7. ảnh chụp mang số Xổ Số */
 log('\n=== 7. ẢNH CHỤP ===');

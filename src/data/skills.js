@@ -451,7 +451,7 @@ export const SKILLS = [
     levels: [{ charges: 1, cooldown: 2 }, { charges: 1, cooldown: 1 }, { charges: 2, cooldown: 1 }],
     grow: { by: 'uses', at: [2, 5], say: 'Đạp xe {n} lần' },
     short: 'Lần lắc này chỉ đi theo viên xí ngầu nhỏ hơn.',
-    effect: 'Dùng Xe Đạp trước khi lắc: lần lắc đó quân chỉ đi theo viên xí ngầu nhỏ hơn (1–6 ô). Ra đôi cũng không tính là đôi.',
+    effect: 'Đang bật thì mỗi lượt, lần lắc đầu tiên quân chỉ đi theo viên xí ngầu nhỏ hơn (1–6 ô), cho tới khi hết lượt dùng. Ra đôi cũng không tính là đôi.',
     lvText: 'Dùng {charges} lần, rồi chờ {cooldown} lần qua ô Bắt Đầu',
   },
   {
@@ -480,11 +480,11 @@ export const SKILLS = [
     requires: ['dd1'],
     name: 'Cược Chẵn Lẻ',
     uses: 'Mỗi lượt 1 lần',
-    when: 'trước khi lắc',
+    when: 'mỗi lượt, lúc bấm Lắc',
     levels: [{ payout: [0.7, 1.4], max: 200 }, { payout: 1.05, max: 200 }, { payout: 1.15, max: 250 }],
     grow: { by: 'uses', at: [4, 10], say: 'Đặt cược {n} lần' },
     short: 'Đoán tổng xí ngầu chẵn hay lẻ, đúng thì ăn tiền cược.',
-    effect: 'Trước khi lắc, đoán tổng hai viên xí ngầu ra chẵn hay lẻ, rồi cược tối đa {$max}. Đoán đúng: được thêm {%payout} số tiền cược. Đoán sai: mất tiền cược, số tiền này vào Quỹ Công.',
+    effect: 'Chọn cửa chẵn hay lẻ và số tiền cược (tối đa {$max}). Đang bật thì mỗi lượt, lúc bấm Lắc, tự cược đúng cửa và số tiền ấy cho tới khi bạn chọn Không. Đoán đúng: được thêm {%payout} số tiền cược. Đoán sai: mất tiền cược, số tiền này vào Quỹ Công.',
     lvText: 'Đúng ăn {%payout} tiền cược, cược tối đa {$max}',
   },
   {

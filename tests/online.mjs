@@ -90,7 +90,7 @@ async function enter(url, name, tag, { ready = true } = {}) {
 async function settleTurn(page, ms = 30000) {
   const t0 = Date.now();
   const order = ['Mua ', 'Nhận tiền', 'Đành chịu', 'Bỏ qua', 'Tiếp tục', 'Chấp nhận',
-                 'Xong', 'Đóng', 'Để sau', 'Thôi'];
+                 'Xong', 'Đóng', 'Để sau', 'Thôi', 'Không cược', 'Chưa đạp'];
   while (Date.now() - t0 < ms) {
     if (await page.locator('#modal-root .scrim.show').count()) {
       let clicked = false;
@@ -232,7 +232,7 @@ const aBtns = await A.locator('#actions button:not([disabled])').count();
 const bBtns = await B.locator('#actions button:not([disabled])').count();
 const bBar = (await B.locator('#actions').innerText()).replace(/\s+/g, ' ').trim();
 ok(aBtns > 0, 'chủ phòng đi trước nên có nút bấm', `${aBtns} nút`);
-ok(bBtns === 0 && bBar.includes('Tới lượt'), 'máy chưa tới lượt chỉ hiện "Tới lượt …"', bBar);
+ok(bBtns === 0 && bBar === '', 'máy chưa tới lượt không có bảng nút giữa bàn', bBar);
 ok((await A.locator('#room-toggle').count()) === 0, 'không còn nút quản trị phòng giữa ván');
 await A.screenshot({ path: `${SHOT}/on-04-game-host.png` });
 
@@ -424,8 +424,9 @@ if (linkKind !== 'supabase') {
   ok(await until(async () => A.evaluate(
     (s) => window.__monopoly.controller.net.isSeatLive(s), seatB), 30000),
     'bàn bên kia thấy mình có mặt trở lại (đã khai lại presence)');
-  ok(await until(async () => (await B.locator('#actions').innerText()).includes('Tới lượt'), 20000),
-    'thanh nút bày lại đúng trạng thái đang ngồi xem');
+  ok(await until(async () => (await B.locator('#actions button').count()) === 0
+      && B.evaluate(() => !window.__monopoly.controller.net.linkLost), 20000),
+    'nối lại xong vẫn đúng trạng thái đang ngồi xem: không có nút');
   await B.screenshot({ path: `${SHOT}/on-07-relinked.png` });
 }
 
@@ -573,7 +574,7 @@ ok(await until(async () => (await turnNow(P2)) !== turn0, 20000),
 const streakAfterClick = await H.evaluate(() => {
   const c = window.__monopoly.controller;
   c.stallStreak = 2;
-  document.querySelector('#actions button, .scrim.show button.btn')
+  document.querySelector('#actions button, .scrim.show button.btn, #skill-btn')
     ?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
   return c.stallStreak;
 });

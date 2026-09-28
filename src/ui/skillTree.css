@@ -293,6 +293,14 @@
 .st-node.is-learned.can-up .st-cost { display: grid; }
 .st-node.is-learned.can-up .st-face { border-color: #FFF3C4; }
 .st-node.ult.is-learned::before { border-color: var(--gold-light); box-shadow: 0 0 16px var(--c); }
+/* Đã học mà đang tắt: giữ màu nhánh cho biết ô đã có, nhưng nhạt và không
+   hắt sáng, để nhìn cả cây là biết cái nào đang chạy */
+.st-node.is-learned.off .st-face {
+  filter: grayscale(.75) brightness(.72);
+  box-shadow: inset 0 -3px 8px rgba(0, 0, 0, .35);
+  border-style: dashed;
+}
+.st-node.ult.is-learned.off::before { box-shadow: none; border-style: dashed; }
 
 .st-node.pop { animation: st-pop .6s var(--ease-out-back); }
 @keyframes st-pop {
@@ -447,7 +455,7 @@
 .sd-why { margin-top: 5px; font-size: 12px !important; color: #E8A58F !important; }
 
 .sd-foot {
-  display: flex; gap: 10px; justify-content: flex-end; align-items: center;
+  display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; align-items: center;
   padding: 12px 18px 14px;
   border-top: 1px solid rgba(200, 160, 72, .18);
 }
@@ -457,6 +465,13 @@
 }
 .sd-learned .sk-ico { width: 16px; height: 16px; stroke-width: 2.6; }
 .sd-learned.sd-not { color: var(--paper-deep); font-weight: 400; }
+.sd-onoff {
+  margin-left: 4px; padding: 1px 7px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: .02em;
+}
+.sd-onoff.is-on  { color: #0E2A18; background: #8FD6A8; }
+.sd-onoff.is-off { color: var(--paper-deep); border: 1px dashed var(--paper-deep); }
+.sd-wait { font-size: 12px; color: var(--paper-deep); font-style: italic; }
 
 /* Ba level của ô: level đã có sáng, level kế tiếp viền vàng */
 .sd-lvs { list-style: none; display: flex; flex-direction: column; gap: 3px; }
@@ -582,16 +597,17 @@
 .sd-need { display: block; font-style: normal; font-size: .82em; opacity: .7; margin-top: 1px; }
 .sd-card.feat .sd-icon { border-radius: 26%; }
 
-/* Kho kỹ năng bấm để dùng: lưới ô, viền màu nhánh; ô chưa dùng được mờ đi
-   nhưng vẫn đọc được lý do */
+/* Kho kỹ năng: lưới ô, viền màu nhánh. Ô có màu là bật, xám là tắt; ô
+   không bấm được lúc này mờ đi nhưng vẫn đọc được lý do */
 .kit { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; font-family: var(--serif); }
 .kit-item {
   display: flex; align-items: center; gap: 10px; text-align: left; padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--c) 70%, transparent); border-radius: 10px;
-  background: color-mix(in srgb, var(--c) 14%, rgba(0, 0, 0, .35)); color: var(--paper); cursor: pointer;
+  background: color-mix(in srgb, var(--c) 22%, rgba(0, 0, 0, .35)); color: var(--paper); font: inherit; cursor: pointer;
+  transition: background .15s, border-color .15s;
 }
-.kit-item:hover:not([disabled]) { background: color-mix(in srgb, var(--c) 28%, rgba(0, 0, 0, .35)); }
-.kit-item.off { opacity: .5; cursor: default; }
+.kit-item:hover:not([disabled]) { background: color-mix(in srgb, var(--c) 34%, rgba(0, 0, 0, .35)); }
+.kit-item[disabled] { opacity: .5; cursor: default; }
 .kit-ico { width: 34px; height: 34px; flex: none; display: grid; place-items: center; color: var(--c); }
 .kit-ico .sk-ico { width: 100%; height: 100%; }
 .kit-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -602,10 +618,15 @@
   .kit-ico { width: 26px; height: 26px; }
 }
 
-/* Kỹ năng bật / tắt đang tắt: nền xám, icon xám; vẫn bấm được để bật */
-.kit-item.is-off { --c: #7d7a74; background: rgba(125, 122, 116, .16); }
+/* Tắt (hoặc vừa bấm tắt trong bản nháp): nền xám, icon xám, viền nét đứt */
+.kit-item.is-off { --c: #7d7a74; background: rgba(125, 122, 116, .12); border-style: dashed; }
 .kit-item.is-off .kit-ico { filter: grayscale(1); }
-.kit-item.is-off:hover:not([disabled]) { background: rgba(125, 122, 116, .28); }
+.kit-item.is-off:hover:not([disabled]) { background: rgba(125, 122, 116, .24); }
+
+/* Bảng chọn: hàng không còn nghĩa (chọn "Không" thì hàng tiền cược) mờ đi */
+.sk-bet-row.dim { opacity: .35; pointer-events: none; }
+.sk-bet-row { flex-wrap: wrap; }
+.sk-bet-row .stake-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--pc); vertical-align: middle; }
 
 /* Góp Vốn: chip màu quân, chọn một người thì những người còn lại xám đi */
 .stake-list { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 14px; }

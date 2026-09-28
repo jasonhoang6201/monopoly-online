@@ -11,14 +11,14 @@ import { BOARD, GROUP_TILES, money, tileLabel } from '../data/board.js';
 import {
   skillById, has, param, roll, rolled, ready, usesLeft, spend, onLap, levyRate, levyEach, levelOf,
   freeHouseTarget, credit, bumpFeat, rentGains, lateFee, lottoPrize, tollStops, forecloseOffers,
-  tourPassed, leftoverOffers,
+  tourPassed, leftoverOffers, isOff, setSkillOn, learnSkill, switchable,
 } from '../core/skills.js';
 import { cardType, isKeepable, moveDest, repairBill } from '../core/cards.js';
 import { cardName, cardEffect, CARD_KINDS, DECK_META } from '../data/cards.js';
 import { RANKS, rankOf, shortLabel } from '../ui/caseOpen.js';
 import { SKILLS, BRANCHES } from '../data/skills.js';
 import { openModal } from '../ui/modal.js';
-import { openSkillTree } from '../ui/skillTree.js';
+import { openSkillTree, refreshSkillTree } from '../ui/skillTree.js';
 import { skillIcon } from '../ui/skillIcons.js';
 import { audio } from '../audio/audio.js';
 
@@ -45,6 +45,13 @@ export class SkillPlay {
     this.expressing = false;
     /** Xe Đạp đã bấm, chờ lần lắc kế tiếp. @type {?{turnNo:number,seat:number}} */
     this.bike = null;
+    /** Hộp cây kỹ năng đang mở trên máy này — chặn mở chồng hai hộp. */
+    this.treeOpen = false;
+    /**
+     * Ô học ngoài lượt đã gửi cho máy cầm lái mà ảnh chụp chưa có.
+     * @type {Array<{id:string, level:number, sent:number, t0:number}>}
+     */
+    this.learnPending = [];
   }
 
   get st() { return this.g.state; }
@@ -60,118 +67,507 @@ export class SkillPlay {
    * hành động — học năm sáu kỹ năng là thanh nút tràn khỏi màn điện thoại.
    */
   buttons(p, rolled) {
+    const offs = p.skills.filter((id) => isOff(p, id)).length;
     const out = [{
       label: 'Kỹ năng', key: 'k', half: true,
       cls: p.skillPoints > 0 ? 'btn-gold' : 'btn-ghost',
       icon: skillIcon('root', 'ai'),
       hint: p.skillPoints > 0 ? `${p.skillPoints} điểm chưa dùng` : `đã học ${p.skills.length}`,
-      title: 'Mở cây kỹ năng: học kỹ năng mới bằng điểm nhận khi qua ô Bắt Đầu',
+      title: 'Mở cây kỹ năng: học kỹ năng mới, bật / tắt kỹ năng đã học',
       onClick: () => this.g.guard(() => this.openTree(p)),
     }];
     // Nút kho luôn đứng cạnh nút cây; chưa học kỹ năng kích hoạt nào thì tối lại
-    const acts = this.actives(p, rolled);
-    const n = acts.filter((a) => a.ready).length;
+    const cells = this.kitCells(p, rolled);
+    const on = cells.filter((c) => c.switch && !isOff(p, c.id)).length;
+    const n = cells.filter((c) => c.ok).length;
     out.push({
       label: 'Dùng kỹ năng', key: 'u', half: true,
-      cls: n ? 'btn-gold' : 'btn-ghost',
-      disabled: !acts.length,
+      cls: n && (offs || cells.some((c) => c.act)) ? 'btn-gold' : 'btn-ghost',
+      disabled: !cells.length,
       icon: skillIcon('chip', 'ai'),
-      hint: !acts.length ? 'chưa học kỹ năng kích hoạt' : n ? `${n} kỹ năng dùng được` : 'chưa có kỹ năng dùng được',
-      title: 'Mở kho kỹ năng bấm để dùng',
+      hint: !cells.length ? 'chưa học kỹ năng kích hoạt'
+        : `${on} bật${offs ? ` · ${offs} tắt` : ''}`,
+      title: 'Mở kho kỹ năng: bật / tắt, chọn cửa cược, chọn ô',
       onClick: () => this.g.guard(() => this.openKit(p, rolled)),
     });
     return out;
   }
 
   /**
-   * Kỹ năng kích hoạt người này đã học, kèm tình trạng lúc này. `ready` là
-   * bấm được ngay; `status` nói vì sao chưa, hoặc đang ở trạng thái nào.
-   * Kỹ năng tự hỏi đúng lúc (Tàu Tốc Hành, Quay Đầu, Xí Ngầu Gian, Thâu Tóm)
-   * cũng liệt kê — không bấm được, nhưng người chơi thấy còn mấy lần, chờ bao lâu.
-   * @returns {Array<{id:string, ready:boolean, status:string, run?:Function}>}
+   * Các ô của kho kỹ năng. Ba kiểu ô:
+   *
+   * - bật / tắt (`switch`, không có `choose`): bấm là đổi màu trong bản nháp.
+   *   Gồm kỹ năng tự hỏi đúng lúc (Tàu Tốc Hành, Quay Đầu…), Cò Quay, Xe Đạp.
+   * - có bảng chọn (`choose`): bấm mở bảng, trong bảng có lựa chọn "Không"
+   *   là tắt. Chọn xong về lại kho. Cược, Xổ Số, Góp Vốn giữ lựa chọn và tự
+   *   làm lại mỗi lượt; Tất Tay, Mua Lại, Siết Nợ, Xuyên Việt (`once`) làm
+   *   một lần ngay lúc Chốt.
+   * - việc làm ngay (`act`, kỹ năng nội tại như Ngồi Yên): bấm là chốt bản
+   *   nháp rồi làm luôn.
+   *
+   * `ok` là bấm được lúc này; không được thì `why` nói lý do. Ô đang tắt vẫn
+   * phải ghi đúng tình trạng như lúc bật (còn mấy lần, chờ bao lâu), mà
+   * ready / usesLeft đều đi qua has(), coi kỹ năng tắt là chưa học — nên tính
+   * trên danh sách tắt rỗng rồi trả lại. Chạy đồng bộ, không ai đọc `p` ở giữa.
    */
-  actives(p, rolled) {
+  kitCells(p, rolled) {
+    const offs = p.skillOff;
+    p.skillOff = [];
+    try { return this.listCells(p, rolled); } finally { p.skillOff = offs; }
+  }
+
+  listCells(p, rolled) {
     const st = this.st;
     const out = [];
     const jail = p.inJail;
     const wait = (id) => `Chờ ${p.cooldowns[id]} lần qua ô Bắt Đầu`;
     const beforeRoll = rolled ? 'Chỉ dùng trước khi lắc' : jail ? 'Không dùng khi đang ở tù' : '';
-    const add = (id, ready, status, run, extra = {}) => { if (has(p, id)) out.push({ id, ready: !!ready, status, run, ...extra }); };
+    const cell = (id, o) => { if (has(p, id)) out.push({ id, switch: switchable(skillById(id)), ok: true, ...o }); };
+    const left = (id) => `còn ${usesLeft(p, id)} lần tới lần qua ô Bắt Đầu`;
+    // Bật / tắt: kỹ năng có lượt dùng đang chờ hồi thì không bật được
+    const toggle = (id, on, extra = '') => cell(id, ready(p, id)
+      ? { on, off: 'Bấm để bật' + extra }
+      : { ok: false, why: wait(id) });
 
     const bet = this.pending(this.bet);
-    add('dd2a', !beforeRoll && !bet && p.usedTurn?.dd2a !== st.turnNo && p.money >= 50,
-      bet ? `Đã cược ${PARITY_NAME[bet.pick]} ${money(bet.amount)}`
-        : beforeRoll || (p.usedTurn?.dd2a === st.turnNo ? 'Đã cược lượt này'
-          : p.money < 50 ? 'Cần ít nhất 50$' : 'Đoán tổng xí ngầu trước khi lắc'),
-      () => this.askBet(p));
+    cell('dd2a', {
+      on: (v) => (v ? `Tự cược ${PARITY_NAME[v.pick]} ${money(v.amount)} mỗi lượt, lúc bấm Lắc` : 'Bật nhưng chưa chọn cửa'),
+      off: 'Bấm để chọn cửa và tiền cược',
+      note: bet ? `Lượt này đã cược ${PARITY_NAME[bet.pick]} ${money(bet.amount)}` : '',
+      val: p.betSet ?? null,
+      choose: (v) => this.chooseBet(p, v),
+    });
     const all = this.pending(this.allIn);
-    add('ddU', !beforeRoll && !all && ready(p, 'ddU'),
-      all ? `Đã tất tay cửa ${PARITY_NAME[all.pick]}` : !ready(p, 'ddU') ? wait('ddU')
-        : beforeRoll || 'Đoán chẵn/lẻ với cả bàn',
-      () => this.askAllIn(p));
-    add('dhU', !beforeRoll && ready(p, 'dhU'),
-      !ready(p, 'dhU') ? wait('dhU') : beforeRoll || 'Thay cho lượt lắc',
-      () => this.teleport(p));
-    const bike = this.pending(this.bike);
-    add('dhS1', !beforeRoll && !bike && usesLeft(p, 'dhS1') > 0,
-      bike ? 'Đang đạp xe: lần lắc này đi theo viên nhỏ hơn'
-        : usesLeft(p, 'dhS1') <= 0 ? wait('dhS1') : beforeRoll || `Còn ${usesLeft(p, 'dhS1')} lần tới lần qua ô Bắt Đầu`,
-      () => this.rideBike(p));
-    add('ddV', !jail && (p.lotto == null || !p.lapUses?.ddVpick),
-      p.lotto == null ? 'Chưa chọn số' : p.lapUses?.ddVpick ? `Số ${p.lotto} · đã đổi trong vòng này` : `Số ${p.lotto} · đổi được 1 lần mỗi vòng`,
-      async () => { await this.pickLotto(p); this.g.restoreActions(); });
-    // Kỹ năng bật / tắt: đang tắt thì ô trong kho nền xám (vẫn bấm được để bật)
-    add('ddS2', !jail, p.spin ? 'Đang bật: lương lần tới được quay' : 'Đang tắt: bấm để bật, lương lần tới được quay',
-      () => this.toggleSpin(p), { off: !p.spin });
-    const left = leftoverOffers(st, p).length;
-    add('dcS1', !jail && usesLeft(p, 'dcS1') > 0 && left,
-      usesLeft(p, 'dcS1') <= 0 ? wait('dcS1') : !left ? 'Chưa có ô nào người khác bỏ qua mà bạn đủ tiền mua'
-        : `${left} ô mua được, ${Math.round(param(p, 'dcS1').price * 100)}% giá`,
-      () => this.pickLeftover(p));
-    const who = p.stake != null && !st.players[p.stake]?.bankrupt ? st.players[p.stake] : null;
-    add('dcS2', !jail && (!who || !p.lapUses?.dcS2pick),
-      !who ? 'Chưa góp vốn ai' : p.lapUses?.dcS2pick ? `Đang góp vốn với ${who.name} · đã đổi trong vòng này` : `Đang góp vốn với ${who.name}`,
-      () => this.pickStake(p));
+    cell('ddU', all ? { ok: false, why: `Đã tất tay cửa ${PARITY_NAME[all.pick]}` }
+      : !ready(p, 'ddU') ? { ok: false, why: wait('ddU') }
+        : beforeRoll ? { ok: false, why: beforeRoll }
+          : { once: true, on: (v) => `Tất tay cửa ${PARITY_NAME[v]} khi Chốt`, off: 'Bấm để chọn cửa, đoán với cả bàn',
+            choose: () => this.chooseAllIn(p) });
+    cell('dhU', !ready(p, 'dhU') ? { ok: false, why: wait('dhU') }
+      : beforeRoll ? { ok: false, why: beforeRoll }
+        : { once: true, on: (v) => `Đi tới ${tileLabel(v)} khi Chốt, thay cho lượt lắc`, off: 'Bấm để chọn ô, thay cho lượt lắc',
+          choose: () => this.chooseTile(p, 'dhU') });
+    toggle('dhS1', () => `Tự đạp xe mỗi lần lắc, ${left('dhS1')}`, `: tự đạp xe mỗi lần lắc, ${left('dhS1')}`);
+    cell('ddV', {
+      on: (v) => (v != null ? `Số ${v} · trúng ${money(lottoPrize(p, v))}` : 'Bật nhưng chưa chọn số'),
+      off: 'Bấm để chọn số',
+      note: p.lapUses?.ddVpick ? 'Đã đổi số trong vòng này' : '',
+      val: p.lotto,
+      choose: (v) => this.chooseLotto(p, v),
+    });
+    toggle('ddS2', () => 'Lương lần tới được quay', ': lương lần tới được quay');
+    const offers = leftoverOffers(st, p).length;
+    cell('dcS1', usesLeft(p, 'dcS1') <= 0 ? { ok: false, why: wait('dcS1') }
+      : jail ? { ok: false, why: 'Không dùng khi đang ở tù' }
+        : !offers ? { ok: false, why: 'Chưa có ô nào người khác bỏ qua mà bạn đủ tiền mua' }
+          : { once: true, on: (v) => `Mua ${tileLabel(v)} khi Chốt`,
+            off: `${offers} ô mua được, ${Math.round(param(p, 'dcS1').price * 100)}% giá`,
+            choose: () => this.chooseTile(p, 'dcS1') });
+    const who = (v) => (v != null && !st.players[v]?.bankrupt ? st.players[v] : null);
+    cell('dcS2', {
+      on: (v) => (who(v) ? `Đang góp vốn với ${who(v).name}` : 'Bật nhưng chưa chọn người'),
+      off: 'Bấm để chọn người góp vốn',
+      note: p.lapUses?.dcS2pick ? 'Đã đổi người trong vòng này' : '',
+      val: who(p.stake) ? p.stake : null,
+      choose: (v) => this.chooseStake(p, v),
+    });
     const liens = forecloseOffers(st, p).length;
-    add('dcV', !jail && usesLeft(p, 'dcV') > 0 && liens,
-      usesLeft(p, 'dcV') <= 0 ? wait('dcV') : !liens ? 'Chưa có đất thế chấp nào của người khác mà bạn đủ tiền mua' : `${liens} ô đang thế chấp`,
-      () => this.foreclose(p));
-    add('cnS2', this.canSit(p),
-      !jail ? 'Chỉ dùng khi đang ở tù' : this.canSit(p) ? `Ngồi Yên: còn ${this.sitsLeft(p)} lượt` : 'Đã ngồi yên đủ số lượt lần này',
-      () => this.g.sitInJail());
+    cell('dcV', usesLeft(p, 'dcV') <= 0 ? { ok: false, why: wait('dcV') }
+      : jail ? { ok: false, why: 'Không dùng khi đang ở tù' }
+        : !liens ? { ok: false, why: 'Chưa có đất thế chấp nào của người khác mà bạn đủ tiền mua' }
+          : { once: true, on: (v) => `Siết nợ ${tileLabel(v)} khi Chốt`, off: `${liens} ô đang thế chấp`,
+            choose: () => this.chooseTile(p, 'dcV') });
+    cell('cnS2', this.canSit(p)
+      ? { act: () => this.g.sitInJail(), on: () => `Bấm để ngồi yên, còn ${this.sitsLeft(p)} lượt` }
+      : { ok: false, why: !jail ? 'Chỉ dùng khi đang ở tù' : 'Đã ngồi yên đủ số lượt lần này' });
 
-    // Tự hỏi đúng lúc — chỉ để xem
-    const auto = (id, text) => add(id, false, text);
-    auto('dh2a', 'Tự hỏi khi bạn dừng ở bến xe / nhà ga');
-    auto('dh3', usesLeft(p, 'dh3') > 0 ? `Tự hỏi sau khi lắc · còn ${usesLeft(p, 'dh3')} lần` : wait('dh3'));
-    auto('dd3', usesLeft(p, 'dd3') > 0 ? `Tự hỏi sau khi lắc · còn ${usesLeft(p, 'dd3')} lần` : wait('dd3'));
-    auto('dc3', ready(p, 'dc3') ? 'Tự hỏi khi bạn dừng trên đất chưa xây của người khác' : wait('dc3'));
+    // Tự hỏi đúng lúc: chỉ bật / tắt
+    toggle('dh2a', () => 'Tự hỏi khi bạn dừng ở bến xe / nhà ga');
+    toggle('dh3', () => `Tự hỏi sau khi lắc, ${left('dh3')}`);
+    toggle('dd3', () => `Tự hỏi sau khi lắc, ${left('dd3')}`);
+    toggle('dc3', () => 'Tự hỏi khi bạn dừng trên đất chưa xây của người khác');
     return out;
   }
 
-  /** Kho kỹ năng: bấm một ô dùng được là chạy kỹ năng đó. */
+  /**
+   * Kho kỹ năng. Ô có màu là bật, xám là tắt. Mọi thao tác trong hộp chỉ đổi
+   * bản nháp; Chốt (hoặc Enter) mới áp dụng một lần và loan tin một lần, Huỷ
+   * (hoặc Esc) đóng hộp không đổi gì. Bảng chọn mở từ một ô cũng chỉ ghi vào
+   * bản nháp rồi trả về kho.
+   */
   async openKit(p, rolled) {
-    const acts = this.actives(p, rolled);
+    const cells = this.kitCells(p, rolled);
+    // Bản nháp: id → { on, val }. Ô `once` luôn bắt đầu chưa chọn gì.
+    const draft = new Map(cells.map((c) => [c.id, {
+      on: c.switch ? !isOff(p, c.id) && !c.once : true,
+      val: c.once ? null : c.val,
+    }]));
+    const text = (c) => {
+      if (!c.ok) return c.why;
+      const d = draft.get(c.id);
+      const s = d.on ? (typeof c.on === 'function' ? c.on(d.val) : '') : c.off;
+      return c.note ? `${s} · ${c.note}` : s;
+    };
+    const lit = (c) => c.ok && draft.get(c.id).on;
+    let act = null;
     const v = await openModal({
-      eyebrow: 'Kỹ năng bấm để dùng',
+      eyebrow: 'Kỹ năng kích hoạt',
       title: 'Dùng kỹ năng',
+      sub: 'Ô có màu là bật, xám là tắt. Bấm Chốt để áp dụng.',
       wide: true,
-      body: `<div class="kit">${acts.map((a, i) => {
-        const s = skillById(a.id);
-        return `<button type="button" class="kit-item${a.ready ? '' : ' off'}${a.off ? ' is-off' : ''}" data-i="${i}" ${a.ready ? '' : 'disabled'}
-            style="--c:${SKILL_COLOR[s.branch]}">
+      body: `<div class="kit">${cells.map((c, i) => {
+        const s = skillById(c.id);
+        return `<button type="button" class="kit-item${lit(c) ? '' : ' is-off'}" data-i="${i}" ${c.ok ? '' : 'disabled'}
+            aria-pressed="${lit(c)}" style="--c:${SKILL_COLOR[s.branch]}">
           <span class="kit-ico">${skillIcon(s.icon)}</span>
-          <span class="kit-text"><b>${s.name}</b><small>${a.status}</small></span>
+          <span class="kit-text"><b>${s.name}</b><small>${text(c)}</small></span>
         </button>`;
       }).join('')}</div>`,
-      buttons: [{ label: 'Đóng', value: null, cls: 'btn-ghost' }],
-      onMount: (body, close) => {
-        body.querySelectorAll('.kit-item:not([disabled])').forEach((b) => b.addEventListener('click', () => close(Number(b.dataset.i))));
+      buttons: [
+        { label: 'Chốt', value: 'apply', cls: 'btn-gold' },
+        { label: 'Huỷ', value: null, cls: 'btn-ghost' },
+      ],
+      onMount: (body, close, _m, _f, stash) => {
+        let busy = false;
+        body.querySelectorAll('.kit-item:not([disabled])').forEach((b) => b.addEventListener('click', async () => {
+          if (busy) return;
+          const c = cells[Number(b.dataset.i)];
+          const d = draft.get(c.id);
+          if (c.act) { act = c.act; close('apply'); return; }
+          if (c.choose) {
+            busy = true;
+            stash(true);
+            const r = await c.choose(d.val).finally(() => stash(false));
+            busy = false;
+            if (r === undefined) return;
+            draft.set(c.id, r);
+          } else {
+            draft.set(c.id, { ...d, on: !d.on });
+            audio.sfx('click');
+          }
+          b.classList.toggle('is-off', !lit(c));
+          b.setAttribute('aria-pressed', String(lit(c)));
+          b.querySelector('small').innerHTML = text(c);
+        }));
       },
     });
-    const a = acts[v];
-    if (a?.ready && a.run) await a.run();
-    else this.g.restoreActions();
+    if (v !== 'apply') { this.g.restoreActions(); return; }
+    await this.applyKit(p, cells, draft);
+    if (this.st.current !== p || p.bankrupt || this.st.over) return;
+    if (act) { await act(); return; }
+    // Xuyên Việt thay cho lượt lắc: đi xong thì tự bày lại thanh nút sau-lắc
+    const tele = cells.find((c) => c.id === 'dhU' && c.ok && draft.get('dhU').on && draft.get('dhU').val != null);
+    if (tele) { await this.doTeleport(p, draft.get('dhU').val); return; }
+    this.g.restoreActions();
+  }
+
+  /**
+   * Áp dụng bản nháp của kho: công tắc, lựa chọn giữ lâu (Cược, Xổ Số, Góp
+   * Vốn), rồi các việc làm một lần. Loan tin phần công tắc và lựa chọn một
+   * lần; mỗi việc làm một lần tự loan tin của nó. Xuyên Việt để `openKit` chạy
+   * sau cùng vì nó dời quân và có thể hết lượt.
+   */
+  async applyKit(p, cells, draft) {
+    const st = this.st;
+    const res = { on: [], off: [], notes: [] };
+    const once = [];
+    for (const c of cells) {
+      if (!c.ok || c.act) continue;
+      const { on, val } = draft.get(c.id);
+      if (c.once) {
+        if (on && val != null) once.push([c.id, val]);
+        continue;
+      }
+      if (setSkillOn(p, c.id, on)) res[on ? 'on' : 'off'].push(c.id);
+      if (!on) continue;
+      if (c.id === 'dd2a' && val && (p.betSet?.pick !== val.pick || p.betSet?.amount !== val.amount)) {
+        p.betSet = { ...val };
+        res.notes.push(`Cược Chẵn Lẻ: tự cược ${PARITY_NAME[val.pick]} ${money(val.amount)} mỗi lượt.`);
+      }
+      if (c.id === 'ddV' && val != null && val !== p.lotto) {
+        if (p.lotto != null) p.lapUses = { ...p.lapUses, ddVpick: 1 };
+        p.lotto = val;
+        res.notes.push(`Xổ Số: chọn số <b>${val}</b>, ai lắc ra ${val} trả <span class="up">${money(lottoPrize(p, val))}</span>.`);
+      }
+      if (c.id === 'dcS2' && val != null && val !== p.stake && !st.players[val]?.bankrupt) {
+        if (p.stake != null && !st.players[p.stake]?.bankrupt) p.lapUses = { ...p.lapUses, dcS2pick: 1 };
+        p.stake = val;
+        res.notes.push(`Góp vốn với ${named(st.players[val])}.`);
+      }
+    }
+    const changed = res.on.length || res.off.length || res.notes.length;
+    if (changed) {
+      audio.sfx('build');
+      this.g.hud.refresh();
+      this.g.scene.refresh(st);
+      this.g.refreshSkillBtn();
+      this.g.sync();
+      const names = (ids) => ids.map((id) => `<b>${skillById(id).name}</b>`).join(', ');
+      const lines = [];
+      if (res.on.length) lines.push(`Bật: ${names(res.on)}.`);
+      if (res.off.length) lines.push(`Tắt: ${names(res.off)}.`);
+      await this.bc('KỸ NĂNG', `${named(p)}<br>${[...lines, ...res.notes].join('<br>')}`, { ms: 2200 });
+    }
+    for (const [id, val] of once) {
+      if (st.current !== p || p.bankrupt || st.over) return;
+      if (id === 'ddU') await this.doAllIn(p, val);
+      if (id === 'dcS1') await this.doLeftover(p, val);
+      if (id === 'dcV') await this.doForeclose(p, val);
+    }
+  }
+
+  /**
+   * Trước khi lắc: đặt những gì đang bật để tự làm mỗi lần lắc. Cược mỗi lượt
+   * một lần (đổ đôi lắc lại không cược thêm); thiếu tiền thì bỏ lượt này,
+   * không tắt. Xe Đạp đạp mỗi lượt một lần tới khi hết lượt dùng.
+   */
+  async beforeRoll(p) {
+    const st = this.st;
+    const set = p.betSet;
+    if (has(p, 'dd2a') && set && p.usedTurn?.dd2a !== st.turnNo && !this.pending(this.bet)) {
+      p.usedTurn = { ...p.usedTurn, dd2a: st.turnNo };
+      if (p.money >= set.amount) {
+        this.bet = { turnNo: st.turnNo, seat: p.id, pick: set.pick, amount: set.amount };
+        this.g.sync();
+        await this.bc(title('dd2a'), `${named(p)} cược <b>${money(set.amount)}</b> vào cửa <b>${PARITY_NAME[set.pick]}</b>.`, { ms: 1800 });
+      } else {
+        await this.bc(title('dd2a'), `${named(p)} không đủ ${money(set.amount)} để cược, lượt này bỏ qua.`, { kind: 'bad', ms: 1800 });
+      }
+    }
+    if (has(p, 'dhS1') && usesLeft(p, 'dhS1') > 0 && !this.pending(this.bike) && p.usedTurn?.dhS1 !== st.turnNo) {
+      p.usedTurn = { ...p.usedTurn, dhS1: st.turnNo };
+      spend(p, 'dhS1');
+      credit(p, 'dhS1');
+      this.bike = { turnNo: st.turnNo, seat: p.id };
+      this.g.sync();
+      await this.bc(title('dhS1'), `${named(p)} đạp xe: lần lắc này chỉ đi theo viên nhỏ hơn.`, { ms: 1600 });
+    }
+  }
+
+  /* ================================================================
+     Bảng chọn của kho kỹ năng
+     ================================================================
+     Mỗi bảng có lựa chọn "Không" là tắt. Trả về { on, val } để ghi vào bản
+     nháp của kho, hoặc undefined khi bấm Huỷ / Esc (bản nháp giữ nguyên). */
+
+  /** Hàng nút chọn một; `data-v` đọc lại bằng `parse`. */
+  static row(name, items, cur) {
+    return `<div class="sk-bet-row" data-row="${name}">${items.map(([v, label, dis]) =>
+      `<button type="button" class="btn btn-ghost${String(v) === String(cur) ? ' on' : ''}" data-v="${v}" ${dis ? 'disabled' : ''}>${label}</button>`).join('')}</div>`;
+  }
+
+  /**
+   * Mở một bảng chọn. `rows` là { tên hàng: giá trị đang chọn }; bấm nút trong
+   * hàng thì đổi giá trị. `onPick(sel, body)` chạy sau mỗi lần bấm, để bảng
+   * làm mờ hàng không còn nghĩa (chọn "Không" thì hàng số tiền mờ đi).
+   */
+  async chooser(id, { title: head, body, rows, onPick }) {
+    const sel = { ...rows };
+    const ok = await openModal({
+      eyebrow: `Kỹ năng · ${skillById(id).name}`,
+      title: head,
+      body: `<div class="sk-bet">${body}</div>`,
+      buttons: [
+        { label: 'Xong', value: true, cls: 'btn-gold' },
+        { label: 'Huỷ', value: false, cls: 'btn-ghost' },
+      ],
+      onMount: (el) => {
+        onPick?.(sel, el);
+        el.querySelectorAll('[data-row] button').forEach((b) => b.addEventListener('click', () => {
+          const row = b.parentElement;
+          row.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+          sel[row.dataset.row] = b.dataset.v;
+          onPick?.(sel, el);
+        }));
+      },
+    });
+    return ok ? sel : undefined;
+  }
+
+  /** Cược Chẵn Lẻ: chọn cửa và số tiền, hoặc Không. */
+  async chooseBet(p, cur) {
+    const { payout, max } = param(p, 'dd2a');
+    const amounts = [50, 100, 200, 300].filter((a) => a <= max);
+    const taiXiu = has(p, 'ddX1');
+    const picks = [['none', 'Không'], ['even', 'Chẵn'], ['odd', 'Lẻ'],
+      ...(taiXiu ? [['big', 'Tài · 8–12'], ['small', 'Xỉu · 2–6']] : [])];
+    const sel = await this.chooser('dd2a', {
+      title: 'Tự cược mỗi lượt',
+      rows: { pick: cur?.pick ?? 'even', amount: cur?.amount ?? amounts[0] },
+      body: `${SkillPlay.row('pick', picks, cur?.pick ?? 'even')}
+        ${SkillPlay.row('amount', amounts.map((a) => [a, money(a)]), cur?.amount ?? amounts[0])}
+        <p class="sk-bet-note">Đang bật thì mỗi lượt, lúc bấm Lắc, tự cược đúng cửa và số tiền này; chọn Không là tắt.
+          Chẵn/Lẻ đúng: được thêm ${pctText(payout)} số tiền cược.${taiXiu
+          ? ` Tài/Xỉu đúng: được thêm ${pctText(param(p, 'ddX1').payout)}; ra 7 thì cả hai cửa thua.` : ''}
+          Sai: mất tiền cược vào Quỹ Công${has(p, 'ddX2') ? `, được hoàn ${pctText(param(p, 'ddX2').back)}` : ''}.
+          Lượt nào không đủ tiền thì bỏ lượt ấy.</p>`,
+      onPick: (s, el) => el.querySelector('[data-row="amount"]').classList.toggle('dim', s.pick === 'none'),
+    });
+    if (!sel) return undefined;
+    if (sel.pick === 'none') return { on: false, val: cur };
+    return { on: true, val: { pick: sel.pick, amount: Number(sel.amount) } };
+  }
+
+  /** Tất Tay: chọn cửa, hoặc Không. Làm một lần lúc Chốt. */
+  async chooseAllIn(p) {
+    const st = this.st;
+    const { win, lose } = param(p, 'ddU');
+    const others = st.alive().filter((q) => q.id !== p.id);
+    const gainAt = (w) => others.reduce((n, q) => n + Math.floor(q.money * w), 0);
+    const gain = Array.isArray(win) ? `${money(gainAt(win[0])).replace(/\$$/, '')}–${money(gainAt(win[1]))}` : money(gainAt(win));
+    const loss = Math.floor(p.money * lose) * others.length;
+    const sel = await this.chooser('ddU', {
+      title: 'Đoán chẵn / lẻ với cả bàn',
+      rows: { pick: 'none' },
+      body: `${SkillPlay.row('pick', [['none', 'Không'], ['even', 'Chẵn'], ['odd', 'Lẻ']], 'none')}
+        <p class="sk-bet-note">Đoán tổng hai viên xí ngầu lần lắc tới. Đúng: nhận khoảng <b class="up">${gain}</b>
+          (${pctText(win)} tiền mặt mỗi người). Sai: trả tổng <b class="down">${money(loss)}</b>
+          (${Math.round(lose * 100)}% tiền mặt của bạn cho mỗi người).</p>`,
+    });
+    if (!sel) return undefined;
+    return sel.pick === 'none' ? { on: false, val: null } : { on: true, val: sel.pick };
+  }
+
+  /** Xổ Số: chọn một tổng xí ngầu, hoặc Không. Đổi số một lần mỗi vòng. */
+  async chooseLotto(p, cur) {
+    const locked = p.lotto != null && p.lapUses?.ddVpick;
+    const nums = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    const start = cur ?? p.lotto ?? 7;
+    const sel = await this.chooser('ddV', {
+      title: 'Chọn một tổng xí ngầu',
+      rows: { pick: start },
+      body: `${SkillPlay.row('pick', [['none', 'Không']], start)}
+        <div class="sk-bet-row sk-lotto" data-row="pick">${nums.map((n) => `<button type="button"
+          class="btn btn-ghost${n === start ? ' on' : ''}" data-v="${n}" ${locked && n !== p.lotto ? 'disabled' : ''}>
+          <b>${n}</b> · ${money(lottoPrize(p, n))}</button>`).join('')}</div>
+        <p class="sk-bet-note">Mỗi lần người khác lắc ra đúng tổng này thì họ trả bạn số tiền ghi trên nút.
+          Số càng khó ra trả càng nhiều; tính trung bình số nào cũng ngang nhau.
+          ${locked ? 'Bạn đã đổi số trong vòng này, qua ô Bắt Đầu mới đổi được nữa.' : 'Đổi số được một lần giữa hai lần qua ô Bắt Đầu.'}</p>`,
+      // Hai hàng cùng tên `pick`: bấm bên này thì bỏ sáng bên kia
+      onPick: (s, el) => el.querySelectorAll('[data-row="pick"] button').forEach((b) => b.classList.toggle('on', b.dataset.v === String(s.pick))),
+    });
+    if (!sel) return undefined;
+    return sel.pick === 'none' ? { on: false, val: cur } : { on: true, val: Number(sel.pick) };
+  }
+
+  /** Góp Vốn: chọn một người, hoặc Không. Đổi người một lần mỗi vòng. */
+  async chooseStake(p, cur) {
+    const st = this.st;
+    const others = st.alive().filter((q) => q.id !== p.id);
+    const had = p.stake != null && !st.players[p.stake]?.bankrupt;
+    const locked = had && p.lapUses?.dcS2pick;
+    const lots = (q) => st.propertiesOf(q.id).length;
+    const start = cur ?? (had ? p.stake : 'none');
+    const sel = await this.chooser('dcS2', {
+      title: 'Góp vốn với ai?',
+      rows: { pick: start },
+      body: `<p class="sk-bet-note">Mỗi lần người bạn chọn thu tiền thuê, ngân hàng trả bạn <b>${pctText(param(p, 'dcS2').share)}</b> số tiền ấy. Người đó không mất gì.
+          ${locked ? 'Bạn đã đổi người trong vòng này, qua ô Bắt Đầu mới đổi được nữa.' : had ? 'Đổi người thì tới lần qua ô Bắt Đầu sau mới đổi được nữa.' : ''}</p>
+        ${SkillPlay.row('pick', [['none', 'Không'], ...others.map((q) => [q.id,
+          `<span class="stake-dot" style="--pc:${q.token.css}"></span> ${q.name} · ${lots(q)} ô · ${money(q.money)}`,
+          locked && q.id !== p.stake])], start)}`,
+    });
+    if (!sel) return undefined;
+    return sel.pick === 'none' ? { on: false, val: cur } : { on: true, val: Number(sel.pick) };
+  }
+
+  /**
+   * Mua Lại, Siết Nợ, Xuyên Việt: chọn một ô thẳng trên bàn cờ (kho đang cất
+   * đi). Nút bỏ ngang của bảng chọn ô là "Không".
+   */
+  async chooseTile(p, id) {
+    const st = this.st;
+    const text = {
+      dcS1: {
+        ids: leftoverOffers(st, p).map((x) => x.id),
+        title: 'Nhặt ô nào?',
+        sub: `Các ô sáng là ô chưa có chủ mà người khác đã dừng rồi bỏ qua. Mua với ${Math.round(param(p, 'dcS1').price * 100)}% giá gốc.`,
+        confirm: 'Chọn ô này',
+      },
+      dcV: {
+        ids: forecloseOffers(st, p).map((x) => x.id),
+        title: 'Siết nợ ô nào?',
+        sub: `Trả ngân hàng số tiền thế chấp và trả chủ cũ thêm ${pctText(param(p, 'dcV').premium)} số đó. Chủ cũ không được từ chối.`,
+        confirm: 'Chọn ô này',
+      },
+      dhU: {
+        ids: BOARD.map((t) => t.id).filter((x) => x !== 30 && x !== p.pos),
+        title: 'Đi tới ô nào?',
+        sub: 'Không lắc, đi thẳng tới ô bạn chọn. Đi ngang ô Bắt Đầu vẫn nhận lương.',
+        confirm: 'Chọn ô này',
+      },
+    }[id];
+    const tile = await this.g.pickTile(text.ids, {
+      eyebrow: `Kỹ năng · ${skillById(id).name}`,
+      title: text.title, sub: text.sub, confirm: text.confirm, owned: false, cancel: 'Không',
+    }, this.g.events.localMs);
+    return text.ids.includes(tile) ? { on: true, val: tile } : { on: false, val: null };
+  }
+
+  /* ================================================================
+     Việc làm một lần, chạy lúc Chốt kho
+     ================================================================ */
+
+  async doAllIn(p, pick) {
+    spend(p, 'ddU');
+    credit(p, 'ddU');
+    this.allIn = { turnNo: this.st.turnNo, seat: p.id, pick };
+    this.g.sync();
+    await this.bc(title('ddU'), `${named(p)} tất tay cửa <b>${PARITY_NAME[pick]}</b> với cả bàn!`, { kind: 'trade', ms: 2600 });
+  }
+
+  /** Mua Lại ô đã chọn. Soát lại: ô có thể vừa có chủ trong lúc chọn. */
+  async doLeftover(p, id) {
+    const st = this.st;
+    const o = leftoverOffers(st, p).find((x) => x.id === id);
+    if (!o || st.owner.has(id) || p.money < o.price) return;
+    const pct = Math.round(param(p, 'dcS1').price * 100);
+    spend(p, 'dcS1');
+    credit(p, 'dcS1');
+    st.buyAt(p.id, id, o.price);
+    audio.sfx('buy');
+    this.g.hud.refresh();
+    this.g.scene.refresh(st);
+    this.g.sync();
+    await this.bc(title('dcS1'), `${named(p)} nhặt <b>${tileLabel(id)}</b> với giá <span class="down">${money(o.price)}</span> (${pct}% giá gốc).`, { ms: 2400 });
+    await this.g.spot([id]);
+    await this.brokerFees(p.id, id);
+  }
+
+  /** Siết Nợ ô đã chọn. */
+  async doForeclose(p, id) {
+    const st = this.st;
+    const o = forecloseOffers(st, p).find((x) => x.id === id);
+    const owner = o && st.ownerOf(id);
+    if (!o || !owner || !st.isMortgaged(id)) return;
+    spend(p, 'dcV');
+    credit(p, 'dcV');
+    await this.bc(title('dcV'),
+      `${named(p)} siết nợ <b>${tileLabel(id)}</b> của ${named(owner)}: trả ngân hàng
+       <span class="down">${money(o.bank)}</span>, trả ${named(owner)} <span class="down">${money(o.owner)}</span>.`,
+      { kind: 'trade', ms: 3000 });
+    if (!(await this.g.payBank(p.id, o.bank))) return;
+    if (o.owner > 0 && !(await this.g.payPlayer(p.id, owner.id, o.owner))) return;
+    // Chủ cũ có thể vừa phá sản trong lúc chờ — ô đã về ngân hàng thì thôi
+    if (st.owner.get(id) === owner.id) {
+      st.mortgaged.delete(id);
+      st.transfer(id, p.id);
+      audio.sfx('trade');
+      this.g.hud.refresh();
+      this.g.scene.refresh(st);
+      this.g.sync();
+      await this.g.spot([id]);
+    }
+  }
+
+  /** Chuyến Tàu Xuyên Việt tới ô đã chọn, thay cho lượt lắc. */
+  async doTeleport(p, dest) {
+    spend(p, 'dhU');
+    credit(p, 'dhU');
+    await this.bc(title('dhU'), `${named(p)} đi thẳng tới <b>${tileLabel(dest)}</b>.`, { ms: 2200 });
+    await this.g.advance(p, (dest - p.pos + 40) % 40, null);
+    if (this.st.over || p.bankrupt || p.inJail) { await this.g.endTurn(); return; }
+    this.g.setTurnActions(true);
   }
 
   /** Cược đang chờ, còn đúng lượt này của đúng người này. */
@@ -181,19 +577,25 @@ export class SkillPlay {
 
   /**
    * Mở cây kỹ năng cho người đang đi. Đóng lại thì loan tin cho cả bàn những
-   * gì đã đổi — so level từng ô trước và sau, nên tẩy điểm rồi học lại trong
-   * cùng một lần mở cũng báo đúng cả hai việc.
+   * gì đã đổi — so level và công tắc từng ô trước và sau, nên tẩy điểm rồi học
+   * lại trong cùng một lần mở cũng báo đúng cả hai việc.
    */
   async openTree(p) {
+    if (this.treeOpen) { this.g.restoreActions(); return; }
     const before = Object.fromEntries(SKILLS.map((s) => [s.id, levelOf(p, s.id)]));
-    await openSkillTree(p, {
-      color: p.token.css,
-      onChange: () => {
-        this.g.hud.refresh();
-        this.g.scene.refresh(this.st);
-        this.g.sync();
-      },
-    });
+    const wasOn = new Set(p.skills.filter((id) => has(p, id)));
+    this.treeOpen = true;
+    try {
+      await openSkillTree(p, {
+        color: p.token.css,
+        onChange: () => {
+          this.g.hud.refresh();
+          this.g.scene.refresh(this.st);
+          this.g.refreshSkillBtn();
+          this.g.sync();
+        },
+      });
+    } finally { this.treeOpen = false; }
     const wiped = SKILLS.some((s) => levelOf(p, s.id) < before[s.id]);
     const base = wiped ? {} : before;
     const gained = SKILLS
@@ -202,13 +604,121 @@ export class SkillPlay {
         const lv = levelOf(p, s.id);
         return `<b>${s.name}</b>${lv > 1 ? ` lên level ${lv}` : ''}`;
       });
+    const lines = [];
     if (wiped) {
-      await this.bc('TẨY ĐIỂM', `${named(p)} tẩy toàn bộ kỹ năng để học lại từ đầu${
-        gained.length ? `, rồi học ${gained.join(', ')}` : ''}.`, { ms: 2800 });
-    } else if (gained.length) {
-      await this.bc('HỌC KỸ NĂNG', `${named(p)}: ${gained.join(', ')}.`, { ms: 2600 });
+      lines.push(`${named(p)} tẩy toàn bộ kỹ năng để học lại từ đầu${
+        gained.length ? `, rồi học ${gained.join(', ')}` : ''}.`);
+    } else if (gained.length) lines.push(`${named(p)} học ${gained.join(', ')}.`);
+    const names = (ids) => ids.map((id) => `<b>${skillById(id).name}</b>`).join(', ');
+    const on = p.skills.filter((id) => has(p, id) && !wasOn.has(id));
+    const off = wiped ? [] : [...wasOn].filter((id) => !has(p, id));
+    if (on.length) lines.push(`Bật: ${names(on)}.`);
+    if (off.length) lines.push(`Tắt: ${names(off)}.`);
+    if (lines.length) {
+      await this.bc(wiped ? 'TẨY ĐIỂM' : 'KỸ NĂNG', lines.join('<br>'), { ms: 2600 });
     }
     this.g.restoreActions();
+  }
+
+  /* ================================================================
+     Học ngoài lượt
+     ================================================================ */
+
+  /**
+   * Nút cây kỹ năng ở hàng tiện ích: mở được bất cứ lúc nào, kể cả lúc người
+   * khác đang đi.
+   *
+   * Tới lượt mình mà đang rảnh tay thì đi đúng đường của nút trên thanh hành
+   * động — được bật / tắt, tẩy điểm. Còn lại (lượt người khác, hoặc lượt mình
+   * mà đang giữa một việc) chỉ học và lên level: ô mới học nằm tắt nên không
+   * đổi gì trên bàn, cho học giữa chừng không làm lệch nước đi đang chạy.
+   * Tắt, bật hay tẩy điểm thì đổi tác dụng ngay, nên phải chờ tới lượt.
+   */
+  async openAnyTime() {
+    const g = this.g;
+    const st = this.st;
+    const p = st.players[g.mySeat];
+    if (!p || p.bankrupt || st.over || this.treeOpen) return;
+    if (st.order && st.turn === p.id && g.isDriver() && !g.busy) {
+      g.guard(() => this.openTree(p));
+      return;
+    }
+    this.treeOpen = true;
+    try {
+      await openSkillTree(p, {
+        color: p.token.css,
+        manage: false,
+        onLearn: (id) => this.learnedOffTurn(p, id),
+        onChange: () => { g.hud.refresh(); g.refreshSkillBtn(); },
+      });
+    } finally { this.treeOpen = false; }
+  }
+
+  /**
+   * Vừa học một ô ngoài lượt, trên bản sao ván của máy mình. Máy mình đang
+   * cầm lái (trọng tài cầm thay lượt người rớt mạng) thì bản sao này là bản
+   * gốc, phát luôn; không thì gửi cho máy cầm lái học hộ trên bản gốc.
+   */
+  learnedOffTurn(p, id) {
+    const level = levelOf(p, id);
+    if (this.g.isDriver()) {
+      this.announceLearn(p, id, level);
+      this.g.syncSoon();
+      return;
+    }
+    const now = Date.now();
+    this.learnPending.push({ id, level, sent: now, t0: now });
+    this.g.netEmit('learn', { seat: p.id, id, level });
+  }
+
+  /**
+   * Máy cầm lái nhận tin học ngoài lượt. `level` là level người học vừa đạt
+   * trên máy họ: bản gốc phải đang đứng ngay dưới level ấy, không thì đây là
+   * tin gửi lại của một lần học đã xong, hoặc tin cũ — bỏ qua, kẻo học hai lần.
+   */
+  onLearnMsg({ seat, id, level }) {
+    const g = this.g;
+    if (!g.isDriver()) return;
+    const q = this.st.players[seat];
+    if (!q || q.bankrupt || levelOf(q, id) !== level - 1) return;
+    if (!learnSkill(q, id).ok) return;
+    g.hud.refresh();
+    this.announceLearn(q, id, level);
+    g.syncSoon();
+  }
+
+  /** Báo cả bàn một lần học ngoài lượt. Không chờ: lượt đang chạy cứ chạy tiếp. */
+  announceLearn(p, id, level) {
+    this.bc('HỌC KỸ NĂNG',
+      `${named(p)} học <b>${skillById(id).name}</b>${level > 1 ? ` lên level ${level}` : ''}.`, { ms: 2000 });
+  }
+
+  /**
+   * Đối chiếu ô học ngoài lượt với ảnh chụp vừa về (hoặc theo nhịp canh).
+   *
+   * Ảnh chụp đã có level ấy thì xong. Chưa có thì học lại trên bản sao cho cây
+   * khỏi nhảy lùi — ảnh ấy có thể phát trước lúc máy cầm lái nhận tin — và quá
+   * 3 giây thì gửi lại, phòng tin rơi mất hay máy cầm lái vừa đổi người. Học
+   * lại không được nữa (điểm đã tiêu vào việc khác) hoặc quá 20 giây thì bỏ.
+   */
+  reconcileLearn() {
+    if (!this.learnPending.length) return;
+    const p = this.st.players[this.g.mySeat];
+    const now = Date.now();
+    this.learnPending = this.learnPending.filter((x) => {
+      if (!p || p.bankrupt || now - x.t0 > 20000) return false;
+      const lv = levelOf(p, x.id);
+      if (lv >= x.level) return false;
+      if (lv !== x.level - 1 || !learnSkill(p, x.id).ok) return false;
+      if (now - x.sent > 3000) {
+        x.sent = now;
+        this.g.netEmit('learn', { seat: p.id, id: x.id, level: x.level });
+      }
+      return true;
+    });
+    // Máy mình vừa thành máy cầm lái: bản sao đã là bản gốc, hết gì để chờ
+    if (this.g.isDriver()) this.learnPending = [];
+    refreshSkillTree();
   }
 
   /* ================================================================
@@ -306,46 +816,6 @@ export class SkillPlay {
     await this.g.receiveFromBank(p.id, n);
   }
 
-  /**
-   * Xổ Số Kiến Thiết: chọn một tổng 2–12. Mỗi nút ghi luôn tiền thưởng của số
-   * đó để người chơi thấy số khó ra trả nhiều hơn. Esc hay hết giờ lượt thì
-   * lấy 7 — số hay ra nhất, người không kịp chọn vẫn có tiền đều.
-   */
-  async pickLotto(p) {
-    const change = p.lotto != null;
-    let pick = p.lotto ?? 7;
-    const nums = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-    const v = await openModal({
-      eyebrow: `Kỹ năng · ${skillById('ddV').name}`,
-      title: 'Chọn một tổng xí ngầu',
-      body: `<div class="sk-bet">
-        <div class="sk-bet-row sk-lotto" data-row="pick">
-          ${nums.map((n) => `<button type="button" class="btn btn-ghost${n === pick ? ' on' : ''}" data-v="${n}">
-            <b>${n}</b> · ${money(lottoPrize(p, n))}</button>`).join('')}
-        </div>
-        <p class="sk-bet-note">Mỗi lần người khác lắc ra đúng tổng này thì họ trả bạn số tiền ghi trên nút.
-          Số càng khó ra trả càng nhiều; tính trung bình số nào cũng ngang nhau. Đổi số được một lần giữa hai lần qua ô Bắt Đầu.</p>
-      </div>`,
-      buttons: [
-        { label: 'Chọn số này', value: true, cls: 'btn-gold' },
-        ...(change ? [{ label: 'Giữ số cũ', value: false, cls: 'btn-ghost' }] : []),
-      ],
-      escValue: !change,
-      onMount: (body) => {
-        body.querySelectorAll('[data-row] button').forEach((b) => b.addEventListener('click', () => {
-          body.querySelectorAll('[data-row] button').forEach((x) => x.classList.toggle('on', x === b));
-          pick = Number(b.dataset.v);
-        }));
-      },
-    });
-    if (v === false) return;
-    if (change && pick === p.lotto) return;
-    p.lotto = pick;
-    if (change) p.lapUses = { ...p.lapUses, ddVpick: 1 };
-    this.g.sync();
-    await this.bc(title('ddV'), `${named(p)} chọn số <b>${pick}</b>: ai lắc ra ${pick} trả <span class="up">${money(lottoPrize(p, pick))}</span>.`, { ms: 2200 });
-  }
-
   /** Xổ Số: người vừa lắc ra số người khác đã chọn thì trả người đó. */
   async lottoHits(p, d) {
     for (const q of this.st.alive()) {
@@ -357,60 +827,9 @@ export class SkillPlay {
     }
   }
 
-  /**
-   * Siết Nợ: chọn một ô đang thế chấp của người khác trên bàn cờ, trả ngân
-   * hàng số thế chấp và trả chủ cũ phần `premium`, rồi ô về tay mình, hết
-   * thế chấp. Chưa trả đồng nào thì bỏ ngang không mất lượt dùng.
-   */
-  async foreclose(p) {
-    const st = this.st;
-    const offers = forecloseOffers(st, p);
-    const byId = new Map(offers.map((x) => [x.id, x]));
-    const id = await this.g.pickTile(offers.map((x) => x.id), {
-      eyebrow: `Kỹ năng · ${skillById('dcV').name}`,
-      title: 'Siết nợ ô nào?',
-      sub: `Trả ngân hàng số tiền thế chấp và trả chủ cũ thêm ${pctText(param(p, 'dcV').premium)} số đó. Chủ cũ không được từ chối.`,
-      confirm: 'Siết nợ ô này',
-      owned: false,
-      cancel: 'Thôi',
-    }, this.g.events.localMs);
-    const o = byId.get(id);
-    const owner = o && st.ownerOf(id);
-    if (!o || !owner || !st.isMortgaged(id) || st.current !== p) { this.g.restoreActions(); return; }
-    spend(p, 'dcV');
-    credit(p, 'dcV');
-    await this.bc(title('dcV'),
-      `${named(p)} siết nợ <b>${tileLabel(id)}</b> của ${named(owner)}: trả ngân hàng
-       <span class="down">${money(o.bank)}</span>, trả ${named(owner)} <span class="down">${money(o.owner)}</span>.`,
-      { kind: 'trade', ms: 3000 });
-    if (!(await this.g.payBank(p.id, o.bank))) { this.g.restoreActions(); return; }
-    if (o.owner > 0 && !(await this.g.payPlayer(p.id, owner.id, o.owner))) { this.g.restoreActions(); return; }
-    // Chủ cũ có thể vừa phá sản trong lúc chờ — ô đã về ngân hàng thì thôi
-    if (st.owner.get(id) === owner.id) {
-      st.mortgaged.delete(id);
-      st.transfer(id, p.id);
-      audio.sfx('trade');
-      this.g.hud.refresh();
-      this.g.scene.refresh(st);
-      this.g.sync();
-      await this.g.spot([id]);
-    }
-    this.g.restoreActions();
-  }
-
   /* ================================================================
      Kỹ năng nhánh phụ (cấp 3 'c' / 'd')
      ================================================================ */
-
-  /** Xe Đạp: bấm trước khi lắc — tốn lượt dùng ngay lúc bấm, như Tất Tay. */
-  async rideBike(p) {
-    spend(p, 'dhS1');
-    credit(p, 'dhS1');
-    this.bike = { turnNo: this.st.turnNo, seat: p.id };
-    this.g.sync();
-    await this.bc(title('dhS1'), `${named(p)} đạp xe: lần lắc này chỉ đi theo viên nhỏ hơn.`, { ms: 1800 });
-    this.g.restoreActions();
-  }
 
   /**
    * Kết quả lắc sau Xe Đạp: tổng là viên nhỏ hơn, không tính đôi. Gọi ngay
@@ -425,104 +844,16 @@ export class SkillPlay {
     return { ...d, sum: Math.min(d.a, d.b), isDouble: false, bike: true };
   }
 
-  /** Cò Quay Lương: bật / tắt, giữ tới khi tắt. */
-  async toggleSpin(p) {
-    p.spin = !p.spin;
-    this.g.sync();
-    await this.bc(title('ddS2'), `${named(p)} ${p.spin ? 'bật' : 'tắt'} Cò Quay Lương.`, { ms: 1500 });
-    this.g.restoreActions();
-  }
-
   /**
    * Lương vừa tính xong mà Cò Quay đang bật: quay gấp đôi hoặc một nửa.
    * @returns {{pay:number, note:string}}
    */
   spinPay(p, pay) {
-    if (!has(p, 'ddS2') || !p.spin) return { pay, note: '' };
+    if (!has(p, 'ddS2')) return { pay, note: '' };
     const win = Math.random() < param(p, 'ddS2').win;
     const out = win ? pay * 2 : Math.round(pay / 2);
     credit(p, 'ddS2', Math.max(0, out - pay));
     return { pay: out, note: win ? ' · <b>Cò Quay trúng, lương ×2</b>' : ' · <b>Cò Quay trượt, lương còn một nửa</b>' };
-  }
-
-  /** Nhặt Hàng Thừa: sáng các ô người khác bỏ qua, chọn một ô để mua. */
-  async pickLeftover(p) {
-    const st = this.st;
-    const offers = new Map(leftoverOffers(st, p).map((x) => [x.id, x]));
-    const pct = Math.round(param(p, 'dcS1').price * 100);
-    const id = await this.g.pickTile([...offers.keys()], {
-      eyebrow: `Kỹ năng · ${skillById('dcS1').name}`,
-      title: 'Nhặt ô nào?',
-      sub: `Các ô sáng là ô chưa có chủ mà người khác đã dừng rồi bỏ qua. Mua với ${pct}% giá gốc.`,
-      confirm: 'Mua ô này',
-      owned: false,
-      cancel: 'Thôi',
-    }, this.g.events.localMs);
-    const o = offers.get(id);
-    if (!o || st.owner.has(id) || st.current !== p || p.money < o.price) { this.g.restoreActions(); return; }
-    spend(p, 'dcS1');
-    credit(p, 'dcS1');
-    st.buyAt(p.id, id, o.price);
-    audio.sfx('buy');
-    this.g.hud.refresh();
-    this.g.scene.refresh(st);
-    this.g.sync();
-    await this.bc(title('dcS1'), `${named(p)} nhặt <b>${tileLabel(id)}</b> với giá <span class="down">${money(o.price)}</span> (${pct}% giá gốc).`, { ms: 2400 });
-    await this.g.spot([id]);
-    await this.brokerFees(p.id, id);
-    this.g.restoreActions();
-  }
-
-  /**
-   * Góp Vốn: chọn người để hưởng một phần tiền thuê họ thu. Danh sách chip
-   * màu quân, chọn một người thì những người còn lại xám đi; phải bấm Chốt
-   * mới đổi, nên lỡ tay chọn nhầm vẫn huỷ được.
-   */
-  async pickStake(p) {
-    const st = this.st;
-    const others = st.alive().filter((q) => q.id !== p.id);
-    const change = p.stake != null && !st.players[p.stake]?.bankrupt;
-    let pick = change ? p.stake : null;
-    const lots = (q) => st.propertiesOf(q.id).length;
-    const v = await openModal({
-      eyebrow: `Kỹ năng · ${skillById('dcS2').name}`,
-      title: 'Góp vốn với ai?',
-      body: `<div class="sk-ask">
-        <p>Mỗi lần người bạn chọn thu tiền thuê, ngân hàng trả bạn <b>${pctText(param(p, 'dcS2').share)}</b> số tiền ấy. Người đó không mất gì.</p>
-        ${change ? '<p>Đổi người thì tới lần qua ô Bắt Đầu sau mới đổi được nữa.</p>' : ''}
-        <div class="stake-list${pick != null ? ' has-pick' : ''}" role="radiogroup">
-          ${others.map((q) => `<label class="stake-chip${q.id === pick ? ' on' : ''}" style="--pc:${q.token.css}">
-            <input type="radio" name="stake" value="${q.id}" ${q.id === pick ? 'checked' : ''}>
-            <span class="stake-dot"></span>
-            <span class="stake-name">${q.name}</span>
-            <span class="stake-meta">${lots(q)} ô · ${money(q.money)}</span>
-          </label>`).join('')}
-        </div>
-      </div>`,
-      buttons: [
-        { label: 'Chốt', value: true, cls: 'btn-gold' },
-        { label: 'Huỷ', value: false, cls: 'btn-ghost' },
-      ],
-      escValue: false,
-      onMount: (body) => {
-        const list = body.querySelector('.stake-list');
-        const ok = body.closest('.modal')?.querySelector('.modal-foot .btn-gold');
-        if (ok) ok.disabled = pick == null;
-        list.querySelectorAll('input').forEach((r) => r.addEventListener('change', () => {
-          pick = Number(r.value);
-          list.classList.add('has-pick');
-          list.querySelectorAll('.stake-chip').forEach((c) => c.classList.toggle('on', c.contains(r)));
-          if (ok) ok.disabled = false;
-        }));
-      },
-    });
-    if (v && pick != null && pick !== p.stake && !st.players[pick]?.bankrupt) {
-      p.stake = pick;
-      if (change) p.lapUses = { ...p.lapUses, dcS2pick: 1 };
-      this.g.sync();
-      await this.bc(title('dcS2'), `${named(p)} góp vốn với ${named(st.players[pick])}.`, { ms: 2000 });
-    }
-    this.g.restoreActions();
   }
 
   /** Góp Vốn: chủ đất vừa thu `amount` tiền thuê — ai góp vốn với họ nhận phần của mình. */
@@ -1084,81 +1415,6 @@ export class SkillPlay {
     return true;
   }
 
-  /** Cược Chẵn Lẻ: chọn cửa và số tiền trước khi lắc. */
-  async askBet(p) {
-    let pick = 'even';
-    let amount = 50;
-    const { payout, max } = param(p, 'dd2a');
-    const amounts = [50, 100, 200, 300].filter((a) => a <= max);
-    const taiXiu = has(p, 'ddX1');
-    const v = await openModal({
-      eyebrow: 'Kỹ năng · Cược Chẵn Lẻ',
-      title: 'Đoán tổng hai viên xí ngầu',
-      body: `<div class="sk-bet">
-        <div class="sk-bet-row" data-row="pick">
-          <button type="button" class="btn btn-ghost on" data-v="even">Chẵn</button>
-          <button type="button" class="btn btn-ghost" data-v="odd">Lẻ</button>
-          ${taiXiu ? `<button type="button" class="btn btn-ghost" data-v="big">Tài · 8–12</button>
-          <button type="button" class="btn btn-ghost" data-v="small">Xỉu · 2–6</button>` : ''}
-        </div>
-        <div class="sk-bet-row" data-row="amount">
-          ${amounts.map((a, i) => `<button type="button" class="btn btn-ghost${i ? '' : ' on'}" data-v="${a}"
-            ${p.money < a ? 'disabled' : ''}>${money(a)}</button>`).join('')}
-        </div>
-        <p class="sk-bet-note">Chẵn/Lẻ đúng: được thêm ${pctText(payout)} số tiền cược.${taiXiu
-          ? ` Tài/Xỉu đúng: được thêm ${pctText(param(p, 'ddX1').payout)}; ra 7 thì cả hai cửa thua.` : ''}
-          Sai: mất tiền cược vào Quỹ Công${has(p, 'ddX2') ? `, được hoàn ${pctText(param(p, 'ddX2').back)}` : ''}.</p>
-      </div>`,
-      buttons: [
-        { label: 'Đặt cược', value: true, cls: 'btn-gold' },
-        { label: 'Thôi', value: false, cls: 'btn-ghost' },
-      ],
-      onMount: (body) => {
-        body.querySelectorAll('[data-row] button').forEach((b) => b.addEventListener('click', () => {
-          const row = b.parentElement;
-          row.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
-          if (row.dataset.row === 'pick') pick = b.dataset.v; else amount = Number(b.dataset.v);
-        }));
-      },
-    });
-    if (v && p.money >= amount) {
-      p.usedTurn = { ...p.usedTurn, dd2a: this.st.turnNo };
-      this.bet = { turnNo: this.st.turnNo, seat: p.id, pick, amount };
-      this.g.sync();
-      await this.bc(title('dd2a'), `${named(p)} cược <b>${money(amount)}</b> vào cửa <b>${PARITY_NAME[pick]}</b>.`, { ms: 2200 });
-    }
-    this.g.restoreActions();
-  }
-
-  /** Tất Tay: chọn cửa trước khi lắc. */
-  async askAllIn(p) {
-    const st = this.st;
-    const { win, lose } = param(p, 'ddU');
-    const others = st.alive().filter((q) => q.id !== p.id);
-    const gainAt = (w) => others.reduce((n, q) => n + Math.floor(q.money * w), 0);
-    const gain = Array.isArray(win) ? `${money(gainAt(win[0])).replace(/\$$/, '')}–${money(gainAt(win[1]))}` : money(gainAt(win));
-    const loss = Math.floor(p.money * lose) * others.length;
-    const v = await this.ask({
-      id: 'ddU',
-      body: `<p>Đoán tổng hai viên xí ngầu lần lắc tới.</p>
-        <p>Đúng: nhận khoảng <b class="up">${gain}</b> (${pctText(win)} tiền mặt mỗi người).<br>
-        Sai: trả tổng <b class="down">${money(loss)}</b> (${Math.round(lose * 100)}% tiền mặt của bạn cho mỗi người).</p>`,
-      buttons: [
-        { label: 'Đoán Chẵn', value: 'even', cls: 'btn-gold' },
-        { label: 'Đoán Lẻ', value: 'odd', cls: 'btn-gold' },
-        { label: 'Thôi', value: null, cls: 'btn-ghost' },
-      ],
-    });
-    if (v) {
-      spend(p, 'ddU');
-      credit(p, 'ddU');
-      this.allIn = { turnNo: st.turnNo, seat: p.id, pick: v };
-      this.g.sync();
-      await this.bc(title('ddU'), `${named(p)} tất tay cửa <b>${PARITY_NAME[v]}</b> với cả bàn!`, { kind: 'trade', ms: 2600 });
-    }
-    this.g.restoreActions();
-  }
-
   /** Chốt cược và Tất Tay theo kết quả lắc cuối cùng (sau Xí Ngầu Gian). */
   async settleBets(p, d) {
     const st = this.st;
@@ -1209,28 +1465,6 @@ export class SkillPlay {
         }
       }
     }
-  }
-
-  /** Chuyến Tàu Xuyên Việt: thay cho lượt lắc, chọn ô bất kỳ rồi đi thẳng tới đó. */
-  async teleport(p) {
-    const ids = BOARD.map((t) => t.id).filter((id) => id !== 30 && id !== p.pos);
-    /* Cùng một bảng chọn ô với thẻ cưỡng chế: có nút bỏ ngang (chưa dùng kỹ
-       năng thì bỏ ngang không mất gì), và bản online có hạn chọn như thẻ. */
-    const dest = await this.g.pickTile(ids, {
-      eyebrow: 'CHUYẾN TÀU XUYÊN VIỆT',
-      title: 'Đi tới ô nào?',
-      sub: 'Không lắc, đi thẳng tới ô bạn chọn. Đi ngang ô Bắt Đầu vẫn nhận lương.',
-      confirm: 'Đi tới ô này',
-      owned: false,
-      cancel: 'Thôi, để lượt sau',
-    }, this.g.events.localMs);
-    if (dest == null || this.st.current !== p) { this.g.restoreActions(); return; }
-    spend(p, 'dhU');
-    credit(p, 'dhU');
-    await this.bc(title('dhU'), `${named(p)} đi thẳng tới <b>${tileLabel(dest)}</b>.`, { ms: 2200 });
-    await this.g.advance(p, (dest - p.pos + 40) % 40, null);
-    if (this.st.over || p.bankrupt || p.inJail) { await this.g.endTurn(); return; }
-    this.g.setTurnActions(true);
   }
 
   /* ================================================================

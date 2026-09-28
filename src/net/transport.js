@@ -96,6 +96,10 @@ class SupabaseTransport extends BaseTransport {
     this.channel.on('broadcast', { event: 'msg' }, ({ payload }) => {
       this._deliver(payload.event, payload.data);
     });
+    /* Cần supabase-js ≥ 2.117. Bản 2.109 xoá `phx_ref` ngay trên object đang
+       nằm trong sổ presence mỗi khi một khoá có thêm bản thứ hai (F5, nối lại
+       rồi khai lại): tin rời phòng về sau so theo ref không khớp nữa, người đã
+       tắt máy nằm lì trong sổ, ghế xanh mãi, bàn đứng ở lượt họ. */
     this.channel.on('presence', { event: 'sync' }, () => {
       const st = this.channel.presenceState();
       this._setPeers(
@@ -143,6 +147,13 @@ class SupabaseTransport extends BaseTransport {
        dần tới 10 giây). Gọi lúc đang nối sẵn cũng không sao — nó tự bỏ qua. */
     this.onOnline = () => { try { supabase.realtime.connect(); } catch { /* nối sau */ } };
     window.addEventListener('online', this.onOnline);
+    /* Đóng tab thì tự khai rời phòng. Không khai thì cả bàn chỉ biết mình đi
+       khi máy chủ thấy socket đóng, mà có lúc máy chủ phải chờ hết hạn tim đập
+       (cỡ một phút) mới báo — suốt quãng ấy ghế vẫn xanh, không ai gạch được,
+       lượt của mình đứng im. Gửi tin lúc trang đang đóng là cầu may, nên đây
+       chỉ làm nhanh hơn; hạn tim đập của máy chủ vẫn là lưới cuối cùng. */
+    this.onPageHide = () => { try { this.channel.untrack(); } catch { /* kênh đã đóng */ } };
+    window.addEventListener('pagehide', this.onPageHide);
   }
 
   /** Đứt — nhưng chỉ tính sau khi đã vào phòng, và chỉ khi chưa chủ động rời. */
@@ -184,6 +195,7 @@ class SupabaseTransport extends BaseTransport {
     clearInterval(this.watch);
     window.removeEventListener('offline', this.onOffline);
     window.removeEventListener('online', this.onOnline);
+    window.removeEventListener('pagehide', this.onPageHide);
     try { await this.channel.untrack(); } catch { /* kênh đã đóng */ }
     await supabase.removeChannel(this.channel);
   }

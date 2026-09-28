@@ -21,7 +21,7 @@ import { cardOf, CARD_KINDS, cardName, cardEffect, DECKS } from '../data/cards.j
 import { inventoryModal } from '../ui/inventory.js';
 import { EventRunner } from './eventRunner.js';
 import { SkillPlay } from './skillPlay.js';
-import { has, watchCash, bumpFeat } from '../core/skills.js';
+import { has, watchCash, bumpFeat, offSpent } from '../core/skills.js';
 import { snapshot, fromSnapshot, applySnapshot } from '../core/serialize.js';
 import { Hud, Broadcast } from '../ui/hud.js';
 import { QuickView } from '../ui/quickview.js';
@@ -42,6 +42,7 @@ import { pickGroupOnBoard } from '../ui/groupPicker.js';
 import { EVENT_BY_ID } from '../data/events.js';
 import { audio } from '../audio/audio.js';
 import { MemeDeck } from '../ui/memes.js';
+import { skillIcon } from '../ui/skillIcons.js';
 import { fateCase, eventCase, newSeed } from '../ui/caseOpen.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -165,6 +166,16 @@ export class Game {
       send: (id) => this.netEmit('meme', { seat: this.memeSeat(), id }),
     });
     this.watchActivity();
+    /* Nút cây kỹ năng ở hàng tiện ích — chỉ bản online mới cần: chơi một máy
+       thì người ngồi trước màn hình luôn là người đang tới lượt, nút trên thanh
+       hành động là đủ. */
+    this.skillBtn = document.getElementById('skill-btn');
+    if (this.skillBtn) {
+      this.skillBtn.innerHTML = `${skillIcon('root')}<span class="skill-btn-n" hidden></span>`;
+      this.skillBtn.addEventListener('click', () => this.skills.openAnyTime());
+    }
+    /** Máy cầm lái nhận tin học ngoài lượt lúc đang bận — phát ảnh chụp khi rảnh. */
+    this.syncOwed = false;
   }
 
   // ---------------------------------------------------------------- khởi đầu
@@ -234,6 +245,8 @@ export class Game {
     room.on.link = (st) => this.onLink(st);
     // Có người vào lại giữa ván → gửi ngay ván hiện tại cho họ dựng lại bàn cờ
     room.onNeedSync = () => this.sync();
+    if (this.skillBtn) this.skillBtn.hidden = false;
+    this.refreshSkillBtn();
 
     /* Nhịp canh người vắng mặt. Phải là hẹn giờ chứ không thể chờ tin báo: lúc
        rớt mạng chỉ có đúng một tin, mà hạn ân thì tính bằng chục giây sau đó. */
@@ -241,6 +254,7 @@ export class Game {
     this.absentTimer = setInterval(() => {
       this.checkAbsent();
       this.checkClock();
+      this.skills.reconcileLearn();
     }, 2000);
 
     this.onRoomChange();
@@ -455,6 +469,8 @@ export class Game {
     if (!this.state) return;
     if (snap.rev != null && this.state.rev != null && snap.rev <= this.state.rev) return;
     applySnapshot(this.state, snap);
+    this.skills.reconcileLearn();
+    this.refreshSkillBtn();
     this.hud.refresh();
     this.scene.refresh(this.state);
     this.scene.placeTokens();
@@ -470,6 +486,8 @@ export class Game {
        lúc ấy. Xếp sau một cú lăn xí ngầu ba giây thì bong bóng nổi lên lạc hẳn
        khỏi chuyện đang xảy ra trên bàn. */
     if (name === 'meme') { this.memes.receive(data.seat, data.id); return; }
+    // Học kỹ năng ngoài lượt: chỉ máy cầm lái xử lý, không phải hoạt cảnh
+    if (name === 'learn') { this.skills.onLearnMsg(data); return; }
     const sc = this.scene;
     if (name === 'dice') {
       await sc.rollDiceAnim(data.a, data.b);
@@ -965,16 +983,13 @@ export class Game {
     this.setTurnActions();
   }
 
-  /** Thanh nút của người đang ngồi xem — nói rõ đang chờ ai. */
+  /**
+   * Người đang ngồi xem không có thanh nút. Bảng "Tới lượt …" giữa bàn cờ che
+   * mất dòng thông báo của người đang đi, mà tới lượt ai thì thẻ lớn bên trái
+   * và quân đang sáng trên bàn đã nói rồi.
+   */
   showWaiting() {
-    const p = this.state.current;
-    const off = !this.net.isSeatLive(this.state.turn);
-    this.hud.setActions([{
-      label: `Tới lượt ${p.name}`,
-      cls: 'btn-ghost',
-      disabled: true,
-      hint: off ? 'người này đang mất kết nối' : 'chờ họ đi xong',
-    }]);
+    this.hud.clearActions();
   }
 
   /** Thanh nút cho người đang tới lượt. */
@@ -982,6 +997,7 @@ export class Game {
     const st = this.state;
     const p = st.current;
     this.lastRolled = rolled;
+    this.refreshSkillBtn();
 
     /* Thanh nút bày ra lại nghĩa là người này vừa làm xong một việc — cho họ
        trọn hạn mới. Nhờ đặt ở đây mà lắc xong, đóng hộp thoại xong, đổi lượt…
@@ -1057,7 +1073,32 @@ export class Game {
     if (this.net && !this.state.over && this.state.turn === this.net.mySeat) {
       this.armClock(this.state.turn, this.busyMs, 'đang thao tác');
     }
-    try { await fn(); } finally { this.busy = false; }
+    try { await fn(); } finally {
+      this.busy = false;
+      /* Tin học ngoài lượt tới giữa lúc bận thì chưa phát, kẻo ảnh chụp chen
+         giữa một hoạt cảnh. Hết bận mà lượt đã trao đi thì ảnh chụp lúc trao
+         lượt đã mang theo rồi — phát thêm lúc không cầm lái là hai máy cùng
+         phát một số `rev`. */
+      if (this.syncOwed && this.isDriver()) this.sync();
+      this.syncOwed = false;
+    }
+  }
+
+  /** Phát ảnh chụp ngay nếu đang rảnh, không thì hẹn tới lúc hết bận (`guard`). */
+  syncSoon() {
+    if (!this.net) return;
+    if (this.busy) this.syncOwed = true;
+    else this.sync();
+  }
+
+  /** Số trên nút cây kỹ năng ở hàng tiện ích: điểm chưa tiêu của mình. */
+  refreshSkillBtn() {
+    const n = this.state?.players[this.mySeat]?.skillPoints ?? 0;
+    const tag = this.skillBtn?.querySelector('.skill-btn-n');
+    if (!tag) return;
+    tag.hidden = !n;
+    tag.textContent = n;
+    this.skillBtn.classList.toggle('has-pts', n > 0);
   }
 
   /**
@@ -1078,6 +1119,7 @@ export class Game {
     /* Lượt vừa qua không có đồng nào đổi chủ — đúng triệu chứng bàn bí mà bộ
        thẻ Thời Cuộc sinh ra để phá, nên nó đẩy thanh áp lực nhanh hơn cả. */
     if (st.dryTurn) addPressure(st, PRESSURE.dryTurn);
+    offSpent(st.current);
 
     if (eventDue(st)) {
       await this.events.run();
@@ -1096,6 +1138,9 @@ export class Game {
   async takeRoll() {
     const st = this.state;
     const p = st.current;
+    // Cược, Xe Đạp đang bật thì tự đặt trước khi lắc
+    await this.skills.beforeRoll(p);
+    if (st.over || p.bankrupt) { await this.endTurn(); return; }
     // Xe Đạp: đi theo viên nhỏ hơn — nắn kết quả trước mọi hộp hỏi sau khi lắc
     const first = this.skills.shape(p, rollDice());
     this.netEmit('dice', first);

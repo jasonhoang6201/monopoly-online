@@ -51,7 +51,7 @@ console.log('--- bank:', await page.locator('#bank-houses').textContent());
 async function drain(maxMs = 20000) {
   const t0 = Date.now();
   const order = ['Mua ', 'Nhận tiền', 'Đành chịu', 'Tiếp tục', 'Chấp nhận',
-                 'Xong', 'Đóng', 'Bỏ qua', 'Để sau', 'Chơi tiếp', 'Thôi', 'Huỷ'];
+                 'Xong', 'Đóng', 'Bỏ qua', 'Để sau', 'Chơi tiếp', 'Thôi', 'Không cược', 'Chưa đạp', 'Huỷ'];
   while (Date.now() - t0 < maxMs) {
     // Bảng chọn ô trên bàn cờ không có nền tối; không bấm thì ván đứng ở đó
     if (await picking(page)) { await pickOnBoard(page).catch(() => {}); continue; }

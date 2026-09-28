@@ -187,7 +187,10 @@ await B.close();
 await A.bringToFront();
 ok(await until(async () => (await A.evaluate(() => window.__monopoly.controller.state.debt)) !== null, 20000),
   'máy chủ đất nhận được khoản nợ đang treo');
-const evicted = await until(async () => await bankruptOf(A, sb), 60000);
+/* Tới 120 giây: tab đóng thì máy khai rời phòng ngay (`pagehide`), nhưng tin
+   ấy là cầu may; lưới cuối là máy chủ Supabase hết hạn tim đập của socket,
+   có lúc gần một phút mới báo. */
+const evicted = await until(async () => await bankruptOf(A, sb), 120000);
 if (!evicted) {
   // Không tịch thu được thì in ra vì sao — mấy điều kiện của `checkAbsent`
   console.log('  ↳ trạng thái máy A: ' + JSON.stringify(await A.evaluate((seat) => {
@@ -195,8 +198,28 @@ if (!evicted) {
     return {
       isArbiter: c.net.isArbiter, awayFor: c.net.awayFor(seat), grace: c.awayGraceMs,
       busy: c.busy, linkLost: c.net.linkLost, turn: c.state.turn, debt: c.state.debt,
+      presence: c.net.tp.channel?.presenceState?.()[c.net.seats[seat].id] ?? null,
     };
   }, sb)));
+  // Chẩn đoán: một trình duyệt mới vào đúng kênh ấy, máy chủ nói ai đang có mặt?
+  const code = await A.evaluate(() => window.__monopoly.controller.net.code);
+  const ctx2 = await browser.newContext();
+  const C = await ctx2.newPage();
+  await C.goto(BASE, { waitUntil: 'domcontentloaded' });
+  console.log('  ↳ máy mới nhìn presence: ' + JSON.stringify(await C.evaluate(async (code) => {
+    const { supabase } = await import('/src/net/supabase.js');
+    const ch = supabase.channel(`monopoly:${code}`, { config: { presence: { key: 'observer' } } });
+    return new Promise((res) => {
+      ch.on('presence', { event: 'sync' }, () => setTimeout(() => res(ch.presenceState()), 1500));
+      ch.subscribe(async (st) => { if (st === 'SUBSCRIBED') await ch.track({ id: 'observer' }); });
+      setTimeout(() => res('timeout'), 10000);
+    });
+  }, code)));
+  const aState = await A.evaluate((seat) => {
+    const c = window.__monopoly.controller;
+    return { status: c.net.tp.status, chan: c.net.tp.channel.state, live: [...c.net.livePeers] };
+  }, sb);
+  console.log('  ↳ máy A: ' + JSON.stringify(aState));
 }
 ok(evicted, 'trọng tài tịch thu người mất kết nối');
 // Tiền vào sau chuỗi hiệu ứng tịch thu, nên chờ chứ đừng đọc ngay
