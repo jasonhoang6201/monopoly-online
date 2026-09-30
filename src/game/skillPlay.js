@@ -85,7 +85,7 @@ export class SkillPlay {
       cls: n && (offs || cells.some((c) => c.act)) ? 'btn-gold' : 'btn-ghost',
       disabled: !cells.length,
       icon: skillIcon('chip', 'ai'),
-      hint: !cells.length ? 'chưa học kỹ năng kích hoạt'
+      hint: !cells.length ? 'không có kỹ năng cần bật'
         : `${on} bật${offs ? ` · ${offs} tắt` : ''}`,
       title: 'Mở kho kỹ năng: bật / tắt, chọn cửa cược, chọn ô',
       onClick: () => this.g.guard(() => this.openKit(p, rolled)),
@@ -97,7 +97,7 @@ export class SkillPlay {
    * Các ô của kho kỹ năng. Ba kiểu ô:
    *
    * - bật / tắt (`switch`, không có `choose`): bấm là đổi màu trong bản nháp.
-   *   Gồm kỹ năng tự hỏi đúng lúc (Tàu Tốc Hành, Quay Đầu…), Cò Quay, Xe Đạp.
+   *   Gồm Cò Quay, Xe Đạp.
    * - có bảng chọn (`choose`): bấm mở bảng, trong bảng có lựa chọn "Không"
    *   là tắt. Chọn xong về lại kho. Cược, Xổ Số, Góp Vốn giữ lựa chọn và tự
    *   làm lại mỗi lượt; Tất Tay, Mua Lại, Siết Nợ, Xuyên Việt (`once`) làm
@@ -180,12 +180,8 @@ export class SkillPlay {
     cell('cnS2', this.canSit(p)
       ? { act: () => this.g.sitInJail(), on: () => `Bấm để ngồi yên, còn ${this.sitsLeft(p)} lượt` }
       : { ok: false, why: !jail ? 'Chỉ dùng khi đang ở tù' : 'Đã ngồi yên đủ số lượt lần này' });
-
-    // Tự hỏi đúng lúc: chỉ bật / tắt
-    toggle('dh2a', () => 'Tự hỏi khi bạn dừng ở bến xe / nhà ga');
-    toggle('dh3', () => `Tự hỏi sau khi lắc, ${left('dh3')}`);
-    toggle('dd3', () => `Tự hỏi sau khi lắc, ${left('dd3')}`);
-    toggle('dc3', () => 'Tự hỏi khi bạn dừng trên đất chưa xây của người khác');
+    // Tàu Tốc Hành, Quay Đầu, Xí Ngầu Gian, Thâu Tóm không nằm trong kho: không
+    // có công tắc, tới đúng lúc thì game tự hỏi (xem `switchable`)
     return out;
   }
 
@@ -588,6 +584,7 @@ export class SkillPlay {
     try {
       await openSkillTree(p, {
         color: p.token.css,
+        state: () => this.st,
         onChange: () => {
           this.g.hud.refresh();
           this.g.scene.refresh(this.st);
@@ -647,6 +644,7 @@ export class SkillPlay {
     try {
       await openSkillTree(p, {
         color: p.token.css,
+        state: () => this.st,
         manage: false,
         onLearn: (id) => this.learnedOffTurn(p, id),
         onChange: () => { g.hud.refresh(); g.refreshSkillBtn(); },
@@ -681,7 +679,7 @@ export class SkillPlay {
     if (!g.isDriver()) return;
     const q = this.st.players[seat];
     if (!q || q.bankrupt || levelOf(q, id) !== level - 1) return;
-    if (!learnSkill(q, id).ok) return;
+    if (!learnSkill(q, id, this.st).ok) return;
     g.hud.refresh();
     this.announceLearn(q, id, level);
     g.syncSoon();
@@ -709,7 +707,7 @@ export class SkillPlay {
       if (!p || p.bankrupt || now - x.t0 > 20000) return false;
       const lv = levelOf(p, x.id);
       if (lv >= x.level) return false;
-      if (lv !== x.level - 1 || !learnSkill(p, x.id).ok) return false;
+      if (lv !== x.level - 1 || !learnSkill(p, x.id, this.st).ok) return false;
       if (now - x.sent > 3000) {
         x.sent = now;
         this.g.netEmit('learn', { seat: p.id, id: x.id, level: x.level });

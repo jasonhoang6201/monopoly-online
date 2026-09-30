@@ -113,6 +113,14 @@ const BAND_WASH = 0.34;
 const GLOW_BY_HOUSES = [0, 0.42, 0.54, 0.68, 0.82, 1.00];
 
 /**
+ * Tâm nhãn "THẾ CHẤP" tính từ tâm ô, theo tỉ lệ chiều cao ô: đè lên dòng giá
+ * mua ở chân ô (ô đất 0.885h, bến/ga và công ty 0.9h tính từ đầu ô). Ô đã có
+ * chủ thì giá mua không ai cần đọc, và mọi loại ô cùng một chỗ thì liếc qua
+ * hàng ô là thấy ngay ô nào đang thế chấp.
+ */
+const MORT_TAG_Y = 0.39;
+
+/**
  * Sắc chỉ dấu chủ đất: màu quân cờ nắn lại cho chịu được lớp phủ mờ.
  * Nước màu loãng bao giờ cũng bị nền giấy kéo về phía nhợt, nên phải bơm
  * độ tươi lên và ghìm độ sáng xuống thì phủ xong mới còn ra màu người chơi —
@@ -1083,13 +1091,11 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   /**
-   * Nhãn đỏ "THẾ CHẤP" nằm ngang thân ô, xoay theo ô. Ô đất có dải tên ở đầu
-   * ô nên nhãn đặt về phía chân ô (đè lên giá mua — đất đã có chủ thì giá mua
-   * không còn ai cần đọc); ô nhà ga / tiện ích có dải tên ở nửa dưới nên nhãn
-   * lên nửa trên.
+   * Nhãn đỏ "THẾ CHẤP" nằm ngang thân ô, xoay theo ô, ở chân ô với mọi loại
+   * ô (xem `MORT_TAG_Y`).
    */
   addMortgageTag(t, sc, a, sw, sh) {
-    const y = t.type === 'property' ? sh * 0.385 : -sh * 0.22;
+    const y = sh * MORT_TAG_Y;
     const txt = this.add.text(0, y, 'THẾ CHẤP', {
       fontFamily: '"Be Vietnam Pro", ui-sans-serif, sans-serif',
       fontStyle: 'bold',
@@ -1220,7 +1226,7 @@ export default class BoardScene extends Phaser.Scene {
     const env = {
       hh,
       headerBottom: nameBand(t.type).bottom,
-      tagY: (t.type === 'property' ? 0.385 : -0.22) * hh * 2,
+      tagY: MORT_TAG_Y * hh * 2,
       house: opts.house ?? false,
       hotel: opts.to === 5,
       mortgaged,

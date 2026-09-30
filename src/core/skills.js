@@ -7,7 +7,7 @@
  */
 import {
   SKILLS, BRANCHES, TIER_COST, LEVEL_COST, MAX_LEVEL, RESPEC_FEE, ULT_MIX, ULT_SPECIAL,
-  FEATS, BROKE_LINE, WAYS,
+  FEATS, BROKE_LINE, WAYS, GROW_BY,
 } from '../data/skills.js';
 import { BOARD, money } from '../data/board.js';
 
@@ -77,22 +77,46 @@ export function credit(p, id, gain = 0) {
 }
 
 /**
- * Còn thiếu gì để lên level `lv` (2 hoặc 3). `null` là đủ rồi.
+ * Số đo tài sản đang có của người chơi, cho điều kiện lên level theo tài sản
+ * (`GROW_BY` có `estate`). Cần bàn cờ nên phải có `st`; thiếu `st` thì coi như
+ * chưa có gì — điều kiện chưa đạt chứ không lỡ tay cho lên level.
+ */
+function estateValue(st, p, by) {
+  if (!st || !p) return 0;
+  if (by === 'lands') return st.propertiesOf(p.id).length;
+  if (by === 'worth') return st.netWorth(p.id);
+  if (by === 'colors') return colorsOwned(st, p.id);
+  return 0;
+}
+
+/** Số đo hiện tại của điều kiện lên level của ô `s`. */
+export function growHave(p, s, st) {
+  return GROW_BY[s.grow.by].estate ? estateValue(st, p, s.grow.by) : usage(p, s.id)[s.grow.by];
+}
+
+/**
+ * Còn thiếu gì để lên level `lv` (2 hoặc 3). `null` là đủ rồi. `st` chỉ cần
+ * cho điều kiện theo tài sản (đất, tổng tài sản, số màu).
  * @returns {?{by:string, need:number, have:number}}
  */
-export function growNeed(p, s, lv) {
+export function growNeed(p, s, lv, st) {
   if (!s.grow || lv < 2) return null;
   const need = s.grow.at[lv - 2];
-  const have = usage(p, s.id)[s.grow.by];
+  const have = growHave(p, s, st);
   return have >= need ? null : { by: s.grow.by, need, have };
 }
 
 /** Chữ cho điều kiện lên level `lv`: "Kiếm được 150$ từ kỹ năng này". */
 export function growText(s, lv) {
   const need = s.grow.at[lv - 2];
-  return s.grow.by === 'gain'
-    ? `Kiếm được ${money(need)} từ kỹ năng này`
-    : (s.grow.say ?? 'Kỹ năng chạy {n} lần').replace('{n}', need);
+  const by = GROW_BY[s.grow.by];
+  return (s.grow.say ?? by.say).replace('{n}', by.money ? money(need) : need);
+}
+
+/** Chữ tiến độ của điều kiện lên level: "120/150$", "3/5 ô". */
+export function growProgress(p, s, lv, st) {
+  const by = GROW_BY[s.grow.by];
+  return progressText(growHave(p, s, st), s.grow.at[lv - 2], !!by.money, by.unit);
 }
 
 /** Chữ tiến độ của một điều kiện: "120/150$", "3/5 lần". */
@@ -131,10 +155,10 @@ export function skillState(player, id) {
 }
 
 /** Ô đã học, chưa tới level tối đa, đã đạt điều kiện và đang đủ điểm để lên. */
-export const canLevelUp = (player, id) => {
+export const canLevelUp = (player, id, st) => {
   const lv = levelOf(player, id);
   return lv > 0 && lv < MAX_LEVEL && player.skillPoints >= LEVEL_COST
-    && !growNeed(player, skillById(id), lv + 1);
+    && !growNeed(player, skillById(id), lv + 1, st);
 };
 
 /**
@@ -163,7 +187,7 @@ export function rivalUlt(player, s) {
  * @returns {{ok:boolean, reason?:string, cost:number, level:number}}
  *   `level` là level sẽ đạt được nếu bấm.
  */
-export function canLearn(player, id) {
+export function canLearn(player, id, st) {
   const s = skillById(id);
   if (!s) return { ok: false, reason: 'Không có kỹ năng này.', cost: 0, level: 0 };
   const lv = levelOf(player, id);
@@ -181,14 +205,16 @@ export function canLearn(player, id) {
   if (!lv && !featMet(player, s)) {
     return { ok: false, reason: `Chưa mở khoá: ${featText(player, s)}.`, cost, level };
   }
-  const need = lv ? growNeed(player, s, level) : null;
+  const need = lv ? growNeed(player, s, level, st) : null;
   if (need) {
     const left = need.need - need.have;
     return {
       ok: false,
       reason: need.by === 'gain'
         ? `Cần kiếm thêm ${money(left)} từ kỹ năng này mới lên được level ${level}.`
-        : `Kỹ năng cần chạy thêm ${left} lần mới lên được level ${level}.`,
+        : need.by === 'uses'
+          ? `Kỹ năng cần chạy thêm ${left} lần mới lên được level ${level}.`
+          : `Lên level ${level} cần: ${growText(s, level)} (đang ${growProgress(player, s, level, st)}).`,
       cost, level,
     };
   }
@@ -199,8 +225,8 @@ export function canLearn(player, id) {
 }
 
 /** Học ô mới hoặc lên một level: trừ đúng giá bước đó. Không được thì không đổi gì. */
-export function learnSkill(player, id) {
-  const check = canLearn(player, id);
+export function learnSkill(player, id, st) {
+  const check = canLearn(player, id, st);
   if (!check.ok) return check;
   player.skillPoints -= check.cost;
   if (check.level === 1) {
@@ -310,10 +336,16 @@ export const has = (p, id) => !!p && !p.bankrupt && p.skills.includes(id) && !is
  * bật: ảnh chụp của ván trước khi có công tắc không mang trường này, dựng lại
  * thì mọi kỹ năng đã học vẫn bật như lúc ấy.
  */
-export const isOff = (p, id) => !!p?.skillOff?.includes(id);
+export const isOff = (p, id) => !!p?.skillOff?.includes(id) && switchable(skillById(id));
 
-/** Chỉ kỹ năng bấm để dùng có công tắc; kỹ năng tự động học là có tác dụng. */
-export const switchable = (s) => s?.kind === 'active';
+/**
+ * Chỉ kỹ năng bấm để dùng có công tắc; kỹ năng tự động học là có tác dụng.
+ * Kỹ năng tự hỏi đúng lúc (`auto`: Tàu Tốc Hành, Quay Đầu, Xí Ngầu Gian, Thâu
+ * Tóm) cũng không có công tắc: hộp hỏi đã có nút bỏ qua, bắt bật trước chỉ
+ * thêm một bước mà người chơi hay quên. `isOff` cũng hỏi hàm này, nên ảnh chụp
+ * cũ còn ghi các ô ấy trong `skillOff` dựng lại vẫn chạy.
+ */
+export const switchable = (s) => s?.kind === 'active' && !s.auto;
 
 /**
  * Bật / tắt một kỹ năng đã học. Chỉ gọi trong lượt của chính người đó (xem

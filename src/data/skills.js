@@ -43,6 +43,25 @@ export const TIER_COST = { 1: 1, 2: 1, 3: 2, 4: 3 };
 export const LEVEL_COST = 1;
 export const MAX_LEVEL = 3;
 
+/**
+ * Các kiểu điều kiện lên level (`grow.by` của từng ô):
+ *   gain   — tổng tiền kỹ năng đã mang về từ lúc học (nhận thêm, hoặc được
+ *            bớt khi phải trả), ghi ở `Player.skillUse` (xem `credit`)
+ *   uses   — số lần kỹ năng đã chạy từ lúc học, cũng ở `Player.skillUse`
+ *   lands  — số ô (đất, bến/ga, công ty) **đang** có, kể cả ô thế chấp
+ *   worth  — tổng tài sản đang có, tính như bảng xếp hạng (`netWorth`)
+ *   colors — số màu đất khác nhau đang có ít nhất 1 ô
+ * Ba kiểu `estate` đo lúc bấm lên level: bán đất rồi thì phải gom lại, nhưng
+ * level đã lên thì giữ.
+ */
+export const GROW_BY = {
+  gain:   { money: true, say: 'Kiếm được {n} từ kỹ năng này' },
+  uses:   { unit: 'lần', say: 'Kỹ năng chạy {n} lần' },
+  lands:  { unit: 'ô', estate: true, say: 'Sở hữu {n} ô đất, bến/ga hoặc công ty' },
+  worth:  { money: true, estate: true, say: 'Tổng tài sản đạt {n}' },
+  colors: { unit: 'màu', estate: true, say: 'Sở hữu đất ở {n} màu khác nhau' },
+};
+
 export const KINDS = {
   passive: { name: 'Tự động' },
   active:  { name: 'Bấm để dùng' },
@@ -159,13 +178,12 @@ export const BRANCHES = [
  * `lvText`: một dòng tóm tắt cho mỗi level, điền số của level đó. Là mảng khi
  * level cao mở thêm hành vi mới chứ không chỉ đổi số.
  *
- * `grow`: điều kiện lên level 2 và 3, ngoài 1 điểm. `by: 'gain'` — tổng số
- * tiền kỹ năng này đã mang về (nhận thêm, hoặc được bớt khi phải trả);
- * `by: 'uses'` — số lần kỹ năng đã chạy, `say` là câu điều kiện hiện cho
- * người chơi ({n} là ngưỡng). `at` là ngưỡng cộng dồn từ lúc học
- * tới level 2 và level 3. Kỹ năng đổi đường đi hay bấm để dùng tính theo số
- * lần vì lợi ích của chúng không đo ra tiền được; còn lại tính theo tiền.
- * Tiến độ ghi ở `Player.skillUse` (xem `credit` trong core/skills.js).
+ * `grow`: điều kiện lên level 2 và 3, ngoài 1 điểm. `by` là một khoá của
+ * `GROW_BY`, `at` là ngưỡng tới level 2 và level 3, `say` (tuỳ chọn) thay câu
+ * điều kiện mặc định ({n} là ngưỡng). Kỹ năng đổi đường đi hay bấm để dùng
+ * tính theo số lần vì lợi ích của chúng không đo ra tiền được. Kỹ năng giảm
+ * giá hay gắn với đất đai tính theo tài sản đang có: tiền chúng mang về phụ
+ * thuộc vào việc người khác làm gì, còn gom đất là việc người chơi tự lo được.
  *
  * `feat`: kỹ năng thành tựu — ngoài `requires` còn phải làm đủ một việc
  * trong ván mới mở khoá (`key` là bộ đếm trong `FEATS`, `n` là ngưỡng). Đạt
@@ -212,7 +230,7 @@ export const SKILLS = [
     requires: ['cn1'],
     name: 'Công Đoàn',
     levels: [{ pay: [0.4, 0.7] }, { pay: 0.5 }, { pay: 0.3 }],
-    grow: { by: 'gain', at: [120, 300] },
+    grow: { by: 'worth', at: [2000, 3000] },
     short: 'Thuế và tiền phạt giảm mạnh.',
     effect: 'Ô Thuế Thu Nhập, Thuế Xa Xỉ và mọi khoản phạt từ thẻ Cơ Hội / Khí Vận chỉ thu {%pay} số tiền.',
     lvText: 'Chỉ trả {%pay} thuế và phạt',
@@ -653,7 +671,7 @@ export const SKILLS = [
     requires: ['dc3'],
     name: 'Cơn Sốt Đất',
     levels: [{ mult: 2.5 }, { mult: 2.75 }, { mult: 3 }],
-    grow: { by: 'gain', at: [300, 800] },
+    grow: { by: 'worth', at: [3000, 4500] },
     short: 'Đất chưa xây, bến/ga, công ty của bạn thu thuê gấp nhiều lần.',
     effect: 'Mọi ô chưa có nhà của bạn (đất trống, bến/ga, công ty) thu tiền thuê ×{mult}. Ô đã xây nhà thì tính giá thuê nhà như thường.',
     lvText: 'Thuê ô chưa xây ×{mult}',
@@ -697,7 +715,7 @@ export const SKILLS = [
     feat: { key: 'buys', n: 4 },
     name: 'Khách Sộp',
     levels: [{ back: [0.1, 0.2] }, { back: 0.18 }, { back: 0.25 }],
-    grow: { by: 'gain', at: [60, 150] },
+    grow: { by: 'lands', at: [6, 9] },
     short: 'Mua đất của ngân hàng được hoàn lại một phần.',
     effect: 'Mỗi lần bạn dừng chân rồi mua ô chưa có chủ (đất, bến/ga, công ty), ngân hàng hoàn lại {%back} giá mua. Mua qua đấu giá không tính.',
     lvText: 'Hoàn {%back} giá mua',
@@ -739,7 +757,7 @@ export const SKILLS = [
     id: 'ac1', branch: 'ancu', tier: 1, kind: 'passive', span: 'forever', icon: 'hearth',
     name: 'Mái Ấm',
     levels: [{ cut: 0.15 }, { cut: 0.2 }, { cut: 0.3 }],
-    grow: { by: 'gain', at: [100, 300] },
+    grow: { by: 'lands', at: [5, 8] },
     short: 'Xây nhà rẻ hơn.',
     effect: 'Giá xây mỗi căn nhà và khách sạn giảm {%cut}.',
     lvText: 'Xây rẻ hơn {%cut}',
@@ -759,7 +777,7 @@ export const SKILLS = [
     requires: ['ac1'],
     name: 'Đất Nhiều Màu',
     levels: [{ perColor: 0.04 }, { perColor: 0.05 }, { perColor: 0.07 }],
-    grow: { by: 'gain', at: [150, 400] },
+    grow: { by: 'colors', at: [4, 6] },
     short: 'Có đất ở càng nhiều màu, mọi tiền thuê càng cao.',
     effect: 'Mỗi màu đất khác nhau bạn đang có ít nhất 1 ô: mọi tiền thuê của bạn +{%perColor}.',
     lvText: '+{%perColor} mỗi màu đất',
@@ -793,7 +811,7 @@ export const SKILLS = [
        bộ đủ để xây. Cộng thẳng chứ không nhân: đất rẻ thuê 2–20$ thì nhân mấy
        cũng không đáng kể. */
     levels: [{ per: 9 }, { per: 12 }, { per: 15 }],
-    grow: { by: 'gain', at: [300, 800] },
+    grow: { by: 'colors', at: [5, 7] },
     short: 'Mỗi ô của bạn thu thêm tiền theo số màu đất bạn có.',
     effect: 'Mọi ô của bạn, kể cả đất trống, bến/ga và công ty, thu thêm {$per} × số màu đất khác nhau bạn đang có ít nhất 1 ô. Cộng thẳng vào tiền thuê.',
     lvText: '+{$per} × số màu đất',

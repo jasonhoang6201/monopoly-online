@@ -129,6 +129,34 @@ check(lv.spent === 3 && lv.pts === 3, 'mỗi level tốn 1 điểm, tổng 3 đi
 check(lv.refund === 3 && lv.after === 6 && lv.money === 850 && lv.lvAfter === 0, 'tẩy điểm hoàn đủ cả điểm level, phí 50$/điểm');
 check(lv.line === '35% khả năng nhặt 10–30$', `chữ level 1 hiện khoảng "10–30$" (${lv.line})`);
 
+// Điều kiện lên level theo tài sản đang có: Mái Ấm đếm số ô, Đất Nhiều Màu đếm màu, Công Đoàn tính tổng tài sản
+await reset();
+const est = await run(`
+  const p = s.current; p.skills = ['ac1','ac2b','cn1','cn2b']; p.skillPoints = 9;
+  const own = (ids) => { s.owner.clear(); for (const id of ids) s.owner.set(id, p.id); };
+  own([1, 3, 5, 6]);                         // 4 ô: 2 màu (nâu, xanh nhạt) + 1 bến
+  const noSt = K.canLearn(p, 'ac1');         // thiếu bàn cờ: coi như chưa đạt
+  const four = K.canLearn(p, 'ac1', s);
+  const colors3 = K.canLearn(p, 'ac2b', s);
+  own([1, 3, 5, 6, 8]);                      // 5 ô
+  const five = K.learnSkill(p, 'ac1', s);
+  own([1, 6, 11, 16, 21]);                   // 5 ô, 4 màu
+  const colors4 = K.learnSkill(p, 'ac2b', s);
+  p.money = 1000;                           // 1000$ + 700$ đất = 1700$
+  const poor = K.canLearn(p, 'cn2b', s);
+  p.money = 3000;
+  const rich = K.learnSkill(p, 'cn2b', s);
+  return { noSt: noSt.ok, four: four.ok, why: four.reason, colors3: colors3.ok, five: five.level, colors4: colors4.level,
+    poor: poor.reason, rich: rich.level,
+    tip: K.growText(K.skillById('ac1'), 2) + ' · ' + K.growProgress(p, K.skillById('ac1'), 3, s) };
+`);
+check(est.noSt === false && est.four === false && est.why.includes('4/5 ô'), `Mái Ấm cần 5 ô mới lên level 2 (${est.why})`);
+check(est.five === 2, 'đủ 5 ô: Mái Ấm lên level 2');
+check(est.colors3 === false && est.colors4 === 2, 'Đất Nhiều Màu cần đất ở 4 màu');
+check(est.poor.includes('2.000$') || est.poor.includes('2000$'), `Công Đoàn cần tổng tài sản 2000$ (${est.poor})`);
+check(est.rich === 2, 'tổng tài sản đủ: Công Đoàn lên level 2');
+check(est.tip.startsWith('Sở hữu 5 ô') && est.tip.includes('5/8 ô'), `chữ điều kiện và tiến độ (${est.tip})`);
+
 await reset();
 const rent = await run(`
   const me = s.turn, other = (s.turn + 1) % 3;
@@ -278,10 +306,13 @@ await page.keyboard.press('Escape');
 await page.waitForTimeout(3200);
 // Kho kỹ năng: ô có màu là bật, xám là tắt; mọi thao tác là bản nháp, Chốt mới áp dụng
 await reset();
-await run(`const p = s.current; p.skills = ['dd1','dd2a','dd2b','dd3','ddS2']; p.skillOff = ['dd2a','dd3','ddS2']; c.restoreActions();`);
+// dd3 trong skillOff: ảnh chụp cũ, lúc kỹ năng tự hỏi còn công tắc
+await run(`const p = s.current; p.skills = ['dd1','dd2a','dd2b','dd3','ddS2','dh1','dh2b','dhS1']; p.skillOff = ['dd2a','dd3','ddS2','dhS1']; c.restoreActions();`);
 await openKit();
 check(await page.locator('.kit-sw').count() === 0, 'kho kỹ năng không còn công tắc');
-check(await isGray('Cược Chẵn Lẻ') && await isGray('Xí Ngầu Gian'), 'kỹ năng đang tắt: ô xám');
+check(await item('Xí Ngầu Gian').count() === 0 && await run(`return K.has(s.current, 'dd3')`),
+  'kỹ năng tự hỏi (Xí Ngầu Gian) không nằm trong kho, luôn chạy dù ảnh chụp cũ ghi tắt');
+check(await isGray('Cược Chẵn Lẻ') && await isGray('Xe Đạp'), 'kỹ năng đang tắt: ô xám');
 // Cược: bấm ô mở bảng chọn có "Không"; chọn xong về lại kho
 await item('Cược Chẵn Lẻ').click();
 await page.locator('.sk-bet').waitFor({ timeout: 3000 });
@@ -292,29 +323,29 @@ await topBtn('Xong').click();
 await page.waitForTimeout(400);
 check(await page.locator('.sk-bet').count() === 0 && await item('Cược Chẵn Lẻ').isVisible(), 'chọn xong thì về lại kho');
 check(!(await isGray('Cược Chẵn Lẻ')) && (await item('Cược Chẵn Lẻ').textContent()).includes('Lẻ 100$'), 'ô Cược có màu, ghi cửa và tiền vừa chọn');
-await item('Xí Ngầu Gian').click();
-check(!(await isGray('Xí Ngầu Gian')), 'bấm ô bật / tắt: ô có màu ngay');
-check(await run(`return !K.has(s.current, 'dd2a') && !K.has(s.current, 'dd3') && !s.current.betSet;`), 'chưa Chốt: trên ván chưa đổi gì');
+await item('Xe Đạp').click();
+check(!(await isGray('Xe Đạp')), 'bấm ô bật / tắt: ô có màu ngay');
+check(await run(`return !K.has(s.current, 'dd2a') && !K.has(s.current, 'dhS1') && !s.current.betSet;`), 'chưa Chốt: trên ván chưa đổi gì');
 await topBtn('Huỷ').click();
 await page.waitForTimeout(500);
-check(await run(`return !K.has(s.current, 'dd2a') && !K.has(s.current, 'dd3') && !s.current.betSet;`), 'Huỷ: đóng kho, không đổi gì');
+check(await run(`return !K.has(s.current, 'dd2a') && !K.has(s.current, 'dhS1') && !s.current.betSet;`), 'Huỷ: đóng kho, không đổi gì');
 await openKit();
-check(await isGray('Cược Chẵn Lẻ') && await isGray('Xí Ngầu Gian'), 'mở lại sau Huỷ: ô về như cũ');
+check(await isGray('Cược Chẵn Lẻ') && await isGray('Xe Đạp'), 'mở lại sau Huỷ: ô về như cũ');
 await item('Cược Chẵn Lẻ').click();
 await page.locator('.sk-bet').waitFor({ timeout: 3000 });
 await pickIn('Lẻ');
 await pickIn('100$');
 await topBtn('Xong').click();
 await page.waitForTimeout(300);
-await item('Xí Ngầu Gian').click();
+await item('Xe Đạp').click();
 await item('Cò Quay').click();
 await item('Cò Quay').click(); // bấm hai lần: coi như không đổi
 await page.keyboard.press('Enter');
 await page.waitForTimeout(400);
-check(await run(`const p = s.current; return K.has(p, 'dd2a') && K.has(p, 'dd3') && !K.has(p, 'ddS2') && p.betSet?.pick === 'odd' && p.betSet?.amount === 100;`),
+check(await run(`const p = s.current; return K.has(p, 'dd2a') && K.has(p, 'dhS1') && !K.has(p, 'ddS2') && p.betSet?.pick === 'odd' && p.betSet?.amount === 100;`),
   'Enter: áp dụng cả hai ô trong một lần, lưu cửa Lẻ 100$');
 const note = await page.locator('.bcast').last().textContent().catch(() => '');
-check(note.includes('Cược Chẵn Lẻ') && note.includes('Xí Ngầu Gian') && note.includes('Lẻ 100$') && !note.includes('Cò Quay'),
+check(note.includes('Cược Chẵn Lẻ') && note.includes('Xe Đạp') && note.includes('Lẻ 100$') && !note.includes('Cò Quay'),
   `loan tin một lần (${note.replace(/\s+/g, ' ').trim().slice(0, 100)})`);
 await page.waitForTimeout(2400);
 // Tự cược mỗi lượt, lúc bấm Lắc; đổ đôi lắc lại không cược thêm

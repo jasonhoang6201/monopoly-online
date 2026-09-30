@@ -162,16 +162,16 @@ for (const id of ['dh1', 'dh2a']) {
   await O.waitForTimeout(500);
 }
 await O.locator('.st-node[data-id="dh2a"]').click();
-ok(await O.locator('[data-act="toggle"]').count() === 0 && await O.locator('.sd-wait').count() === 1,
-  'ngoài lượt: thẻ chi tiết không có nút bật / tắt, ghi "Bật / tắt trong lượt của bạn"');
+ok(await O.locator('[data-act="toggle"]').count() === 0 && await O.locator('.sd-wait').count() === 0,
+  'Tàu Tốc Hành tự hỏi đúng lúc: thẻ chi tiết không có công tắc');
 await O.keyboard.press('Escape');
 await O.waitForTimeout(300);
 await O.locator('.st-close').click();
 await D.bringToFront();
 ok(await until(async () => D.evaluate((s) => {
   const p = window.__monopoly.controller.state.players[s];
-  return p.skills.join() === 'dh1,dh2a' && p.skillPoints === 1 && p.skillOff.join() === 'dh2a';
-}, oSeat)), 'máy cầm lái ghi đúng 2 kỹ năng học ngoài lượt, còn 1 điểm, Tàu Tốc Hành nằm tắt');
+  return p.skills.join() === 'dh1,dh2a' && p.skillPoints === 1 && !p.skillOff.length;
+}, oSeat)), 'máy cầm lái ghi đúng 2 kỹ năng học ngoài lượt, còn 1 điểm, Tàu Tốc Hành không nằm tắt');
 ok(await D.evaluate((s) => {
   const p = window.__monopoly.controller.state.players[s];
   return !p.skillOff.includes('dh1');

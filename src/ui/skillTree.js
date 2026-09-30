@@ -27,7 +27,7 @@ import { BRANCHES, SKILLS, KINDS, RESPEC_FEE, MAX_LEVEL } from '../data/skills.j
 import {
   skillById, branchByKey, skillCost, skillState, canLearn, learnSkill, levelOf,
   canLevelUp, nextCost, lvParams, levelLine, spentIn, branchMax, fillText,
-  canRespec, respec, featMet, featText, growNeed, growText, usage, progressText, rivalUlt,
+  canRespec, respec, featMet, featText, growNeed, growText, growProgress, rivalUlt,
   isOff, setSkillOn, switchable,
 } from '../core/skills.js';
 import { audio } from '../audio/audio.js';
@@ -93,10 +93,8 @@ const tierName = (s) => (s.feat ? `${TIER_NAME[s.tier]} · Thành tựu`
   : isSide(s) ? `${TIER_NAME[s.tier]} · Nhánh phụ` : TIER_NAME[s.tier]);
 
 /** Tiến độ tới level kế tiếp của ô đã học: "Kiếm được 150$ từ kỹ năng này (120/150$)". */
-function growLine(player, s, lv) {
-  const have = usage(player, s.id)[s.grow.by];
-  const need = s.grow.at[lv - 2];
-  return `${growText(s, lv)} (${progressText(have, need, s.grow.by === 'gain')})`;
+function growLine(player, s, lv, st) {
+  return `${growText(s, lv)} (${growProgress(player, s, lv, st)})`;
 }
 
 /** Nhãn thời hạn: vĩnh viễn, reset ở ô Bắt Đầu, hoặc số lần dùng. */
@@ -170,11 +168,11 @@ function buildTree(player, readOnly, manage) {
 
 /* ------------------------------------------------------------ thẻ chi tiết */
 
-function detailHtml(player, s, readOnly, manage) {
+function detailHtml(player, s, readOnly, manage, st) {
   const b = branchByKey(s.branch);
   const state = skillState(player, s.id);
   const lv = levelOf(player, s.id);
-  const check = canLearn(player, s.id);
+  const check = canLearn(player, s.id, st);
   const cost = nextCost(player, s);
   const maxed = lv >= MAX_LEVEL;
   const kind = KINDS[s.kind];
@@ -197,7 +195,7 @@ function detailHtml(player, s, readOnly, manage) {
     conds.push({ ok: !rivalUlt(player, s), text: `Chưa học tối thượng kia: <b>${esc(other.name)}</b>` });
   }
   if (lv && !maxed) {
-    conds.push({ ok: !growNeed(player, s, lv + 1), text: `Lên level ${lv + 1}: ${esc(growLine(player, s, lv + 1))}` });
+    conds.push({ ok: !growNeed(player, s, lv + 1, st), text: `Lên level ${lv + 1}: ${esc(growLine(player, s, lv + 1, st))}` });
   }
   if (!maxed) {
     conds.push({
@@ -218,7 +216,7 @@ function detailHtml(player, s, readOnly, manage) {
         ? `Tự động, không cần bấm. <b>${esc(s.uses)}</b>.`
         : 'Tự động, không cần bấm. Hiệu ứng <b>vĩnh viễn</b> từ lúc học tới hết ván.')
     : s.auto
-      ? `Học xong kỹ năng nằm <b>tắt</b>; bật lên (trong lượt của bạn) thì game tự hỏi bạn ${esc(s.when)}, muốn dùng thì chọn, không thì bỏ qua. <b>${esc(s.uses)}</b>. Dùng hết lượt thì cuối lượt tự về tắt.`
+      ? `Không cần bật: học xong là game tự hỏi bạn ${esc(s.when)}, muốn dùng thì chọn, không thì bỏ qua. <b>${esc(s.uses)}</b>.`
       : `Học xong kỹ năng nằm <b>tắt</b> trong kho <b>Dùng kỹ năng</b> trên thanh nút. Trong kho, bấm vào ô để bật (ô có màu) `
       + `hoặc chọn cách dùng, chọn "Không" là tắt; bấm Chốt để áp dụng. Dùng được ${esc(s.when)}. <b>${esc(s.uses)}</b>. `
       + 'Dùng hết lượt thì cuối lượt tự về tắt.') + ultNote;
@@ -351,6 +349,8 @@ function respecHtml(player) {
  * @param {()=>void} [o.onChange] gọi sau mỗi lần nâng cấp, bật / tắt hoặc tẩy điểm
  * @param {(id:string)=>void} [o.onLearn] gọi sau mỗi lần học ô mới hoặc lên level
  * @param {()=>void} [o.onClose] bấm nút ✕ trên thanh điểm
+ * @param {()=>?object} [o.state] trả GameState hiện tại — điều kiện lên level
+ *   theo tài sản (số ô, tổng tài sản, số màu) cần đọc bàn cờ
  * @returns {{el:HTMLElement, onKey:(e:KeyboardEvent)=>boolean, refresh:()=>void}}
  *   `onKey` trả true nếu đã xử lý phím (Esc đóng thẻ chi tiết, Enter bấm nút chính).
  *   `refresh` vẽ lại theo `player` — gọi khi ảnh chụp mới vừa ghi đè lên nó.
@@ -358,6 +358,9 @@ function respecHtml(player) {
 export function mountSkillTree(player, o = {}) {
   const readOnly = !!o.readOnly;
   const manage = !readOnly && o.manage !== false;
+  /* Bàn cờ hiện tại, cho điều kiện lên level theo tài sản. Hỏi mỗi lần chứ
+     không giữ một bản: ảnh chụp mới có thể thay cả GameState. */
+  const board = () => o.state?.() ?? null;
   const tree = buildTree(player, readOnly, manage);
   const $ = (sel) => tree.querySelector(sel);
   const tip = $('.st-tip');
@@ -379,7 +382,7 @@ export function mountSkillTree(player, o = {}) {
       // Bản chỉ xem: ô chưa học đều mờ như nhau, không có "học được ngay"
       const shown = readOnly && st !== 'learned' ? 'locked' : st;
       n.className = n.className.replace(/\bis-\w+/g, '').replace(/\bcan-up\b/, '').trim() + ` is-${shown}`;
-      n.classList.toggle('can-up', !readOnly && canLevelUp(player, id));
+      n.classList.toggle('can-up', !readOnly && canLevelUp(player, id, board()));
       n.classList.toggle('off', lv > 0 && isOff(player, id));
       n.dataset.lv = lv;
       n.querySelector('.st-cost').textContent = lv ? `+${nextCost(player, skillById(id))}` : skillCost(skillById(id));
@@ -411,8 +414,8 @@ export function mountSkillTree(player, o = {}) {
       ? (lv ? `Level ${lv}/${MAX_LEVEL}` : 'Chưa học')
       : {
         learned: lv >= MAX_LEVEL ? `Level ${lv}/${MAX_LEVEL} · tối đa`
-          : canLevelUp(player, s.id) ? `Level ${lv}/${MAX_LEVEL} · bấm để lên level`
-            : growNeed(player, s, lv + 1) ? `Level ${lv}/${MAX_LEVEL} · ${growLine(player, s, lv + 1)}`
+          : canLevelUp(player, s.id, board()) ? `Level ${lv}/${MAX_LEVEL} · bấm để lên level`
+            : growNeed(player, s, lv + 1, board()) ? `Level ${lv}/${MAX_LEVEL} · ${growLine(player, s, lv + 1, board())}`
               : `Level ${lv}/${MAX_LEVEL} · cần 1 điểm để lên level`,
         ready: 'Bấm để nâng cấp',
         poor: `Thiếu ${skillCost(s) - player.skillPoints} điểm`,
@@ -438,7 +441,7 @@ export function mountSkillTree(player, o = {}) {
   function openDetail(id) {
     openId = id;
     hideTip();
-    detail.innerHTML = id === 'respec' ? respecHtml(player) : detailHtml(player, skillById(id), readOnly, manage);
+    detail.innerHTML = id === 'respec' ? respecHtml(player) : detailHtml(player, skillById(id), readOnly, manage, board());
     detail.hidden = false;
     requestAnimationFrame(() => detail.classList.add('show'));
     tree.querySelector(`.st-node[data-id="${id}"]`)?.classList.add('focus');
@@ -462,7 +465,7 @@ export function mountSkillTree(player, o = {}) {
     if (readOnly) return;
     const id = openId;
     const before = player.skillPoints;
-    const res = learnSkill(player, id);
+    const res = learnSkill(player, id, board());
     if (!res.ok) return;
     closeDetail();
     refresh();
@@ -476,7 +479,7 @@ export function mountSkillTree(player, o = {}) {
     if (!manage || !openId) return;
     if (!setSkillOn(player, openId, isOff(player, openId))) return;
     refresh();
-    detail.innerHTML = detailHtml(player, skillById(openId), readOnly, manage);
+    detail.innerHTML = detailHtml(player, skillById(openId), readOnly, manage, board());
     detail.querySelector('[data-act="toggle"]')?.focus({ preventScroll: true });
     audio.sfx(isOff(player, openId) ? 'click' : 'build');
     o.onChange?.();
@@ -575,7 +578,7 @@ export function mountSkillTree(player, o = {}) {
   /** Ảnh chụp mới ghi đè lên `player`: vẽ lại cây, cả thẻ chi tiết đang mở. */
   function resync() {
     refresh();
-    if (openId && openId !== 'respec') detail.innerHTML = detailHtml(player, skillById(openId), readOnly, manage);
+    if (openId && openId !== 'respec') detail.innerHTML = detailHtml(player, skillById(openId), readOnly, manage, board());
   }
 
   return { el: tree, onKey, refresh: resync };
@@ -601,13 +604,14 @@ export function refreshSkillTree() { liveView?.refresh(); }
  * @param {()=>void} [o.onChange] gọi sau mỗi lần nâng cấp, bật / tắt hoặc tẩy điểm
  * @param {(id:string)=>void} [o.onLearn] gọi sau mỗi lần học ô mới hoặc lên level
  * @param {string} [o.color] màu quân của người chơi, tô lên tiêu đề
+ * @param {()=>?object} [o.state] xem `mountSkillTree`
  * @returns {Promise<void>} xong khi đóng hộp
  */
 export function openSkillTree(player, o = {}) {
   let closeModal = null;
   let scrimEl = null;
   const view = mountSkillTree(player, {
-    manage: o.manage, onChange: o.onChange, onLearn: o.onLearn, onClose: () => closeModal?.(null),
+    manage: o.manage, onChange: o.onChange, onLearn: o.onLearn, state: o.state, onClose: () => closeModal?.(null),
   });
   liveView = view;
 
