@@ -429,11 +429,58 @@ export function mountSkillTree(player, o = {}) {
       <span class="tip-meta">${tierName(s)} · ${skillCost(s)} điểm · ${KINDS[s.kind].name}</span>
       <span class="tip-short">${esc(fillText(s.short, lvParams(s, lv || 1)))}</span>
       <span class="tip-note n-${noteCls}">${esc(note + offNote)}</span>`;
-    tip.style.left = node.style.left;
-    tip.style.top = node.style.top;
     tip.style.setProperty('--c', branchByKey(s.branch).color);
-    tip.classList.toggle('below', s.tier === 4);
+    placeTip(node, s.tier === 4 ? ['bottom', 'top', 'right', 'left'] : ['top', 'bottom', 'right', 'left']);
     tip.classList.add('show');
+  }
+
+  /* Tên nổi phải nằm gọn trong thân hộp thoại: thân hộp kỹ năng là
+     `overflow: hidden` nên phần lòi ra bị cắt chữ, còn trong bảng tài sản thân
+     hộp cuộn được nên lòi ra là hiện thanh cuộn. Thử lần lượt các phía, phía
+     nào đủ chỗ thì dùng; không phía nào đủ thì lấy phía rộng nhất rồi ép vào
+     trong khung. */
+  function placeTip(node, sides) {
+    const GAP = 8, PAD = 6;
+    const box = tree.closest('.modal-body') ?? tree;
+    const br = box.getBoundingClientRect();
+    const lim = {
+      l: br.left + box.clientLeft + PAD,
+      t: br.top + box.clientTop + PAD,
+      r: br.left + box.clientLeft + box.clientWidth - PAD,
+      b: br.top + box.clientTop + box.clientHeight - PAD,
+    };
+    // Đặt về góc sân trước khi đo, để bề ngang max-content không bị lề phải ép hẹp
+    tip.style.left = '0px';
+    tip.style.top = '0px';
+    /* Hộp thoại mở ra bằng transform scale(.9 → 1): rect đo trên màn đã nhân
+       tỉ lệ, còn offsetWidth và style.left thì chưa, phải quy đổi qua `k` */
+    const stage = tip.offsetParent;
+    const sr = stage.getBoundingClientRect();
+    const k = sr.width / stage.offsetWidth || 1;
+    tip.style.maxWidth = `${Math.min(250, (lim.r - lim.l) / k)}px`;
+    const w = tip.offsetWidth * k, h = tip.offsetHeight * k;
+    const n = node.getBoundingClientRect();
+    const cx = n.left + n.width / 2, cy = n.top + n.height / 2;
+    const room = {
+      top: n.top - GAP - lim.t - h,
+      bottom: lim.b - (n.bottom + GAP) - h,
+      right: lim.r - (n.right + GAP) - w,
+      left: n.left - GAP - lim.l - w,
+    };
+    const side = sides.find((d) => room[d] >= 0) ?? sides.reduce((a, d) => (room[d] > room[a] ? d : a));
+    let x, y;
+    if (side === 'top' || side === 'bottom') {
+      x = cx - w / 2;
+      y = side === 'top' ? n.top - GAP - h : n.bottom + GAP;
+    } else {
+      x = side === 'left' ? n.left - GAP - w : n.right + GAP;
+      y = cy - h / 2;
+    }
+    x = Math.max(lim.l, Math.min(x, lim.r - w));
+    y = Math.max(lim.t, Math.min(y, lim.b - h));
+    tip.style.left = `${(x - sr.left) / k}px`;
+    tip.style.top = `${(y - sr.top) / k}px`;
+    tip.dataset.side = side;
   }
   const hideTip = () => tip.classList.remove('show');
 

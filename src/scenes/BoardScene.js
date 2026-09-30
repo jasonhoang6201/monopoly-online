@@ -1162,10 +1162,12 @@ export default class BoardScene extends Phaser.Scene {
    * Nhiều ô thì chạy so le 150ms, chỉ ô đầu có tiếng.
    * @param {'quake'|'fire'} kind
    * @param {number[]} ids
+   * @param {boolean} [lost] false khi chủ đã chống đỡ / dập lửa kịp: ô vẫn rung,
+   *   vẫn cháy, chỉ không có căn nhà văng ra
    */
-  tileFx(kind, ids) {
+  tileFx(kind, ids, lost = true) {
     const list = [...new Set(ids ?? [])];
-    const go = (id, i) => this.startTileFx(kind, id, { sound: i === 0, house: true });
+    const go = (id, i) => this.startTileFx(kind, id, { sound: i === 0, house: lost });
     // Ô đầu chạy ngay trong nhịp này, không đợi khung hình sau như `delayedCall(0)`
     return Promise.all(list.map((id, i) => (i === 0 ? go(id, i) : new Promise((resolve) => {
       this.time.delayedCall(i * 150, () => go(id, i).then(resolve));

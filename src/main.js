@@ -111,7 +111,43 @@ async function boot() {
 
 boot();
 
-/** Các nút tiện ích dưới chân cột: nhạc, hiệu ứng, toàn màn hình. */
+/**
+ * Nút âm thanh mở bảng hai dòng Nhạc nền / Hiệu ứng, mỗi dòng một dấu tích.
+ * Phím M vẫn gọi thẳng `#music-toggle.click()` nên bật tắt được cả lúc bảng đóng.
+ */
+function wireSoundMenu($) {
+  const btn = $('sound-btn');
+  const pop = $('sound-pop');
+  const music = $('music-toggle');
+  const sfx = $('sfx-toggle');
+
+  const setOpen = (on) => {
+    pop.hidden = !on;
+    btn.setAttribute('aria-expanded', String(on));
+  };
+  /* Cả hai cùng tắt thì nút ngoài đổi sang loa gạch, để khỏi phải mở bảng mới
+     biết vì sao ván im lặng. */
+  const sync = () => {
+    music.setAttribute('aria-checked', String(audio.musicOn));
+    sfx.setAttribute('aria-checked', String(audio.sfxOn));
+    const mute = !audio.musicOn && !audio.sfxOn;
+    btn.textContent = mute ? '🔇' : '🔊';
+    btn.classList.toggle('off', mute);
+  };
+
+  btn.addEventListener('click', () => setOpen(pop.hidden));
+  music.addEventListener('click', () => { audio.toggleMusic(); sync(); });
+  sfx.addEventListener('click', () => { audio.toggleSfx(); sync(); });
+  /* Nghe ở pha capture: nút meme chặn lan truyền cú bấm của nó, nghe ở pha
+     nổi bọt thì bấm từ bảng âm thanh sang nút meme không đóng được bảng này. */
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#sound-btn, #sound-pop')) setOpen(false);
+  }, true);
+  window.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false); });
+  sync();
+}
+
+/** Các nút tiện ích dưới chân cột: âm thanh, toàn màn hình. */
 function wireChrome() {
   const $ = (id) => document.getElementById(id);
 
@@ -119,12 +155,7 @@ function wireChrome() {
      dời xuống đó — phải chạy trước khi ai đó đi tìm #meme-btn theo vị trí cũ. */
   initSidePanel();
 
-  $('music-toggle').addEventListener('click', (e) => {
-    e.currentTarget.classList.toggle('off', !audio.toggleMusic());
-  });
-  $('sfx-toggle').addEventListener('click', (e) => {
-    e.currentTarget.classList.toggle('off', !audio.toggleSfx());
-  });
+  wireSoundMenu($);
 
   const fsBtn = $('fullscreen-toggle');
   fsBtn.addEventListener('click', () => {

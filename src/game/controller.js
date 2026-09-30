@@ -429,11 +429,12 @@ export class Game {
    * sao, nên máy cầm lái phải báo.
    * @param {'quake'|'fire'} kind
    * @param {number[]} ids
+   * @param {boolean} [lost] false = nhà được giữ lại, không diễn cảnh nhà văng
    */
-  tileFx(kind, ids) {
+  tileFx(kind, ids, lost = true) {
     if (!ids.length) return Promise.resolve();
-    this.netEmit('tilefx', { kind, ids });
-    return this.scene.tileFx(kind, ids);
+    this.netEmit('tilefx', { kind, ids, lost });
+    return this.scene.tileFx(kind, ids, lost);
   }
 
   /**
@@ -511,7 +512,7 @@ export class Game {
       await sc.spotTiles(data.ids, data.ms);
     } else if (name === 'tilefx') {
       // Không `await`: hoạt cảnh chạy song song với dòng thông báo theo sau
-      sc.tileFx(data.kind, data.ids);
+      sc.tileFx(data.kind, data.ids, data.lost ?? true);
     } else if (name === 'eventcard') {
       /* Thẻ Thời Cuộc là chuyện của cả bàn, nên máy nào cũng phải thấy mặt thẻ.
          Cùng `seed` thì dải xếp y hệt và dừng đúng ô ấy, cả bàn hồi hộp cùng

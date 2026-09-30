@@ -291,6 +291,9 @@ export class EventRunner {
       const total = lots.reduce((s, l) => s + l.brace, 0);
       // Chốt lại ở máy cầm lái: câu trả lời gửi từ xa không được tin suông
       if (answers.get(seat) === 'brace' && p.money >= total) {
+        /* Vẫn diễn cho cả bàn thấy đất rung, nứt: không có hình thì người chơi
+           tưởng thẻ rỗng. Chỉ bỏ cảnh căn nhà văng ra vì nhà còn đứng nguyên. */
+        this.g.tileFx('quake', lots.filter((l) => l.lose > 0).map((l) => l.id), false);
         await this.g.bc.show('CHỐNG ĐỠ KỊP',
           `<b>${p.name}</b> bỏ <span class="down">${money(total)}</span> gia cố ${lots.length} ô — nhà đứng nguyên.`);
         await this.g.payBank(seat, total);
@@ -345,6 +348,8 @@ export class EventRunner {
       const total = lots.reduce((sum, l) => sum + l.save, 0);
       // Chốt lại ở máy cầm lái: câu trả lời gửi từ xa không được tin suông
       if (answers.get(seat) === 'save' && p.money >= total) {
+        // Như động đất: lửa vẫn bốc lên rồi tắt, chỉ không có căn nhà cháy rụi
+        this.g.tileFx('fire', lots.filter((l) => l.lose > 0).map((l) => l.id), false);
         await this.g.bc.show('DẬP LỬA KỊP',
           `<b>${p.name}</b> trả <span class="down">${money(total)}</span> cho phu chữa cháy —
            nhà cửa ở ${lots.map((l) => tileShortLabel(l.id)).join(', ')} còn nguyên.`);

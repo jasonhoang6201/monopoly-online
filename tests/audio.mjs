@@ -101,7 +101,8 @@ const sfxCheck = await page.evaluate(async () => {
 log('hiệu ứng âm thanh:');
 for (const [k, v] of Object.entries(sfxCheck)) log(`   ${k.padEnd(10)} ${v}`);
 
-// Hai công tắc riêng: nhạc nền và hiệu ứng
+// Hai công tắc riêng: nhạc nền và hiệu ứng, nằm trong bảng mở từ nút loa
+await page.locator('#sound-btn').click();
 await page.locator('#music-toggle').click();
 await page.waitForTimeout(700);
 log('tắt nhạc:', JSON.stringify(await page.evaluate(() => ({

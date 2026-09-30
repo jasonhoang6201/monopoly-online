@@ -197,6 +197,49 @@ html, body {
   width: 24px; height: 1.5px; background: currentColor; transform: rotate(-45deg);
 }
 
+/* Bảng âm thanh: mọc lên trên hàng nút, neo mép phải như bảng meme. Hàng nút
+   nằm sát mép phải cột và hẹp hơn bảng, neo mép trái thì bảng lấn qua mép
+   phải cột và bị `overflow: hidden` cắt mất ô tích. */
+#sound-pop {
+  position: absolute; right: -2px; bottom: 40px;
+  min-width: 150px;
+  padding: 5px;
+  display: flex; flex-direction: column; gap: 2px;
+  border-radius: 10px;
+  background:
+    linear-gradient(165deg, rgba(239, 226, 198, .05), transparent 46%),
+    linear-gradient(180deg, rgba(36, 17, 12, .97), rgba(18, 9, 6, .98));
+  border: 1px solid var(--gold-deep);
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 225, 170, .14);
+  z-index: 6;
+  animation: meme-pop-in .18s var(--ease-out-back) both;
+}
+#sound-pop[hidden] { display: none; }
+.snd-row {
+  display: flex; align-items: center; gap: 9px;
+  padding: 7px 9px;
+  border: 0; border-radius: 7px;
+  background: transparent;
+  color: var(--paper);
+  font: inherit; font-size: 12.5px; text-align: left;
+  cursor: pointer;
+}
+.snd-row:hover { background: rgba(200, 160, 72, .14); }
+.snd-row:focus-visible { outline: 2px solid var(--gold-light); outline-offset: -2px; }
+.snd-ico { width: 16px; text-align: center; color: var(--gold-light); }
+.snd-name { flex: 1; white-space: nowrap; }
+/* Ô tích: viền vàng, bật thì tô đặc và có dấu ✓ */
+.snd-check {
+  width: 16px; height: 16px; border-radius: 4px;
+  display: grid; place-items: center;
+  border: 1px solid var(--gold-deep);
+  font-size: 11px; line-height: 1; color: #2a130c;
+}
+.snd-row[aria-checked="true"] .snd-check { background: var(--gold-light); border-color: var(--gold-light); }
+.snd-row[aria-checked="true"] .snd-check::before { content: "✓"; font-weight: 700; }
+.snd-row[aria-checked="false"] .snd-name,
+.snd-row[aria-checked="false"] .snd-ico { opacity: .5; }
+
 #bank-plate {
   display: flex; flex-direction: column;
   line-height: 1.25;
@@ -3126,6 +3169,11 @@ html, body {
     bottom: 0;
     --meme-w: min(230px, calc(100vw - var(--strip) - var(--safe-r) - 14px));
   }
+  /* Thanh hẹp xếp nút theo cột, nút loa nằm trên cùng khối: bảng âm thanh bung
+     sang phải và thẳng mép trên nút loa. */
+  #side-strip #sound-pop { right: auto; left: calc(100% + 6px); bottom: auto; top: 0; }
+  .snd-row { padding: 6px 8px; font-size: 11.5px; }
+
   /* Ba hàng meme cao hơn nửa cột 402px — hạ xuống hai hàng rưỡi, phần còn lại
      vẫn cuộn như cũ. */
   .meme-grid { max-height: calc(var(--meme-cell) * 2 + var(--meme-gap) + 14px); }

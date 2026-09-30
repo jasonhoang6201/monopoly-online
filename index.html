@@ -69,8 +69,24 @@
             <span id="bank-houses">32 nhà</span>
           </div>
           <div class="side-tools">
-            <button class="icon-btn" id="music-toggle" title="Bật/tắt nhạc nền (M)" aria-label="Bật/tắt nhạc nền">♪</button>
-            <button class="icon-btn" id="sfx-toggle" title="Bật/tắt hiệu ứng âm thanh" aria-label="Bật/tắt hiệu ứng âm thanh">🔔</button>
+            <!-- Nhạc nền và hiệu ứng gom chung một nút: đứng riêng hai nút thì
+                 hàng tiện ích năm nút tràn khỏi cột và nút cuối bị cắt mất. -->
+            <button class="icon-btn" id="sound-btn" type="button" title="Âm thanh"
+                    aria-label="Âm thanh" aria-haspopup="menu" aria-expanded="false">🔊</button>
+            <div id="sound-pop" role="menu" aria-label="Âm thanh" hidden>
+              <button class="snd-row" id="music-toggle" type="button" role="menuitemcheckbox"
+                      aria-checked="true" title="Bật/tắt nhạc nền (M)">
+                <span class="snd-ico" aria-hidden="true">♪</span>
+                <span class="snd-name">Nhạc nền</span>
+                <span class="snd-check" aria-hidden="true"></span>
+              </button>
+              <button class="snd-row" id="sfx-toggle" type="button" role="menuitemcheckbox"
+                      aria-checked="true" title="Bật/tắt hiệu ứng âm thanh">
+                <span class="snd-ico" aria-hidden="true">🔔</span>
+                <span class="snd-name">Hiệu ứng</span>
+                <span class="snd-check" aria-hidden="true"></span>
+              </button>
+            </div>
             <button class="icon-btn" id="skill-btn" hidden title="Cây kỹ năng (học được cả lúc chưa tới lượt)" aria-label="Mở cây kỹ năng"></button>
             <button class="icon-btn" id="meme-btn" title="Thả meme lên bàn cờ (G · phím 1-0 thả thẳng 10 meme đầu)" aria-label="Thả meme lên bàn cờ">😂</button>
             <button class="icon-btn" id="fullscreen-toggle" title="Toàn màn hình (F)" aria-label="Toàn màn hình">⛶</button>

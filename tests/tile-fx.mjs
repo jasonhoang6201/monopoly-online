@@ -143,6 +143,25 @@ live = await scene('3-hoa-hoan', 8, (id) => {
 }, 2.3);
 check(live.length === 1 && live[0] === 8, `hoả hoạn chạy trên ô 8 (thấy: ${JSON.stringify(live)})`);
 
+log('\n=== Chống đỡ / dập lửa kịp ===');
+{
+  // Nhà giữ nguyên: ô vẫn rung, vẫn cháy, nhưng không có căn nhà văng ra
+  const seen = await page.evaluate(async () => {
+    const sc = window.__monopoly.controller.scene;
+    const orig = sc.startTileFx;
+    const got = [];
+    sc.startTileFx = function (kind, id, opts) { got.push({ kind, id, house: opts.house }); return orig.call(this, kind, id, opts); };
+    const c = window.__monopoly.controller;
+    const done = Promise.all([c.tileFx('quake', [6], false), c.tileFx('fire', [8], false)]);
+    const live = [...sc.fxRuns.keys()];
+    await done;
+    sc.startTileFx = orig;
+    return { got, live };
+  });
+  check(seen.live.length === 2 && seen.got.every((g) => g.house === false),
+    `vẫn diễn trên hai ô, không có cảnh nhà văng (${JSON.stringify(seen)})`);
+}
+
 log('\n=== Thế chấp ===');
 live = await scene('4-the-chap', 3, (id) => {
   const c = window.__monopoly.controller;
