@@ -27,7 +27,7 @@
  *                   mua được, phải trả tiền thuê, rút tiếp thẻ nếu đáp trúng ô
  *                   Cơ Hội / Khí Vận. Ô đến khai bằng một trong bốn cách:
  *                   `to` (ô cố định), `nearest` ('station' | 'utility' — ô gần
- *                   nhất **phía trước**), `back` (lùi mấy ô), `jail` (về Khám
+ *                   nhất **phía trước**), `ahead` (tiến mấy ô, không thẻ nào đi lùi), `jail` (về Khám
  *                   Lớn, không lãnh lương dọc đường).
  *
  * ── Vì sao thêm thẻ di chuyển ──────────────────────────────────────────────
@@ -82,8 +82,8 @@ export const CHANCE = [
     type: 'move', nearest: 'utility',
   },
   {
-    text: 'Xe kéo quay đầu vì lộ Catinat đang cấm đường, lùi lại ba căn phố.',
-    type: 'move', back: 3,
+    text: 'Lộ Catinat đang cấm đường, xe kéo phải chạy vòng, lố thêm ba căn phố.',
+    type: 'move', ahead: 3,
   },
   {
     text: `Được mời dự dạ tiệc ở Dinh Thượng Thơ ngay đầu đường Catinat, không
@@ -167,8 +167,8 @@ export const CHEST = [
     type: 'move', to: 25,
   },
   {
-    text: 'Bỏ quên cái nón ở quán hai căn phố phía sau, đành quay lại lấy.',
-    type: 'move', back: 2,
+    text: 'Mải ngó hàng rong nên đi lố quán hẹn hai căn phố.',
+    type: 'move', ahead: 2,
   },
   {
     text: 'Toà Đô Chánh đánh thuế thổ trạch: cứ mỗi nóc nhà, mỗi khách sạn đều phải nộp.',

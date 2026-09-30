@@ -35,3 +35,24 @@ export async function pickOnBoard(page, id = null) {
   await page.waitForTimeout(400);
   return tile;
 }
+
+/**
+ * Bấm thật (chuột) vào một viên xí ngầu trên canvas — Xí Ngầu Gian chọn viên
+ * lắc lại. Khác ô cờ, viên xí ngầu đi qua `dieAt` trong `pointerdown`, nên bấm
+ * bằng toạ độ mới thử đúng đường người chơi đi.
+ * @param {0|1} i viên trái / viên phải
+ */
+export async function clickDie(page, i, { tap = false } = {}) {
+  const at = await page.evaluate((k) => {
+    const sc = window.__monopoly.scene;
+    const cv = sc.game.canvas;
+    const r = cv.getBoundingClientRect();
+    const h = sc.diceHome[k];
+    return { x: r.left + h.x * (r.width / cv.width), y: r.top + h.y * (r.height / cv.height) };
+  }, i);
+  if (tap) await page.touchscreen.tap(at.x, at.y);
+  else await page.mouse.click(at.x, at.y);
+}
+
+/** Hai viên xí ngầu có đang sáng vòng, bấm được không? */
+export const dicePickable = (page) => page.evaluate(() => !!window.__monopoly.scene.dicePick);

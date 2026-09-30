@@ -38,13 +38,15 @@ function tileMeta(state, id, owned) {
  * @param {number[]} ids các ô chọn được
  * @param {{eyebrow:string,title:string,sub:string,note?:string,confirm?:string,
  *          owned?:boolean,cancel?:string,quick?:boolean,
- *          extra?:Array<{label:string,value:*}>}} text `cancel` là nhãn nút bỏ ngang;
+ *          extra?:Array<{label:string,value:*}>,dice?:Array<*>}} text `cancel` là nhãn nút bỏ ngang;
  *   bỏ trống thì phiên chọn này bắt buộc phải ra một ô. Chỉ đặt khi bên gọi còn
  *   lùi lại được — thẻ tự lôi ra khỏi túi thì lùi được, sự kiện ép chọn thì không.
  *   `quick`: bấm ô là chốt luôn, không mở hộp xác nhận — dùng khi chỉ có vài ô
  *   sáng (kỹ năng Nhà Du Hành chọn 1–3 ô đích), bấm lỡ vào ô tối thì không ăn,
  *   nên hộp xác nhận chỉ thêm một cú bấm. `extra`: thêm nút cạnh nút bỏ ngang,
- *   bấm thì trả về `value` của nút ấy thay cho số ô.
+ *   bấm thì trả về `value` của nút ấy thay cho số ô. `dice`: hai giá trị cho
+ *   viên trái / viên phải — hai viên xí ngầu trên bàn sáng vòng và bấm được,
+ *   bấm viên nào thì trả về giá trị của viên ấy (Xí Ngầu Gian chọn viên lắc lại).
  * @param {number} [ms] bản online: hạn chọn. Hết giờ thì lấy ô **rẻ nhất** —
  *   bỏ trống thì sự kiện đứng lại, mà tự lấy ô đắt thì hoá ra phạt người mất
  *   kết nối nặng hơn người ngồi bấm. Phiên bỏ ngang được thì hết giờ là bỏ
@@ -66,7 +68,8 @@ export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
       <div class="tp-title">${text.title}</div>
       <div class="tp-sub">${text.sub}</div>
       <div class="tp-call">Bấm vào <b>ô đang sáng</b> trên bàn cờ —
-        ${text.quick ? 'bấm là đi luôn' : `có <b>${ids.length}</b> ô chọn được`}</div>
+        ${text.quick ? 'bấm là đi luôn' : `có <b>${ids.length}</b> ô chọn được`}${
+        text.dice ? '<br>Bấm vào <b>viên xí ngầu</b> nào thì lắc lại viên đó' : ''}</div>
       ${text.note ? `<div class="tp-note">${text.note}</div>` : ''}
       <div class="tp-timer" hidden></div>
       ${cancel || extra.length ? `<div class="tp-acts">
@@ -85,6 +88,13 @@ export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
     let closeAsk = null;
     let ticker = 0;
     let myClick = null;      // đặt ở dưới; `finish` chỉ gỡ đúng phiên này ra
+    if (text.dice) {
+      scene.armDicePick((i) => {
+        if (done || asking) return;
+        audio.sfx('click');
+        finish(text.dice[i]);
+      });
+    }
 
     const finish = (id) => {
       if (done) return;
@@ -93,6 +103,7 @@ export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
       closeAsk?.(false);
       scene.popTileClick(myClick);
       scene.clearMarks();
+      if (text.dice) scene.disarmDicePick();
       panel.classList.add('out');
       setTimeout(() => panel.remove(), 260);
       /* Còn phiên khác đang mở thì giữ nguyên `picking`: bỏ ra ở đây là thanh

@@ -545,10 +545,6 @@
 .sk-lotto .btn { padding-inline: 6px; white-space: nowrap; }
 .sk-bet-note { font-size: 13px; color: var(--paper-deep); text-align: center; }
 
-.pcard-skill {
-  font-size: 9.5px; padding: 1px 6px; border-radius: 999px; letter-spacing: .04em;
-  color: #2A1C08; background: linear-gradient(180deg, var(--gold-pale), var(--gold));
-}
 /* ---------------------------------------------------- tab trong bảng tài sản */
 .ptabs {
   display: flex; gap: 4px; margin: -4px 0 12px;

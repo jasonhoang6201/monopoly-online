@@ -13,7 +13,7 @@
  */
 import { launchChrome } from './launch.mjs';
 import { playRollOff } from './rolloff.mjs';
-import { markedTiles } from './pick.mjs';
+import { markedTiles, clickDie, dicePickable } from './pick.mjs';
 
 const errors = [];
 let fails = 0;
@@ -396,10 +396,17 @@ await page.waitForTimeout(400);
 log('\n=== 4. BẤM ĐỂ DÙNG ===');
 await reset();
 await run(`
-  const p = s.current; p.skills = ['dd1','dd2a','dd3'];
+  const p = s.current; p.pos = 10; p.skills = ['dd1','dd2a','dd3'];
+  await c.scene.rollDiceAnim(3, 4);
   window.__ar = c.skills.afterRoll(p, { a: 3, b: 4, sum: 7, isDouble: false });
 `);
-await clickModal('Lắc lại viên 4');
+await page.locator('.tile-pick[data-quick]:not(.out)').waitFor({ timeout: 5000 });
+const xg = { lit: await markedTiles(page), dice: await dicePickable(page),
+  acts: await page.locator('.tile-pick:not(.out) .tp-acts button').count(),
+  modal: await page.locator('#modal-root .scrim.show').count() };
+check(JSON.stringify(xg.lit) === '[17]' && xg.dice && xg.acts === 0 && xg.modal === 0,
+  `Xí Ngầu Gian: sáng ô sẽ tới 17 + hai viên xí ngầu, không hộp thoại, không nút phụ (${JSON.stringify(xg)})`);
+await clickDie(page, 1);
 const ar = await run('const r = await window.__ar; return { sum: r.d.sum, a: r.d.a, cd: s.current.cooldowns.dd3 };');
 check(ar.a === 3 && ar.sum >= 4 && ar.sum <= 9, `Xí Ngầu Gian: giữ viên 3, lắc lại viên kia (tổng ${ar.sum})`);
 check(ar.cd === 1, 'Xí Ngầu Gian: chờ 1 lần qua ô Bắt Đầu');
@@ -409,11 +416,18 @@ await run(`
   const p = s.current; p.cooldowns = {}; p.lapUses = {}; p.skillLv = { dd3: 2 };
   window.__ar = c.skills.afterRoll(p, { a: 3, b: 4, sum: 7, isDouble: false });
 `);
-await clickModal('Lắc lại viên 4');
+await page.locator('.tile-pick[data-quick]:not(.out)').waitFor({ timeout: 5000 });
+await clickDie(page, 1);
 const ar2 = await run('await window.__ar; return { cd: s.current.cooldowns.dd3 ?? 0, used: s.current.lapUses.dd3 ?? 0 };');
 check(ar2.cd === 0 && ar2.used === 1, `Xí Ngầu Gian level 2: dùng 1 lần chưa phải chờ (${JSON.stringify(ar2)})`);
 await run(`window.__ar = c.skills.afterRoll(s.current, { a: 3, b: 4, sum: 7, isDouble: false });`);
-await clickModal('Lắc lại viên');
+await page.locator('.tile-pick[data-quick]:not(.out)').waitFor({ timeout: 5000 });
+await page.evaluate(() => { window.__monopoly.scene.onTileClick(17); });
+const arGo = await run('const r = await window.__ar; return { sum: r.d.sum, used: s.current.lapUses.dd3 ?? 0 };');
+check(arGo.used === 1, `bấm ô sáng là đi luôn, không tốn lượt Xí Ngầu Gian (${JSON.stringify(arGo)})`);
+await run(`window.__ar = c.skills.afterRoll(s.current, { a: 3, b: 4, sum: 7, isDouble: false });`);
+await page.locator('.tile-pick[data-quick]:not(.out)').waitFor({ timeout: 5000 });
+await clickDie(page, 0);
 const ar3 = await run('await window.__ar; return { cd: s.current.cooldowns.dd3 ?? 0, used: s.current.lapUses.dd3 ?? 0 };');
 check(ar3.cd === 1 && ar3.used === 0, `Xí Ngầu Gian level 2: lần thứ 2 thì chờ tới lần qua ô Bắt Đầu (${JSON.stringify(ar3)})`);
 await run('const p = s.current; p.cooldowns = { dd3: 1 }; p.skillLv = {};');
@@ -426,11 +440,12 @@ await run(`
 `);
 await page.locator('.tile-pick[data-quick]:not(.out)').waitFor({ timeout: 5000 });
 const qd = { lit: (await markedTiles(page)).sort((a, b) => a - b),
-  extra: await page.locator('.tile-pick .tp-extra').allTextContents(),
+  dice: await dicePickable(page),
+  extra: await page.locator('.tile-pick .tp-extra').count(),
   cancel: await page.locator('.tile-pick .tp-cancel').textContent() };
 check(JSON.stringify(qd.lit) === '[3,17]', `Quay Đầu: sáng ô đi tới 17 và ô đi lùi 3 (${qd.lit})`);
-check(qd.extra.join('|') === 'Lắc lại viên 3|Lắc lại viên 4' && qd.cancel === 'Đi tới như thường',
-  `bảng chọn có nút lắc lại từng viên và nút đi như thường (${JSON.stringify(qd)})`);
+check(qd.dice && qd.extra === 0 && qd.cancel === 'Đi tới như thường',
+  `hai viên xí ngầu bấm được, còn nút đi như thường (${JSON.stringify(qd)})`);
 check(await page.locator('#modal-root .scrim.show').count() === 0, 'không mở hộp thoại nào che bàn cờ');
 await page.evaluate(() => { window.__monopoly.scene.onTileClick(3); });
 const qd1 = await run('const r = await window.__ar; return { back: r.back, used: s.current.cooldowns.dh3 ?? 0 };');
@@ -443,12 +458,13 @@ const qd2 = await run('const r = await window.__ar; return { back: r.back, cd: s
 check(qd2.back === false && qd2.cd === 0, `"Đi tới như thường": đi tới, không tốn lượt Quay Đầu (${JSON.stringify(qd2)})`);
 await run(`const p = s.current; p.cooldowns = {};
   window.__ar = c.skills.afterRoll(p, { a: 3, b: 4, sum: 7, isDouble: false });`);
-await page.locator('.tile-pick:not(.out) .tp-extra', { hasText: 'Lắc lại viên 4' }).click();
+await page.locator('.tile-pick[data-quick]:not(.out)').waitFor({ timeout: 5000 });
+await clickDie(page, 1);
 // Lắc lại xong thì hỏi lần nữa với tổng mới — lúc này chỉ còn Quay Đầu, chọn đi tới
 await page.waitForTimeout(2600);
 await page.locator('.tile-pick:not(.out) .tp-cancel').click({ timeout: 8000 });
 const qd3 = await run('const r = await window.__ar; return { a: r.d.a, back: r.back, dd3: s.current.cooldowns.dd3 ?? 0 };');
-check(qd3.a === 3 && !qd3.back && qd3.dd3 === 1, `nút phụ "Lắc lại viên 4" chạy Xí Ngầu Gian rồi hỏi lại (${JSON.stringify(qd3)})`);
+check(qd3.a === 3 && !qd3.back && qd3.dd3 === 1, `bấm viên phải chạy Xí Ngầu Gian rồi hỏi lại (${JSON.stringify(qd3)})`);
 
 await run('c.restoreActions();');
 await openKit();

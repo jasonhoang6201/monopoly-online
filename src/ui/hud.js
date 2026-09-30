@@ -353,8 +353,6 @@ export class Hud {
         + (p.cards?.length
           ? ` <span class="pcard-ticket" title="Thẻ đang giữ trong túi">TÚI THẺ${
             p.cards.length > 1 ? ` ×${p.cards.length}` : ''}</span>` : '')
-        + (p.skillPoints > 0 && !p.bankrupt
-          ? ` <span class="pcard-skill" title="Điểm kỹ năng chưa dùng — bấm nút Kỹ năng để học">+${p.skillPoints} ĐIỂM</span>` : '')
         + (away ? ' <span class="pcard-off">MẤT KẾT NỐI</span>' : '');
 
       // Chỗ đang đứng — chỉ hiện cho người tới lượt cho đỡ rối mắt

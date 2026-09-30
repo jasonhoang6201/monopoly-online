@@ -956,7 +956,7 @@ export class SkillPlay {
       case 'move': {
         if (card.jail) return 'Vào tù';
         const dest = moveDest(card, p.pos);
-        return card.back ? `Lùi ${-dest.steps} ô tới ${tileLabel(dest.tile)}` : `Đi tới ${tileLabel(dest.tile)}`;
+        return card.ahead ? `Tiến ${dest.steps} ô tới ${tileLabel(dest.tile)}` : `Đi tới ${tileLabel(dest.tile)}`;
       }
       default: return card.amount > 0 ? `Nhận ${money(card.amount)}` : `Nộp ${money(-card.amount)}`;
     }
@@ -969,7 +969,7 @@ export class SkillPlay {
   async dodgeCard(p, card) {
     if (!has(p, 'cnS1')) return false;
     const t = cardType(card);
-    const bad = (t === 'bank' && card.amount < 0) || t === 'repair' || (t === 'move' && (card.jail || card.back));
+    const bad = (t === 'bank' && card.amount < 0) || t === 'repair' || (t === 'move' && card.jail);
     if (!bad || Math.random() >= param(p, 'cnS1').chance) return false;
     credit(p, 'cnS1');
     await this.bc(title('cnS1'), `${named(p)} rút phải thẻ xấu, <b>Bảo Hộ Lao Động</b> cho bỏ qua: “${card.text}”.`, { ms: 2600 });
@@ -1284,9 +1284,10 @@ export class SkillPlay {
    * Sau khi lắc, trước khi quân đi: Xí Ngầu Gian (lắc lại một viên) và Quay
    * Đầu (đi lùi). Gộp chung một lần hỏi để người có cả hai không phải bấm hai lần.
    *
-   * Có Quay Đầu thì hỏi trên bàn cờ: ô đi tới và ô đi lùi cùng sáng, bấm ô nào
-   * đi ô ấy; lắc lại viên nào là nút phụ trên bảng chọn. Chỉ có Xí Ngầu Gian thì
-   * không có ô nào để chọn, vẫn hỏi bằng hộp thoại.
+   * Hỏi thẳng trên bàn cờ: ô sẽ tới sáng lên (có Quay Đầu thì thêm ô đi lùi),
+   * bấm ô nào đi ô ấy. Có Xí Ngầu Gian thì hai viên xí ngầu cũng sáng vòng,
+   * bấm viên nào lắc lại viên ấy — người chơi nhìn đúng mặt số mình muốn bỏ,
+   * không phải đọc nút "lắc lại viên 3" rồi dò xem viên 3 nằm bên nào.
    * @returns {Promise<{d:object, back:boolean}>}
    */
   async afterRoll(p, d) {
@@ -1299,40 +1300,23 @@ export class SkillPlay {
       const fwd = (p.pos + d.sum) % 40;
       const back = (p.pos - d.sum + 40) % 40;
       const left = (id) => { const n = usesLeft(p, id); return n > 1 ? ` (còn ${n} lần trước khi qua ô Bắt Đầu)` : ''; };
-      const rerolls = canReroll ? [
-        { label: `Lắc lại viên ${d.a}`, value: 'a' },
-        { label: `Lắc lại viên ${d.b}`, value: 'b' },
-      ] : [];
-      const rerollNote = canReroll ? `Xí Ngầu Gian${left('dd3')}: lắc lại một viên, kết quả mới là kết quả cuối.` : '';
+      const rolledText = `Lắc ra ${d.a} + ${d.b}${d.bike ? `, đạp xe ${d.sum} ô` : ` = ${d.sum}`}`;
+      const fwdLine = `Đi tới: <b>${tileLabel(fwd)}</b>${this.tileInfo(p, fwd, d)}`;
 
-      let v;
-      if (canBack) {
-        const pick = await this.g.pickTile([fwd, back], {
-          eyebrow: `Kỹ năng · ${skillById('dh3').name}${left('dh3')}`,
-          title: `Lắc ra ${d.a} + ${d.b}${d.bike ? `, đạp xe ${d.sum} ô` : ` = ${d.sum}`}: đi tới hay đi lùi?`,
-          sub: `Đi tới: <b>${tileLabel(fwd)}</b>${this.tileInfo(p, fwd, d)}<br>
-            Đi lùi: <b>${tileLabel(back)}</b>${this.tileInfo(p, back, d)}`,
-          note: rerollNote,
-          owned: false,
-          quick: true,
-          extra: rerolls,
-          cancel: 'Đi tới như thường',
-        }, this.g.events.localMs);
-        v = pick === back ? 'back' : pick === 'a' || pick === 'b' ? pick : 'go';
-      } else {
-        v = await this.ask({
-          id: 'dd3',
-          heading: 'Sau khi lắc',
-          body: `<p>Lắc ra <b>${d.a} + ${d.b}</b>${d.bike ? `, đạp xe đi <b>${d.sum}</b> ô` : ` = <b>${d.sum}</b>`}.</p>
-            <p>Đi tới: <b>${tileLabel(fwd)}</b>${this.tileInfo(p, fwd, d)}</p>
-            <p>${rerollNote}</p>`,
-          buttons: [
-            { label: `Đi tới · ${tileLabel(fwd)}`, value: 'go', cls: 'btn-primary' },
-            ...rerolls.map((r) => ({ ...r, cls: 'btn-ghost' })),
-          ],
-          escValue: 'go',
-        });
-      }
+      const pick = await this.g.pickTile(canBack ? [fwd, back] : [fwd], {
+        eyebrow: `Kỹ năng · ${[canBack && `${skillById('dh3').name}${left('dh3')}`,
+          canReroll && `${skillById('dd3').name}${left('dd3')}`].filter(Boolean).join(' · ')}`,
+        title: canBack
+          ? `${rolledText}: đi tới hay đi lùi?`
+          : `${rolledText}: đi tới ${tileLabel(fwd)} hay lắc lại một viên?`,
+        sub: canBack ? `${fwdLine}<br>Đi lùi: <b>${tileLabel(back)}</b>${this.tileInfo(p, back, d)}` : fwdLine,
+        note: canReroll ? 'Xí Ngầu Gian: kết quả lắc lại là kết quả cuối, kể cả khi xấu hơn.' : '',
+        owned: false,
+        quick: true,
+        dice: canReroll ? ['a', 'b'] : undefined,
+        cancel: canBack ? 'Đi tới như thường' : undefined,
+      }, this.g.events.localMs);
+      const v = pick === back && canBack ? 'back' : pick === 'a' || pick === 'b' ? pick : 'go';
 
       if (v === 'back') {
         spend(p, 'dh3');
@@ -1348,8 +1332,8 @@ export class SkillPlay {
         const a = v === 'a' ? n : d.a;
         const b = v === 'b' ? n : d.b;
         d = this.shape(p, { a, b, sum: a + b, isDouble: a === b, bike: d.bike });
-        this.g.netEmit('dice', d);
-        await this.g.scene.rollDiceAnim(d.a, d.b);
+        this.g.netEmit('dice', { ...d, only: v === 'a' ? 0 : 1 });
+        await this.g.scene.rollDiceAnim(d.a, d.b, v === 'a' ? 0 : 1);
         await this.bc(title('dd3'), `${named(p)} lắc lại một viên, giờ là <b>${d.a} + ${d.b}</b>${
           d.bike ? `, đạp xe đi <b>${d.sum}</b> ô` : ` = <b>${d.sum}</b>`}.`, { ms: 2000 });
         continue;

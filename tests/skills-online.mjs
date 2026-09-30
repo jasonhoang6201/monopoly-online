@@ -119,7 +119,8 @@ await D.evaluate(() => {
   c.hud.refresh(); c.sync(); c.restoreActions();
 });
 await O.bringToFront();
-ok(await until(async () => (await O.locator('.pcard-skill').count()) === 1), 'máy kia thấy nhãn "+3 ĐIỂM" trên thẻ người đang đi');
+ok(await until(async () => (await O.evaluate(() => window.__monopoly.controller.state.current.skillPoints)) === 3),
+  'máy kia nhận 3 điểm kỹ năng của người đang đi');
 ok((await O.locator('#actions button[data-key="k"]').count()) === 0, 'máy ngồi xem không có nút Kỹ năng');
 
 await D.bringToFront();

@@ -68,7 +68,7 @@ function sim() {
       const card = deck[Math.floor(Math.random() * deck.length)];
       if (card.type === 'move') {
         if (card.jail) { toJail(); return; }
-        if (card.back) { move(-card.back, false); return; }
+        if (card.ahead) { move(card.ahead); return; }
         const pool = card.nearest ? NEAREST[card.nearest] : [card.to ?? 0];
         const ahead = (id) => (((id - pos) % 40) + 40) % 40 || 40;
         const dest = pool.reduce((a, b) => (ahead(b) < ahead(a) ? b : a));
@@ -189,7 +189,7 @@ function cardValue(card, from) {
   if (t === 'repair') return -(6 * card.perHouse);
   if (t === 'move') {
     if (card.jail) return -120;
-    if (card.back) return -risk((from - card.back + 40) % 40);
+    if (card.ahead) { const to = (from + card.ahead) % 40; return (to < from ? GO_SALARY : 0) - risk(to); }
     const pool = card.nearest ? NEAREST[card.nearest] : [card.to ?? 0];
     const ahead = (id) => (((id - from) % 40) + 40) % 40 || 40;
     const dest = pool.reduce((a, b) => (ahead(b) < ahead(a) ? b : a));
@@ -211,7 +211,7 @@ function bestOf(deck, n, from) {
   return tot / cnt - one;
 }
 const badCost = (deck, from) => {
-  const bad = deck.filter((c) => { const t = c.type ?? 'bank'; return (t === 'bank' && c.amount < 0) || t === 'repair' || (t === 'move' && (c.jail || c.back)); });
+  const bad = deck.filter((c) => { const t = c.type ?? 'bank'; return (t === 'bank' && c.amount < 0) || t === 'repair' || (t === 'move' && c.jail); });
   return { p: bad.length / deck.length, cost: bad.reduce((n, c) => n - cardValue(c, from), 0) / Math.max(1, bad.length) };
 };
 

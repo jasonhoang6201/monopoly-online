@@ -34,16 +34,16 @@ const JAIL = 10;
  * Thẻ `nearest` luôn tìm ô gần nhất **phía trước** — đi giật lùi tới nhà ga thì
  * vừa mất lương vừa khó hiểu.
  *
- * `back` là đường duy nhất đi ngược, và `steps` khi ấy âm; `game/controller.js`
- * không cộng lương cho nước lùi.
+ * Không thẻ nào dắt quân đi ngược chiều kim đồng hồ: người chơi đọc "đi tới ô
+ * Thuế" mà thấy quân bò giật lùi thì tưởng game lỗi. `ahead` là tiến đúng N ô.
  *
  * @returns {{tile:number, steps:number}}
  */
 export function moveDest(card, from) {
   if (card.jail) return { tile: JAIL, steps: 0 };
-  if (card.back) {
-    const back = Math.min(card.back, 39);
-    return { tile: ((from - back) % 40 + 40) % 40, steps: -back };
+  if (card.ahead) {
+    const n = Math.min(card.ahead, 39);
+    return { tile: (from + n) % 40, steps: n };
   }
   const pool = card.nearest === 'station' ? STATION_TILES
     : card.nearest === 'utility' ? UTILITY_TILES

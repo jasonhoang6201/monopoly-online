@@ -59,7 +59,7 @@ const offerTiles = (offer) => [...(offer?.give ?? []), ...(offer?.get ?? [])];
  * Bao nhiêu thẻ di chuyển được nối nhau trong một nước đi.
  *
  * Thẻ di chuyển thả quân xuống ô mới, ô mới có thể lại là ô Cơ Hội / Khí Vận.
- * Hai nấc là đủ cho mấy chuỗi đáng nhớ ("đi tới nhà ga" rồi "lùi ba ô"), còn
+ * Hai nấc là đủ cho mấy chuỗi đáng nhớ ("đi tới nhà ga" rồi "lố ba căn phố"), còn
  * quá đó thì cắt: lượt kéo dài vô tận không còn vui, và về lý thuyết bộ bài đủ
  * thẻ di chuyển để chạy vòng vòng không dứt.
  */
@@ -491,7 +491,7 @@ export class Game {
     if (name === 'learn') { this.skills.onLearnMsg(data); return; }
     const sc = this.scene;
     if (name === 'dice') {
-      await sc.rollDiceAnim(data.a, data.b);
+      await sc.rollDiceAnim(data.a, data.b, data.only);
     } else if (name === 'move') {
       sc.clearHighlight();
       await sc.moveToken(data.seat, data.from, data.steps);
@@ -1497,7 +1497,7 @@ export class Game {
    * Thẻ di chuyển: dắt quân tới ô khác rồi **xử ô ấy như vừa lắc tới**.
    *
    * Quân đi bộ qua từng ô chứ không nhảy thẳng, nên ghé ngang ô Bắt Đầu là lãnh
-   * lương thật — trừ nước lùi và nước bị giải về Khám Lớn.
+   * lương thật — trừ nước bị giải về Khám Lớn.
    *
    * Xí ngầu của nước lắc vừa rồi đi theo luôn: đáp xuống ô dịch vụ thì tiền
    * thuê vẫn tính theo số vừa lắc, chứ không lắc lại một lần nữa.

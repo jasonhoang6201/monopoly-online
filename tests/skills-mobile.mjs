@@ -192,12 +192,14 @@ for (const [W, H] of SIZES) {
   await page.waitForTimeout(500);
 
   /* ---- sau khi lắc: chọn ô đi tới / đi lùi trên bàn cờ, 3 nút phụ ---- */
-  await run(page, `window.__ar = c.skills.afterRoll(s.current, { a: 3, b: 4, sum: 7, isDouble: false });`);
+  await run(page, `await c.scene.rollDiceAnim(3, 4);
+    window.__ar = c.skills.afterRoll(s.current, { a: 3, b: 4, sum: 7, isDouble: false });`);
   await page.locator('.tile-pick[data-quick]:not(.out)').waitFor({ timeout: 5000 });
   await page.waitForTimeout(400);
   await shot('6-afterroll');
   const count = await page.locator('.tile-pick:not(.out) .tp-acts button').count();
-  ok(`${tag} · Quay Đầu chọn trên bàn cờ: 2 nút lắc lại + nút đi như thường`, count === 3, `${count} nút`);
+  const dice = await page.evaluate(() => !!window.__monopoly.scene.dicePick);
+  ok(`${tag} · Quay Đầu chọn trên bàn cờ: xí ngầu bấm được + nút đi như thường`, count === 1 && dice, `${count} nút, xí ngầu ${dice}`);
   for (let i = 0; i < count; i++) {
     await tappable(tag, `bảng chọn sau khi lắc: nút ${i + 1}/${count}`, page, '.tile-pick:not(.out) .tp-acts button', i);
   }

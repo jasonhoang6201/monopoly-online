@@ -194,13 +194,15 @@ const r = await page.evaluate(async () => {
   out.ticketOnBankrupt = st.decks.chest.gone.size === 0 && st.players[2].cards.length === 0;
   st.players[2].bankrupt = false;
 
-  /* Thẻ di chuyển: ô đến luôn tính đường đi tới, trừ nước lùi.
+  /* Thẻ di chuyển: ô đến luôn tính đường đi tới, không thẻ nào đi lùi.
      Đứng ở ô 7 (Cơ Hội đầu bàn) thì ga gần nhất phía trước là ô 15, dịch vụ
      gần nhất là ô 12, và "về Bắt Đầu" phải đi trọn 33 ô chứ không giật lùi. */
   out.moveStation = cr.moveDest({ type: 'move', nearest: 'station' }, 7);
   out.moveUtility = cr.moveDest({ type: 'move', nearest: 'utility' }, 7);
   out.moveGo = cr.moveDest({ type: 'move', to: 0 }, 7);
-  out.moveBack = cr.moveDest({ type: 'move', back: 3 }, 2);
+  out.moveAhead = cr.moveDest({ type: 'move', ahead: 3 }, 38);
+  out.noBack = [...CHANCE, ...CHEST].filter((x) => x.type === 'move' && !x.jail)
+    .every((x) => [0, 2, 7, 17, 22, 33, 36, 38].every((from) => cr.moveDest(x, from).steps > 0));
   out.moveJail = cr.moveDest({ type: 'move', jail: true }, 36);
   // Ô đến của mọi thẻ di chuyển trong bộ đều nằm trên bàn, và đi tới được
   out.moveAllValid = [...CHANCE, ...CHEST]
@@ -265,8 +267,9 @@ ok('thẻ đi tới dịch vụ gần nhất phía trước', r.moveUtility.tile
   JSON.stringify(r.moveUtility));
 ok('thẻ về ô Bắt Đầu đi trọn vòng chứ không giật lùi',
   r.moveGo.tile === 0 && r.moveGo.steps === 33, JSON.stringify(r.moveGo));
-ok('thẻ lùi ô trả số bước âm', r.moveBack.tile === 39 && r.moveBack.steps === -3,
-  JSON.stringify(r.moveBack));
+ok('thẻ tiến N ô đi tới, vòng qua ô Bắt Đầu', r.moveAhead.tile === 1 && r.moveAhead.steps === 3,
+  JSON.stringify(r.moveAhead));
+ok('mọi thẻ di chuyển trong bộ đều đi theo chiều kim đồng hồ', r.noBack);
 ok('thẻ giải về Khám Lớn không đi bộ', r.moveJail.tile === 10 && r.moveJail.steps === 0);
 ok('mọi thẻ di chuyển trong bộ đều ra ô hợp lệ', r.moveAllValid, `${r.moveCount} thẻ`);
 ok('bảng túi thẻ đọc được nội dung lá đang giữ', r.bag);

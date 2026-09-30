@@ -235,6 +235,8 @@ export default class BoardScene extends Phaser.Scene {
        cờ ngừng nhận bấm tới hết ván. Xếp chồng ở đây thì gỡ ai ra cũng được. */
     this.clickStack = [];
     this.baseTileClick = null;
+    /* Phiên cho bấm vào xí ngầu (xem `armDicePick`), null nếu không có */
+    this.dicePick = null;
     this.overlay = this.add.container(0, 0).setDepth(2);
     /* Vệt đèn báo ô đã có nhà — nằm trên nước màu chủ đất, dưới quân cờ */
     this.glowLayer = this.add.container(0, 0).setDepth(3);
@@ -431,12 +433,20 @@ export default class BoardScene extends Phaser.Scene {
       this.onTileHover?.(id);
     };
 
-    this.input.on('pointermove', (p) => setHover(this.tileAt(p.x, p.y)));
+    this.input.on('pointermove', (p) => {
+      setHover(this.tileAt(p.x, p.y));
+      // Xí ngầu nằm giữa lòng bàn, không đè lên ô nào, nên con trỏ tính riêng
+      if (this.dicePick && this.hoverTile == null) {
+        this.input.setDefaultCursor(this.dieAt(p.x, p.y) == null ? 'default' : 'pointer');
+      }
+    });
     // Chuột đi khỏi khung vẽ (sang cột điều khiển hay ra ngoài cửa sổ)
     // thì không còn nhận pointermove nữa — phải tự tắt nền ô đang sáng
     this.input.on(Phaser.Input.Events.GAME_OUT, () => setHover(null));
 
     this.input.on('pointerdown', (p) => {
+      const die = this.dicePick ? this.dieAt(p.x, p.y) : null;
+      if (die != null) { this.dicePick.fn(die); return; }
       const id = this.tileAt(p.x, p.y);
       if (id != null) this.onTileClick?.(id);
     });
@@ -802,14 +812,20 @@ export default class BoardScene extends Phaser.Scene {
    * Chuyển động chạy bằng vòng cập nhật của scene chứ không bằng tween:
    * có trọng lực, có hệ số nảy, có ma sát hãm vòng quay — nhờ vậy nhịp rơi
    * và nhịp lăn ăn khớp với nhau như xúc xắc thật.
+   *
+   * @param {number} [only] 0 hoặc 1: chỉ lăn viên này (Xí Ngầu Gian lắc lại
+   *   một viên), viên kia nằm yên đúng mặt cũ
    */
-  rollDiceAnim(a, b) {
+  rollDiceAnim(a, b, only = null) {
     const S = this.size;
     const G = S * 9.5;            // trọng lực, điểm ảnh/giây²
     const REST = 0.42;            // hệ số nảy sau mỗi lần chạm bàn
     const SETTLE = 850;           // mốc bắt đầu nắn về mặt số (ms)
     const SNAP = 280;             // thời gian nắn (ms)
     const values = [a, b];
+    // Viên đứng yên mà đang ẩn (máy vừa vào giữa chừng) thì cho lăn luôn, khỏi mất một viên
+    const lives = this.dice.map((d, i) => only == null || only === i || !d.visible);
+    const live = (i) => lives[i];
 
     // Tiếng lắc trong ống trước, rồi từng cú chạm bàn kêu theo đúng lúc nảy
     audio.sfx('shake', { count: 10, span: 0.5 });
@@ -839,6 +855,7 @@ export default class BoardScene extends Phaser.Scene {
     });
 
     this.dice.forEach((d, i) => {
+      if (!live(i)) return;
       this.diceQ[i] = qRandom();
       d.setVisible(true).setAlpha(0).setAngle(0);
       this.diceShadow[i].setVisible(true).setAlpha(0);
@@ -856,6 +873,7 @@ export default class BoardScene extends Phaser.Scene {
         const t = now - t0;
 
         for (let i = 0; i < sim.length; i++) {
+          if (!live(i)) continue;
           const s = sim[i];
           const home = this.diceHome[i];
           const snapping = t >= SETTLE;
@@ -917,6 +935,7 @@ export default class BoardScene extends Phaser.Scene {
         /* Đã nằm yên: chốt đúng hướng mặt số rồi buông tay cho controller */
         this.events.off(Phaser.Scenes.Events.UPDATE, onUpdate);
         this.dice.forEach((d, i) => {
+          if (!live(i)) return;
           this.diceQ[i] = sim[i].target ?? qForValue(values[i], this.diceQ[i]);
           this.paintDieFrame(i);
           d.setPosition(this.diceHome[i].x, this.diceHome[i].y);
@@ -928,7 +947,8 @@ export default class BoardScene extends Phaser.Scene {
           });
         });
         const [d1, d2] = this.dice;
-        this.flash((d1.x + d2.x) / 2, d1.y, a === b ? 0xE9CE85 : 0xFFFFFF, a === b ? 1.0 : 0.55);
+        const fx = only == null ? (d1.x + d2.x) / 2 : this.dice[only].x;
+        this.flash(fx, d1.y, a === b ? 0xE9CE85 : 0xFFFFFF, a === b ? 1.0 : 0.55);
         this.time.delayedCall(200, resolve);
       };
       this.events.on(Phaser.Scenes.Events.UPDATE, onUpdate);
@@ -936,8 +956,56 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   hideDice() {
+    this.disarmDicePick();
     this.dice.forEach((d) => d.setVisible(false));
     this.diceShadow.forEach((s) => s.setVisible(false));
+  }
+
+  /** Viên xí ngầu nằm dưới điểm (toạ độ khung vẽ), hoặc null. */
+  dieAt(sx, sy) {
+    if (!this.dice[0].visible) return null;
+    const r = this.dieSize * 0.62;
+    const i = this.diceHome.findIndex((h) => Math.hypot(sx - h.x, sy - h.y) <= r);
+    return i < 0 ? null : i;
+  }
+
+  /**
+   * Cho bấm vào từng viên xí ngầu (Xí Ngầu Gian: bấm viên nào lắc lại viên ấy).
+   *
+   * Vòng sáng vẽ lại mỗi nhịp theo `diceHome`, nên đổi cỡ cửa sổ giữa chừng thì
+   * vòng vẫn bám đúng viên. Depth 29.5: trên màn tối của phiên chọn ô (5.4) để
+   * hai viên không bị phủ mờ như phần bàn không bấm được, dưới chính viên xí ngầu.
+   *
+   * @param {(i:number)=>void} fn nhận 0 (viên trái) hoặc 1 (viên phải)
+   */
+  armDicePick(fn) {
+    this.disarmDicePick();
+    const g = this.add.graphics().setDepth(29.5);
+    const beat = { t: 0 };
+    const draw = () => {
+      g.clear();
+      const k = 0.55 + beat.t * 0.45;
+      for (const h of this.diceHome) {
+        const r = this.dieSize * (0.66 + beat.t * 0.05);
+        g.fillStyle(0xC8A048, 0.16 * k).fillCircle(h.x, h.y, r);
+        g.lineStyle(Math.max(2, this.size * 0.005), 0xFFE9B0, k).strokeCircle(h.x, h.y, r);
+      }
+    };
+    const tween = this.tweens.add({
+      targets: beat, t: 1, duration: 880, yoyo: true, repeat: -1,
+      ease: 'Sine.easeInOut', onUpdate: draw,
+    });
+    draw();
+    this.dicePick = { fn, g, tween };
+  }
+
+  disarmDicePick() {
+    const p = this.dicePick;
+    if (!p) return;
+    this.dicePick = null;
+    p.tween.remove();
+    p.g.destroy();
+    this.input.setDefaultCursor(this.hoverTile == null ? 'default' : 'pointer');
   }
 
   // -------------------------------------------------- chủ sở hữu & nhà cửa
