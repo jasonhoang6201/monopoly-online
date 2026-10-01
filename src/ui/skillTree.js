@@ -30,8 +30,8 @@ import { BRANCHES, SKILLS, KINDS, RESPEC_FEE, MAX_LEVEL } from '../data/skills.j
 import {
   skillById, branchByKey, skillCost, skillState, canLearn, learnSkill, levelOf,
   canLevelUp, nextCost, lvParams, levelLine, spentIn, branchMax, fillText,
-  canRespec, respec, featMet, featText, growNeed, growText, growProgress, rivalUlt,
-  isOff, switchable,
+  canRespec, respec, growNeed, growText, growProgress, rivalUlt,
+  isOff, switchable, skillNow,
 } from '../core/skills.js';
 import { audio } from '../audio/audio.js';
 import { money } from '../data/board.js';
@@ -89,8 +89,7 @@ const EDGES = SKILLS.flatMap((s) => (s.requires ?? []).map((r) => ({ from: r, to
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 const TIER_NAME = { 1: 'Cấp 1', 2: 'Cấp 2', 3: 'Cấp 3', 4: 'Tối thượng' };
-const tierName = (s) => (s.feat ? `${TIER_NAME[s.tier]} · Thành tựu`
-  : isSide(s) ? `${TIER_NAME[s.tier]} · Nhánh phụ` : TIER_NAME[s.tier]);
+const tierName = (s) => (isSide(s) ? `${TIER_NAME[s.tier]} · Nhánh phụ` : TIER_NAME[s.tier]);
 
 /** Tiến độ tới level kế tiếp của ô đã học: "Kiếm được 150$ từ kỹ năng này (120/150$)". */
 function growLine(player, s, lv, st) {
@@ -117,7 +116,7 @@ function buildTree(player, readOnly, manage) {
   const nodes = SKILLS.map((s) => {
     const b = branchByKey(s.branch);
     return `
-      <button type="button" class="st-node${s.tier === 4 ? ' ult' : ''}${s.feat ? ' feat' : ''}" data-id="${s.id}"
+      <button type="button" class="st-node${s.tier === 4 ? ' ult' : ''}" data-id="${s.id}"
               style="${pct(posOf(s))};--c:${b.color}" aria-label="${esc(s.name)}">
         <span class="st-face">${skillIcon(s.icon)}</span>
         <span class="st-cost">${skillCost(s)}</span>
@@ -172,6 +171,9 @@ function detailHtml(player, s, readOnly, manage, st) {
   const cost = nextCost(player, s);
   const maxed = lv >= MAX_LEVEL;
   const kind = KINDS[s.kind];
+  /* Số tiền sẽ nhận / phải trả tính trên thế cờ hiện tại — người chơi khỏi
+     tự nhân "3% + 1% mỗi lần qua" trong đầu. Cần bàn cờ; thiếu thì bỏ mục. */
+  const now = skillNow(st, player, s);
 
   /* Điều kiện ghi thành từng dòng có dấu tích, để người chơi thấy ngay mình
      đang vướng ở đâu thay vì chỉ thấy một nút bấm bị mờ. */
@@ -182,9 +184,6 @@ function detailHtml(player, s, readOnly, manage, st) {
     conds.push({ ok: have, text: `Đã học ${names}` });
   } else {
     conds.push({ ok: true, text: 'Không cần học kỹ năng nào trước' });
-  }
-  if (s.feat) {
-    conds.push({ ok: featMet(player, s), text: `Mở khoá: ${esc(featText(player, s))}` });
   }
   if (s.tier === 4 && !lv) {
     const other = SKILLS.find((x) => x.tier === 4 && x.branch === s.branch && x.id !== s.id);
@@ -202,7 +201,6 @@ function detailHtml(player, s, readOnly, manage, st) {
 
   /* Người chơi hỏi nhiều nhất là "có phải bấm không, bấm mấy lần" — nên nói
      thẳng ra thay vì chỉ ghi nhãn. */
-  const featNote = s.feat ? ' Đây là kỹ năng thành tựu: làm đủ việc ghi ở Điều kiện thì mới học được.' : '';
   const ultNote = s.tier === 4 ? ' Mỗi nhánh có hai tối thượng, <b>chỉ được học một</b>; muốn đổi thì tẩy điểm.'
     : isSide(s) ? ' Ô nhánh phụ: không dẫn lên tối thượng, học vì tác dụng của chính nó.' : '';
   const howto = (s.kind === 'passive'
@@ -217,8 +215,8 @@ function detailHtml(player, s, readOnly, manage, st) {
         ? `Không cần bật: mở kho <b>Dùng kỹ năng</b> trên thanh nút, bấm vào ô để chọn rồi bấm Chốt, kỹ năng chạy ngay lúc ấy. `
         + `Dùng được ${esc(s.when)}. <b>${esc(s.uses)}</b>.`
       : `Học xong kỹ năng nằm <b>tắt</b> trong kho <b>Dùng kỹ năng</b> trên thanh nút. Trong kho, bấm vào ô để bật (ô có màu) `
-      + `hoặc chọn cách dùng, chọn "Không" là tắt; bấm Chốt để áp dụng. Dùng được ${esc(s.when)}. <b>${esc(s.uses)}</b>. `
-      + 'Dùng hết lượt thì cuối lượt tự về tắt.') + ultNote;
+      + `hoặc chọn cách dùng, chọn "Không" là tắt; bấm Chốt để áp dụng. Dùng được ${esc(s.when)}. <b>${esc(s.uses)}</b>.`
+      + (s.levels.some((x) => x.charges || x.cooldown) ? ' Dùng hết lượt thì cuối lượt tự về tắt.' : '')) + ultNote;
 
   /* Ba level xếp thành ba dòng: level đang có tô sáng, level kế tiếp đánh dấu
      để người chơi so được mình sẽ nhận thêm gì trước khi bấm. Số dạng khoảng
@@ -251,7 +249,7 @@ function detailHtml(player, s, readOnly, manage, st) {
          </button>`;
 
   return `
-    <div class="sd-card${s.tier === 4 ? ' ult' : ''}${s.feat ? ' feat' : ''}${off ? ' off' : ''} is-${readOnly && !lv ? 'locked' : state}" style="--c:${b.color}" role="dialog"
+    <div class="sd-card${s.tier === 4 ? ' ult' : ''}${off ? ' off' : ''} is-${readOnly && !lv ? 'locked' : state}" style="--c:${b.color}" role="dialog"
          aria-label="${esc(s.name)}">
       <div class="sd-top">
         <span class="sd-icon">${skillIcon(s.icon)}</span>
@@ -271,13 +269,17 @@ function detailHtml(player, s, readOnly, manage, st) {
           <h4>Tác dụng${lv ? ` (level ${lv})` : ''}</h4>
           <p class="sd-effect">${esc(fillText(s.effect, lvParams(s, lv || 1)))}</p>
         </section>
+        ${now.length ? `<section>
+          <h4>${lv ? 'Số liệu lúc này' : 'Nếu học bây giờ'}</h4>
+          <dl class="sd-now">${now.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+        </section>` : ''}
         <section>
           <h4>Level</h4>
           <ul class="sd-lvs">${levels}</ul>
         </section>
         <section>
           <h4>Cách dùng</h4>
-          <p>${howto}${featNote}</p>
+          <p>${howto}</p>
         </section>
         ${readOnly ? '' : `<section>
           <h4>Điều kiện</h4>
@@ -414,8 +416,7 @@ export function mountSkillTree(player, o = {}) {
               : `Level ${lv}/${MAX_LEVEL} · cần 1 điểm để lên level`,
         ready: 'Bấm để nâng cấp',
         poor: `Thiếu ${skillCost(s) - player.skillPoints} điểm`,
-        locked: s.requires?.some((r) => player.skills.includes(r)) && s.feat ? featText(player, s)
-          : `Cần học ${s.requires?.map((r) => skillById(r).name).join(' hoặc ')}`,
+        locked: `Cần học ${s.requires?.map((r) => skillById(r).name).join(' hoặc ')}`,
       }[st];
     const noteCls = readOnly ? (lv ? 'learned' : 'locked') : st;
     const offNote = lv && isOff(player, s.id) ? ' · đang tắt' : '';

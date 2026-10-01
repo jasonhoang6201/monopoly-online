@@ -36,7 +36,6 @@ export function snapshot(st) {
       lapUses: { ...p.lapUses },
       jails: p.jails,
       skillUse: copyUse(p.skillUse),
-      feats: { ...p.feats },
       lotto: p.lotto,
       betSet: p.betSet ? { ...p.betSet } : null,
       stake: p.stake,
@@ -120,7 +119,6 @@ export function applySnapshot(st, snap) {
     p.lapUses = { ...(s.lapUses ?? p.lapUses) };
     p.jails = s.jails ?? p.jails;
     p.skillUse = copyUse(s.skillUse ?? p.skillUse);
-    p.feats = { ...(s.feats ?? p.feats) };
     p.lotto = s.lotto ?? null;
     p.betSet = s.betSet ? { ...s.betSet } : null;
     p.stake = s.stake ?? null;

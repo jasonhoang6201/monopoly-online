@@ -21,7 +21,7 @@ import { cardOf, CARD_KINDS, cardName, cardEffect, DECKS } from '../data/cards.j
 import { inventoryModal } from '../ui/inventory.js';
 import { EventRunner } from './eventRunner.js';
 import { SkillPlay } from './skillPlay.js';
-import { has, watchCash, bumpFeat, offSpent, grantLapPoint } from '../core/skills.js';
+import { has, offSpent, grantLapPoint } from '../core/skills.js';
 import { snapshot, fromSnapshot, applySnapshot } from '../core/serialize.js';
 import { Hud, Broadcast } from '../ui/hud.js';
 import { QuickView } from '../ui/quickview.js';
@@ -1154,7 +1154,7 @@ export class Game {
   async takeRoll() {
     const st = this.state;
     const p = st.current;
-    // Cược, Xe Đạp đang bật thì tự đặt trước khi lắc
+    // Cược đang bật thì tự đặt trước khi lắc
     await this.skills.beforeRoll(p);
     if (st.over || p.bankrupt) { await this.endTurn(); return; }
     // Xe Đạp: đi theo viên nhỏ hơn — nắn kết quả trước mọi hộp hỏi sau khi lắc
@@ -1212,7 +1212,6 @@ export class Game {
       if (pos === 0 && steps > 0) passedGo = true;
     });
     p.pos = ((from + steps) % 40 + 40) % 40;
-    bumpFeat(p, 'steps', Math.abs(steps));
     this.hud.refresh();
     this.sync();
     await this.skills.pickup(p);
@@ -1224,9 +1223,12 @@ export class Game {
          tính cả lần qua này. */
       const landed = p.pos === 0;      // dừng đúng ô 0, không chỉ đi ngang
       const points = this.skills.lapStart(p);
-      const { total: base, parts } = st.payslip(landed, p);
-      // Cò Quay Lương: quay gấp đôi hoặc một nửa
-      const { pay, note: spinNote } = this.skills.spinPay(p, base);
+      const { total, parts } = st.payslip(landed, p);
+      // Cò Quay Lương: quay gấp đôi hoặc một nửa — chỉ phần lương, tiền giữ nhà Sổ Hồng đứng ngoài
+      const deed = parts.ac3 ?? 0;
+      const spun = this.skills.spinPay(p, total - deed);
+      const pay = spun.pay + deed;
+      const spinNote = spun.note + (deed ? ` · <b>Sổ Hồng</b> +${money(deed)}` : '');
       const cut = st.modMult('salary') !== 1;
       st.laps += 1;
       addPressure(st, PRESSURE.lap);
@@ -1250,7 +1252,7 @@ export class Game {
     await this.skills.tours(p, from, steps);
     if (st.over || p.bankrupt) return;
 
-    // Dừng chung ô với người khác: thành tựu và Hai Ngón chạy trước khi xử lý ô
+    // Dừng chung ô với người khác: Hai Ngón chạy trước khi xử lý ô
     await this.skills.landed(p);
     if (st.over || p.bankrupt) return;
 
@@ -1346,9 +1348,8 @@ export class Game {
       return;
     }
 
-    // Đất của chính mình
+    // Đất của chính mình: không báo gì, chỉ Chủ Nhà (có tiền) mới hiện thông báo
     if (ownerId === p.id) {
-      await this.bc.show('ĐẤT NHÀ', `<b>${p.name}</b> về thăm đất của mình.`, { ms: 1900 });
       await this.skills.atHome(p);
       return;
     }
@@ -1906,7 +1907,6 @@ export class Game {
     const p = this.state.players[playerId];
     this.state.dryTurn = false;
     p.money += amount;
-    watchCash(p);
     this.hud.refresh();
     this.sync();
     this.hud.flashMoney(playerId, true);
@@ -1924,7 +1924,6 @@ export class Game {
     const p = this.state.players[playerId];
     this.state.dryTurn = false;
     p.money -= amount;
-    watchCash(p);
     this.hud.refresh();
     this.sync();
     this.hud.flashMoney(playerId, false);
@@ -1953,8 +1952,6 @@ export class Game {
     st.dryTurn = false;
     from.money -= amount;
     to.money += amount;
-    watchCash(from);
-    watchCash(to);
     st.debt = null;
     this.hud.refresh();
     this.sync();

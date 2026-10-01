@@ -55,7 +55,7 @@ async function openGame(viewport) {
   await run(`
     for (const p of s.players) {
       p.money = 1500; p.skills = []; p.skillPoints = 0; p.laps = 0; p.cooldowns = {};
-      p.skillLv = {}; p.lapUses = {}; p.jails = 0; p.skillUse = {}; p.feats = {};
+      p.skillLv = {}; p.lapUses = {}; p.jails = 0; p.skillUse = {};
       p.lotto = null; p.spin = false; p.stake = null; p.jailSits = 0;
     }
     c.hud.refresh(); c.scene.refresh(s); c.restoreActions();

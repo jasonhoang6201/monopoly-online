@@ -7,9 +7,9 @@
  */
 import {
   SKILLS, BRANCHES, TIER_COST, LEVEL_COST, MAX_LEVEL, RESPEC_FEE, ULT_MIX, ULT_SPECIAL,
-  FEATS, BROKE_LINE, WAYS, GROW_BY,
+  WAYS, GROW_BY,
 } from '../data/skills.js';
-import { BOARD, money } from '../data/board.js';
+import { BOARD, money, tileLabel, GO_SALARY } from '../data/board.js';
 
 const BY_ID = new Map(SKILLS.map((s) => [s.id, s]));
 
@@ -30,34 +30,6 @@ export const levelOf = (p, id) => (p?.skills?.includes(id) ? (p.skillLv?.[id] ??
 export const lvParams = (s, lv) => s.levels[Math.min(MAX_LEVEL, Math.max(1, lv)) - 1];
 
 /* ------------------------------------------------------------ tiến độ */
-
-/** Số đếm hiện tại của một thành tựu. */
-export function featValue(p, key) {
-  if (key === 'laps') return p?.laps ?? 0;
-  if (key === 'jails') return p?.jails ?? 0;
-  return p?.feats?.[key] ?? 0;
-}
-
-/** Kỹ năng thành tựu đã đủ điều kiện mở khoá chưa. Ô thường luôn là true. */
-export const featMet = (p, s) => !s.feat || featValue(p, s.feat.key) >= s.feat.n;
-
-/** Cộng vào một bộ đếm thành tựu. `laps`, `jails` tự tăng ở chỗ khác. */
-export function bumpFeat(p, key, n = 1) {
-  if (!p || p.bankrupt || !n) return;
-  p.feats = { ...p.feats, [key]: (p.feats?.[key] ?? 0) + n };
-}
-
-/**
- * Tiền mặt vừa đổi: tụt xuống dưới `BROKE_LINE` từ trên đó thì tính một lần
- * cho thành tựu `broke`. `low` nhớ đang ở dưới vạch — nằm lì dưới vạch nhiều
- * lượt vẫn chỉ là một lần, phải lên lại rồi tụt nữa mới đếm tiếp.
- */
-export function watchCash(p) {
-  if (!p || p.bankrupt) return;
-  const low = p.money < BROKE_LINE;
-  if (low && !p.feats?.low) p.feats = { ...p.feats, low: true, broke: (p.feats?.broke ?? 0) + 1 };
-  else if (!low && p.feats?.low) p.feats = { ...p.feats, low: false };
-}
 
 /** Tiến độ của một kỹ năng đã học: số lần đã chạy và số tiền đã mang về. */
 export const usage = (p, id) => ({ uses: p?.skillUse?.[id]?.n ?? 0, gain: p?.skillUse?.[id]?.gain ?? 0 });
@@ -124,13 +96,6 @@ export function progressText(have, need, isMoney, unit = 'lần') {
   return isMoney ? `${money(Math.min(have, need)).replace(/\$$/, '')}/${money(need)}` : `${Math.min(have, need)}/${need} ${unit}`;
 }
 
-/** Chữ điều kiện mở khoá của kỹ năng thành tựu kèm tiến độ. */
-export function featText(p, s) {
-  const f = FEATS[s.feat.key];
-  const have = featValue(p, s.feat.key);
-  return `${f.text}: ${progressText(have, s.feat.n, !!f.money, f.unit)}`;
-}
-
 /** Giá bước kế tiếp của ô này với người này: mở ô, hay lên một level. */
 export const nextCost = (p, s) => (levelOf(p, s.id) ? LEVEL_COST : skillCost(s));
 
@@ -150,7 +115,7 @@ const sunk = (p, s) => {
 export function skillState(player, id) {
   const s = skillById(id);
   if (player.skills.includes(id)) return 'learned';
-  if (!prereqMet(player, s) || !featMet(player, s) || rivalUlt(player, s)) return 'locked';
+  if (!prereqMet(player, s) || rivalUlt(player, s)) return 'locked';
   return player.skillPoints >= skillCost(s) ? 'ready' : 'poor';
 }
 
@@ -201,9 +166,6 @@ export function canLearn(player, id, st) {
   const rival = !lv && rivalUlt(player, s);
   if (rival) {
     return { ok: false, reason: `Đã chọn tối thượng "${rival.name}". Mỗi nhánh chỉ một tối thượng; tẩy điểm để đổi.`, cost, level };
-  }
-  if (!lv && !featMet(player, s)) {
-    return { ok: false, reason: `Chưa mở khoá: ${featText(player, s)}.`, cost, level };
   }
   const need = lv ? growNeed(player, s, level, st) : null;
   if (need) {
@@ -304,7 +266,7 @@ export function canRespec(player) {
  * **ngoài** `skills` và cố ý không bị xoá ở đây — không thì dùng xong tối
  * thượng, tẩy rồi học lại là bấm được ngay lần nữa.
  *
- * Tiến độ lên level (`skillUse`) và bộ đếm thành tựu (`feats`) cũng giữ lại:
+ * Tiến độ lên level (`skillUse`) cũng giữ lại:
  * đó là việc người chơi đã làm trong ván, học lại ô cũ vẫn phải trả đủ điểm
  * cho từng level nên giữ tiến độ không cho không được gì.
  */
@@ -706,4 +668,203 @@ export function ultColor(p) {
   if (!keys.length) return null;
   if (keys.length === 1) return branchByKey(keys[0]).color;
   return ULT_SPECIAL[keys.length] ?? ULT_MIX[keys.join(',')];
+}
+
+/* ================================================================
+   Số liệu hiện tại — thẻ chi tiết trên cây kỹ năng
+   ================================================================ */
+
+/** Giữa khoảng `[a, b]` — số tiền trung bình của level 1. Số thường trả nguyên. */
+const mid = (v) => (Array.isArray(v) ? (v[0] + v[1]) / 2 : v);
+/** Tiền dạng khoảng hiện "10–30$", số thường hiện "20$". */
+const cash = (v) => (Array.isArray(v) ? fillText('{$v}', { v }) : money(Math.round(v)));
+const pctOf = (v) => `${Math.round(v * 100)}%`;
+const others = (st, p) => st.alive().filter((q) => q.id !== p.id);
+const waitRow = (p, id) => (p.cooldowns?.[id] > 0
+  ? ['Trạng thái', `Chờ ${p.cooldowns[id]} lần qua ô Bắt Đầu`] : ['Trạng thái', 'Dùng được']);
+
+/**
+ * Những con số người chơi cần để biết kỹ năng này lúc này đáng bao nhiêu:
+ * số lần đã qua ô Bắt Đầu, số lần vào tù, số đất, và số tiền sẽ nhận / phải
+ * trả tính trên thế cờ hiện tại. Chưa học thì tính như vừa học xong (level
+ * 1), để người chơi so trước khi bỏ điểm. Level 1 có khoảng ngẫu nhiên thì
+ * hiện cả khoảng, hoặc lấy giữa khoảng khi phải cộng dồn.
+ *
+ * Chỉ đọc, không đổi gì — kể cả không rút số ngẫu nhiên (`roll`), để mở thẻ
+ * nhiều lần vẫn ra cùng một số.
+ * @returns {Array<[string, string]>} từng dòng nhãn → giá trị
+ */
+export function skillNow(st, p, s) {
+  if (!st || !p) return [];
+  const lv = levelOf(p, s.id) || 1;
+  const P = lvParams(s, lv);
+  const laps = p.laps ?? 0;
+  const jails = p.jails ?? 0;
+  const opp = others(st, p);
+  const mine = st.propertiesOf(p.id);
+  const out = [];
+  const row = (k, v) => out.push([k, v]);
+
+  switch (s.id) {
+    case 'cn1':
+      row('Trung bình mỗi lần di chuyển', `≈ ${money(Math.round(P.chance * mid(P.amount)))}`);
+      break;
+    case 'cn2a':
+      row('Lương mỗi lần qua ô Bắt Đầu', cash(Array.isArray(P.bonus) ? P.bonus.map((x) => GO_SALARY + x) : GO_SALARY + P.bonus));
+      break;
+    case 'cn2b':
+      for (const t of BOARD.filter((x) => x.type === 'tax')) {
+        row(t.name.split(' (')[0], `${money(t.tax_amount)} → ${cash(Array.isArray(P.pay)
+          ? P.pay.map((k) => Math.round(t.tax_amount * k)) : Math.round(t.tax_amount * P.pay))}`);
+      }
+      break;
+    case 'cn3': {
+      row('Đã qua ô Bắt Đầu', `${laps} lần`);
+      const add = (k) => Math.min(P.cap, k * (laps + 1));
+      row('Lần qua tới cộng thêm', cash(Array.isArray(P.perLap) ? P.perLap.map(add) : add(P.perLap)));
+      break;
+    }
+    case 'cnU': {
+      /* Lần qua tới: số lần qua đã tính cả lần ấy, tiền mặt đã cộng lương
+         gốc — đúng thứ tự `lapEnd` thu quỹ sau khi lãnh lương. */
+      const next = { ...p, laps: laps + 1, money: p.money + GO_SALARY };
+      const rate = levyRate(next);
+      const each = levyEach(next);
+      const total = opp.reduce((n, q) => n + Math.min(each, q.money), 0);
+      row('Đã qua ô Bắt Đầu', `${laps} lần`);
+      row('Đã vào tù', `${jails} lần`);
+      row('Tỉ lệ lần qua tới', `${pctOf(rate)} (trần ${pctOf(P.cap)})`);
+      row('Mỗi người nộp', `${money(each)} (trần ${money(P.each * (laps + 1))})`);
+      row(`Thu về từ ${opp.length} người`, `≈ ${money(total)}`);
+      break;
+    }
+    case 'cnV':
+      out.push(waitRow(p, 'cnV'));
+      row('Trả hộ tối đa', money(P.cover));
+      break;
+    case 'cnX1':
+      if (p.skills.includes('cnX1')) {
+        row('Lần qua tới được điểm', `còn ${P.every - (p.skillUse?.cnX1?.tick ?? 0)} lần`);
+      }
+      break;
+    case 'cnX2':
+      row('Đã vào tù', `${jails} lần`);
+      row('Mỗi lần vào tù nhận', cash(P.comp));
+      break;
+    case 'dh1': {
+      const n = st.stationCount(p.id);
+      row('Bến/ga đang có', `${n}`);
+      if (n) row('Mỗi lần thu vé thêm', money(P.own * n));
+      break;
+    }
+    case 'dh2b':
+      row('Đạp trúng ô Bắt Đầu nhận', money(GO_SALARY * P.goMult));
+      break;
+    case 'dhU': case 'ddU': case 'dc3':
+      out.push(waitRow(p, s.id));
+      if (s.id === 'ddU') {
+        row('Đoán đúng nhận', `≈ ${money(opp.reduce((n, q) => n + Math.floor(q.money * mid(P.win)), 0))}`);
+        row('Đoán sai trả', money(opp.length * Math.floor(p.money * P.lose)));
+      }
+      break;
+    case 'dh3': case 'dd3':
+      if (p.skills.includes(s.id)) row('Còn dùng được', `${usesLeft(p, s.id)} lần tới lần qua ô Bắt Đầu`);
+      break;
+    case 'dhV': {
+      const n = mine.filter((id) => ['station', 'utility'].includes(BOARD[id].type) && !st.isMortgaged(id)).length;
+      row('Trạm đang thu phí', `${n}`);
+      if (n) row('Người khác đi ngang hết các trạm', money(n * P.toll));
+      break;
+    }
+    case 'dhX1': {
+      const rich = opp.reduce((a, b) => (!a || b.money > a.money ? b : a), null);
+      if (rich) row(`Móc túi ${rich.name} được`, cash(Array.isArray(P.pct)
+        ? P.pct.map((k) => Math.min(P.cap, Math.floor(rich.money * k))) : Math.min(P.cap, Math.floor(rich.money * P.pct))));
+      break;
+    }
+    case 'dhS2':
+      row(`Vượt qua cả ${opp.length} người`, money(opp.length * P.fee));
+      break;
+    case 'dd1':
+      row('Trung bình mỗi lần lắc', `≈ +${money(Math.round((mid(P.even) - mid(P.odd)) / 2))}`);
+      break;
+    case 'dd2a':
+      if (p.betSet) row(`Đang cược ${money(p.betSet.amount)}`, `trúng +${cash(Array.isArray(P.payout)
+        ? P.payout.map((k) => Math.round(p.betSet.amount * k)) : Math.round(p.betSet.amount * P.payout))}`);
+      break;
+    case 'ddV':
+      if (p.lotto != null) row(`Số ${p.lotto}, mỗi lần trúng`, money(lottoPrize({ ...p, skills: [...p.skills, 'ddV'] }, p.lotto)));
+      row('Người lắc mỗi vòng', `${opp.length}`);
+      break;
+    case 'ddS2': {
+      row('Lương trúng / trượt', `${money(GO_SALARY * 2)} / ${money(GO_SALARY / 2)}`);
+      break;
+    }
+    case 'dcU': {
+      const n = mine.filter((id) => st.housesOn(id) === 0).length;
+      row('Ô chưa xây đang có', `${n} ô, thuê ×${P.mult}`);
+      break;
+    }
+    case 'dcS1': row('Ô mua được lúc này', `${leftoverOffers(st, { ...p, skills: [...p.skills, 'dcS1'], skillOff: [] }).length}`); break;
+    case 'dcV': row('Ô thế chấp mua được', `${forecloseOffers(st, { ...p, skills: [...p.skills, 'dcV'], skillOff: [] }).length}`); break;
+    case 'dcX1': {
+      const n = opp.filter((q) => st.propertiesOf(q.id).some((id) => st.isMortgaged(id))).length;
+      row('Người đang có ô thế chấp', `${n}/${opp.length}`);
+      break;
+    }
+    case 'dcS2': {
+      const q = p.stake != null ? st.players[p.stake] : null;
+      if (q && !q.bankrupt) row('Đang góp vốn với', q.name);
+      break;
+    }
+    case 'acX2':
+      row('Ô đang có', `${mine.length}`);
+      break;
+    case 'ac2a':
+      row('Đã qua ô Bắt Đầu', `${laps} lần`);
+      row('Thuê ô có nhà', `+${pctOf(Math.min(P.cap, P.perLap * laps))}`);
+      break;
+    case 'ac2b': {
+      const c = colorsOwned(st, p.id);
+      row('Màu đất đang có', `${c}`);
+      row('Mọi tiền thuê', `+${pctOf(P.perColor * c)}`);
+      break;
+    }
+    case 'ac3': {
+      const n = st.houseCount(p.id);
+      row('Căn nhà đang có', `${n} (khách sạn tính 5)`);
+      row('Mỗi lần qua ô Bắt Đầu nhận', money(n * P.perHouse));
+      break;
+    }
+    case 'acU': {
+      const id = freeHouseTarget(st, p.id);
+      row('Lần qua tới xây ở', id == null ? 'chưa có ô xây được' : tileLabel(id));
+      break;
+    }
+    case 'acV': {
+      const c = colorsOwned(st, p.id);
+      row('Màu đất đang có', `${c}`);
+      row('Mỗi ô thu thêm', money(c * P.per));
+      break;
+    }
+    case 'acX1':
+      row('Tiền mặt', `${money(p.money)} · ${p.money < P.under ? 'đang được giảm' : `giảm khi dưới ${money(P.under)}`}`);
+      break;
+    case 'acS1': {
+      const n = mine.filter((id) => BOARD[id].type === 'property' && !st.hasFullGroup(p.id, BOARD[id].color_group)).length;
+      row('Đất lẻ xây được', `${n} ô, mỗi ô tối đa ${P.cap} căn`);
+      break;
+    }
+    case 'acS2':
+      row('Ô có hàng xóm', `${mine.filter((id) => hasNeighbor(st, id, p.id)).length}/${mine.length}`);
+      break;
+    default:
+  }
+
+  if (p.skills.includes(s.id)) {
+    const u = usage(p, s.id);
+    row('Tổng số lần đã chạy', `${u.uses} lần`);
+    if (u.gain > 0) row('Tổng tiền đã mang về', money(u.gain));
+  }
+  return out;
 }

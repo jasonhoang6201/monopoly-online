@@ -259,7 +259,8 @@ const EV = {
   dh3: () => perLapDodge(DODGE.back, prm('dh3').charges, prm('dh3').cooldown),
   dhX2: () => P.rolls * (6 / 36) * prm('dhX2').bonus,
   dhX1: () => { const q = prm('dhX1'); const share = 2 * OPP * f.reduce((n, x, t) => n + x * occ[t], 0); return share * q.chance * Math.min(q.cap, CASH * q.pct); },   // mình dừng lên người khác + người khác dừng lên mình
-  dhS1: () => perLapDodge(DODGE.bike, prm('dhS1').charges, prm('dhS1').cooldown),
+  // * bật suốt: mỗi cú lắc đáng né thì né được, cộng tiền xăng level 3; chưa trừ phần lương mất vì đi chậm
+  dhS1: () => P.rolls * (DODGE.bike.use * DODGE.bike.gain + prm('dhS1').gas),
   dhS2: () => OPP * P.moves * g.reduce((n, x, t) => n + (x / P.moves) * occ[t], 0) * prm('dhS2').fee,
   dhU: () => (GO_SALARY * GO_LANDING_MULT + R_OUT * 3) / (prm('dhU').cooldown * LAP),  // * về thẳng ô Bắt Đầu + né 3 lượt tiền thuê
   dhV: () => OPP * [5, 15, 12].reduce((n, t) => n + g[t], 0) * prm('dhV').toll,
@@ -292,7 +293,7 @@ const EV = {
   ac1: () => (10 * 120 * prm('ac1').cut) / TURNS,          // * mình xây 10 căn, giá 120$
   ac2a: () => incomeOn(built) * Math.min(prm('ac2a').cap, prm('ac2a').perLap * LAPS_MID),
   ac2b: () => R_IN * prm('ac2b').perColor * myColors,
-  ac3: () => (OPP * 2 * 0.027 * (90 - 12)) * 0.5,          // * xây được 2 ô trên bộ 2/3, mỗi ô 2 nhà, nửa ván
+  ac3: () => (8 * prm('ac3').perHouse) / LAP,              // * giữ 8 căn nhà, nhận mỗi lần qua ô Bắt Đầu
   acX2: () => mine.reduce((n, t) => n + f[t], 0) * prm('acX2').bonus,
   acX1: () => R_OUT * (prm('acX1').under >= 250 ? 0.35 : 0.3) * (1 - prm('acX1').pay),   // * 30% số lượt tiền mặt dưới 200$ (35% dưới 250$)
   acS1: () => OPP * [8, 21].reduce((n, t) => n + f[t] * (BOARD[t].rents[1] * (1) - rent(t)), 0) - (2 * BOARD[8].house_cost * (prm('acS1').mult)) / TURNS,

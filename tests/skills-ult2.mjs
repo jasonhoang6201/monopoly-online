@@ -49,7 +49,7 @@ const run = (fn, arg) => page.evaluate(async ([src, a]) => {
 const reset = () => run(`
   for (const p of s.players) {
     p.money = 1500; p.skills = []; p.skillPoints = 0; p.laps = 0; p.cooldowns = {}; p.usedTurn = {};
-    p.skillLv = {}; p.lapUses = {}; p.jails = 0; p.skillUse = {}; p.feats = {}; p.lotto = null;
+    p.skillLv = {}; p.lapUses = {}; p.jails = 0; p.skillUse = {}; p.lotto = null;
     p.pos = 5; p.inJail = false; p.bankrupt = false;
   }
   s.owner.clear(); s.houses.clear(); s.mortgaged.clear(); s.heritage.clear();

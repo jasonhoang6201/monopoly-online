@@ -105,7 +105,7 @@ await page.evaluate(([lvRolls, ultB]) => {
   for (const id of [5, 15, 25]) s.owner.set(id, 1);
   // Đỏ Đen: bộ nâu, chưa xây — mồi cho Thâu Tóm
   for (const id of [1, 3]) s.owner.set(id, 2);
-  // Đầu Cơ: 2/3 bộ đỏ (Sổ Hồng xây được, Phố Cổ có chỗ đặt nhà) + đất lẻ nhiều màu
+  // Đầu Cơ: 2/3 bộ đỏ (Chung Cư Mini xây được) + đất lẻ nhiều màu
   for (const id of [21, 23, 6, 11, 26, 31, 37]) s.owner.set(id, 3);
   // Ô thứ ba của bộ đỏ trong tay Công Nhân — không ai đủ bộ đỏ
   s.owner.set(24, 0);
@@ -271,9 +271,6 @@ const invariants = () => page.evaluate(async () => {
         if (!Number.isInteger(v) || v < 0) bad.push(`${p.name} tiến độ ${id}.${k} = ${v}`);
       }
     }
-    for (const [k, v] of Object.entries(p.feats ?? {})) {
-      if (k !== 'low' && (!Number.isInteger(v) || v < 0)) bad.push(`${p.name} thành tựu ${k} = ${v}`);
-    }
     for (const [id, n] of Object.entries(p.cooldowns ?? {})) {
       if (!Number.isInteger(n) || n <= 0) bad.push(`${p.name} hồi chiêu ${id} = ${n}`);
     }
@@ -379,11 +376,11 @@ for (const [k, v] of Object.entries(stats).sort((a, b) => b[1] - a[1])) console.
 console.log(`\nĐã chơi ${played} lượt.`);
 // Tiến độ lên level và bộ đếm thành tựu cuối ván — để thấy ngưỡng `grow` có với tới được không
 const prog = await page.evaluate(() => window.__monopoly.controller.state.players.map((p) => ({
-  name: p.name, laps: p.laps, jails: p.jails, feats: p.feats,
+  name: p.name, laps: p.laps, jails: p.jails,
   use: Object.fromEntries(Object.entries(p.skillUse ?? {}).map(([id, u]) => [id, `${u.n} lần/${u.gain}$`])),
 })));
 console.log('\nTiến độ kỹ năng cuối ván:');
-for (const x of prog) console.log(`  ${x.name} · qua ${x.laps} · tù ${x.jails} · ${JSON.stringify(x.feats)}\n    ${JSON.stringify(x.use)}`);
+for (const x of prog) console.log(`  ${x.name} · qua ${x.laps} · tù ${x.jails}\n    ${JSON.stringify(x.use)}`);
 if (errors.length) { console.log('\nLỗi console:'); for (const e of errors.slice(0, 15)) console.log('  ' + e); fails.push('lỗi console'); }
 console.log(fails.length ? `\n✗ ${fails.length} chỗ hỏng:\n  ${fails.join('\n  ')}` : '\n✓ Không có chỗ nào hỏng.');
 await browser.close();

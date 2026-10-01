@@ -202,7 +202,6 @@
 
 /* Thành tựu: vuông bo góc — khác ô tròn thường và ô thoi tối thượng, để
    người chơi biết ô này còn đòi một việc làm trong ván ngoài ô đứng trước. */
-.st-node.feat .st-face { border-radius: 26%; }
 
 /* Giá (góc dưới phải), khoá (đỉnh), dấu tích (góc dưới phải) */
 .st-cost, .st-done, .st-lock {
@@ -435,6 +434,15 @@
 }
 .sd-body p { font-size: 14px; line-height: 1.55; color: var(--paper-warm); }
 .sd-body p.sd-effect { font-size: 15px; color: var(--paper); }
+/* Số liệu lúc này: nhãn trái, số phải, gạch chấm giữa hai cột cho mắt dò ngang */
+.sd-now {
+  display: grid; grid-template-columns: 1fr auto; gap: 3px 12px;
+  font-size: 13.5px; padding: 6px 10px; border-radius: 6px;
+  background: color-mix(in srgb, var(--c) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c) 30%, transparent);
+}
+.sd-now dt { color: var(--paper-warm); }
+.sd-now dd { margin: 0; color: var(--gold-light); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
 .sd-conds { list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 13.5px; }
 .sd-conds li.ok { color: #8FD6A8; }
 .sd-conds li.no { color: #E8A58F; }
@@ -580,7 +588,6 @@
 
 /* Điều kiện lên level ghi dưới dòng level chưa có */
 .sd-need { display: block; font-style: normal; font-size: .82em; opacity: .7; margin-top: 1px; }
-.sd-card.feat .sd-icon { border-radius: 26%; }
 
 /* Kho kỹ năng: lưới ô, viền màu nhánh. Ô có màu là bật, xám là tắt; ô
    không bấm được lúc này mờ đi nhưng vẫn đọc được lý do */

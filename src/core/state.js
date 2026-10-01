@@ -106,8 +106,6 @@ export class Player {
      * từ lúc học — điều kiện lên level (xem `credit` trong core/skills.js).
      */
     this.skillUse = {};
-    /** Bộ đếm thành tựu mở khoá kỹ năng ẩn (xem `FEATS` trong data/skills.js). */
-    this.feats = {};
     /** Tổng xí ngầu đã chọn cho Xổ Số Kiến Thiết; `null` là chưa chọn. */
     this.lotto = null;
     /** Cửa và tiền Cược Chẵn Lẻ tự đặt mỗi lượt; `null` là chưa chọn. @type {?{pick:string, amount:number}} */
@@ -284,7 +282,11 @@ export class GameState {
     const land = landed ? (has(p, 'dh2b') ? param(p, 'dh2b').goMult : GO_LANDING_MULT) : 1;
     for (const id of Object.keys(parts)) parts[id] *= mod * land;
     if (landed && has(p, 'dh2b')) parts.dh2b = base * mod * (land - GO_LANDING_MULT);
-    return { total: Math.round(base * mod * land), parts };
+    /* Sổ Hồng cộng sau mọi hệ số: tiền giữ nhà không phải lương, mất mùa hay
+       đạp trúng ô Bắt Đầu không đổi số nhà đang có. */
+    const deed = has(p, 'ac3') ? (parts.ac3 = this.houseCount(p.id) * param(p, 'ac3').perHouse) : 0;
+    if (!parts.ac3) delete parts.ac3;
+    return { total: Math.round(base * mod * land) + deed, parts };
   }
 
   /** Đếm ngược mọi hiệu ứng một lượt, bỏ những cái đã hết hạn. */
@@ -324,6 +326,11 @@ export class GameState {
     return out.sort((a, b) => a - b);
   }
 
+  /** Tổng số căn nhà người chơi đang có, khách sạn tính 5 căn. */
+  houseCount(playerId) {
+    return this.propertiesOf(playerId).reduce((n, id) => n + this.housesOn(id), 0);
+  }
+
   /** Người chơi có đủ cả nhóm màu không (điều kiện xây nhà). */
   hasFullGroup(playerId, group) {
     const ids = GROUP_TILES[group];
@@ -331,18 +338,12 @@ export class GameState {
   }
 
   /**
-   * Những ô trong bộ màu mà người chơi được xây: cả bộ khi đủ bộ; hoặc 2 ô
-   * đang giữ của một bộ 3 ô khi có Sổ Hồng. Rỗng là chưa được xây.
-   *
-   * Luật xây đều tay và luật thế chấp chỉ xét trong đúng những ô này — ô thứ
-   * ba nằm trong tay người khác, chủ Sổ Hồng không quyết được gì ở đó.
+   * Những ô trong bộ màu mà người chơi được xây: cả bộ khi đủ bộ, rỗng là
+   * chưa được xây. Đất lẻ có Chung Cư Mini thì `canBuild` tự cho ô ấy đứng
+   * riêng một mình.
    */
   buildGroup(playerId, group) {
-    const ids = GROUP_TILES[group];
-    if (this.hasFullGroup(playerId, group)) return ids;
-    const mine = ids.filter((id) => this.owner.get(id) === playerId);
-    if (ids.length === 3 && mine.length === 2 && has(this.players[playerId], 'ac3')) return mine;
-    return [];
+    return this.hasFullGroup(playerId, group) ? GROUP_TILES[group] : [];
   }
 
   /**
@@ -485,12 +486,11 @@ export class GameState {
     if (!check.ok) return check;
     const p = this.players[playerId];
     p.money -= check.cost;
-    // Tiến độ lên level: Mái Ấm tính số tiền được bớt, Sổ Hồng tính căn xây trên bộ chưa đủ
+    // Tiến độ lên level: Mái Ấm tính số tiền được bớt, Chung Cư Mini tính căn xây trên đất lẻ
     if (!o.free && has(p, 'ac1')) {
       credit(p, 'ac1', Math.ceil(BOARD[tileId].house_cost * this.modMult('build')) - check.cost);
     }
     if (check.mini) credit(p, 'acS1');
-    else if (!this.hasFullGroup(playerId, BOARD[tileId].color_group)) credit(p, 'ac3');
     if (check.isHotel) {
       this.houses.set(tileId, 5);
       this.bankHouses += 4;   // trả 4 căn nhà về kho

@@ -1078,7 +1078,7 @@ export function playerModal(state, playerId) {
         // Màn thấp: tab cây ẩn tiêu đề + chân hộp để cây đủ chỗ (skillTree.css), ✕ trên thanh điểm thay nút Đóng
         modal.classList.toggle('ptree-on', key === 'skills');
         if (key === 'skills' && !pane.firstChild) {
-          pane.appendChild(mountSkillTree(p, { readOnly: true, onClose: () => close(null) }).el);
+          pane.appendChild(mountSkillTree(p, { readOnly: true, state: () => state, onClose: () => close(null) }).el);
         }
       }));
     },
