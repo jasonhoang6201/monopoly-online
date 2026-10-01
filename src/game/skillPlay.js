@@ -7,13 +7,13 @@
  * Mọi hàm ở đây chỉ chạy trên máy cầm lái, y như phần còn lại của controller:
  * hộp hỏi hiện ở máy người đang đi, kết quả đi theo ảnh chụp tới các máy khác.
  */
-import { BOARD, GROUP_TILES, money, tileLabel } from '../data/board.js';
+import { BOARD, money, tileLabel } from '../data/board.js';
 import {
   skillById, has, param, roll, rolled, ready, usesLeft, spend, onLap, levyRate, levyEach, levelOf,
   freeHouseTarget, credit, bumpFeat, rentGains, lateFee, lottoPrize, tollStops, forecloseOffers,
   tourPassed, leftoverOffers, isOff, setSkillOn, learnSkill, switchable,
 } from '../core/skills.js';
-import { cardType, isKeepable, moveDest, repairBill } from '../core/cards.js';
+import { cardType, isKeepable, moveDest, repairBill, groupHasHouses } from '../core/cards.js';
 import { cardName, cardEffect, CARD_KINDS, DECK_META } from '../data/cards.js';
 import { RANKS, rankOf, shortLabel } from '../ui/caseOpen.js';
 import { SKILLS, BRANCHES } from '../data/skills.js';
@@ -195,7 +195,7 @@ export class SkillPlay {
     const cells = this.kitCells(p, rolled);
     // Bản nháp: id → { on, val }. Ô `once` luôn bắt đầu chưa chọn gì.
     const draft = new Map(cells.map((c) => [c.id, {
-      on: c.switch ? !isOff(p, c.id) && !c.once : true,
+      on: c.once ? false : c.switch ? !isOff(p, c.id) : true,
       val: c.once ? null : c.val,
     }]));
     const text = (c) => {
@@ -953,6 +953,7 @@ export class SkillPlay {
     switch (cardType(card)) {
       case 'collect': return `Tiền mừng ${money(card.amount)}, cả bàn chia nhau góp`;
       case 'repair': return `Thuế nhà cửa: bạn nộp ${money(repairBill(this.st, p.id, card).amount)}`;
+      case 'skill': return `Nhận ${card.points} điểm kỹ năng`;
       case 'move': {
         if (card.jail) return 'Vào tù';
         const dest = moveDest(card, p.pos);
@@ -1206,8 +1207,7 @@ export class SkillPlay {
     const t = BOARD[tileId];
     const owner = st.ownerOf(tileId);
     if (!owner || owner.id === p.id || !ready(p, 'dc3')) return false;
-    const group = t.color_group ? GROUP_TILES[t.color_group] : [tileId];
-    if (group.some((id) => st.housesOn(id) > 0)) return false;
+    if (groupHasHouses(st, tileId)) return false;
     // Level 1 rút giá trước khi hỏi: số hiện trên hộp là số sẽ trả
     const premium = roll(param(p, 'dc3').premium);
     const price = Math.round(t.price * premium);

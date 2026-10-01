@@ -113,7 +113,7 @@ const tile = await drv.page.evaluate(() => {
   const c = window.__monopoly.controller;
   const st = c.state;
   st.eventPile = ['dai-ha-gia'];
-  st.eventsFired = 5;
+  st.eventsFired = 3;      // dưới LATE_AFTER: pha cuối ván sẽ gạt thẻ không phải tài chính
   st.laps = 99;            // mở khoá không cần bán hết đất
   st.pressure = 999;
   c.guard(() => c.endTurn());
@@ -203,7 +203,7 @@ const mirrored = await until(async () => {
 ok(mirrored, 'sổ chủ đất khớp nhau trên cả hai máy');
 
 const fired = await other.evaluate(() => window.__monopoly.controller.state.eventsFired);
-ok(fired === 6, 'máy bên kia cũng ghi nhận sự kiện đã nổ', String(fired));
+ok(fired === 4, 'máy bên kia cũng ghi nhận sự kiện đã nổ', String(fired));
 
 // Ván phải chạy tiếp bình thường: lượt sang người kế
 ok(await until(async () => {

@@ -144,6 +144,9 @@ export class EventRunner {
       case 'thue-dien-tho':
         return `${plan.bills.length} người phải nộp, tổng
                 <b>${money(plan.bills.reduce((s, b) => s + b.amount, 0))}</b> vào Quỹ Công.`;
+      case 'thue-khu':
+        return `Khu <b>${GROUPS[plan.group].name}</b> — ${plan.bills.length} chủ đất nộp tổng
+                <b>${money(plan.bills.reduce((s, b) => s + b.amount, 0))}</b> vào Quỹ Công.`;
       case 'siet-tin-dung':
         return `${plan.bills.length} người đang cắm đất phải đóng lãi ngay.`;
       case 'mat-giay-to':
@@ -160,7 +163,8 @@ export class EventRunner {
   /** Chọn tay thi hành theo id thẻ. */
   async apply(card, plan) {
     switch (card.id) {
-      case 'thue-dien-tho':       return this.taxToPot(plan);
+      case 'thue-dien-tho':
+      case 'thue-khu':            return this.taxToPot(plan);
       case 'siet-tin-dung':       return this.creditSqueeze(plan);
       case 'hoi-cho':             return this.fairPrize(plan);
       case 'an-xa':               return this.amnesty(plan);
@@ -187,11 +191,12 @@ export class EventRunner {
 
   async taxToPot(plan) {
     const st = this.state;
+    if (plan.group) await this.g.spot(GROUP_TILES[plan.group]);
     for (const b of plan.bills) {
       const p = st.players[b.seat];
       if (p.bankrupt) continue;
       const paid = await this.collect(b.seat, b.amount,
-        `${b.houses} nhà, ${b.hotels} khách sạn`);
+        b.note ?? `${b.houses} nhà, ${b.hotels} khách sạn`);
       if (paid) st.pot += b.amount;
     }
     this.g.sync();

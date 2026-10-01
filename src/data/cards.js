@@ -12,6 +12,9 @@
  *   · `repair`    — thuế nhà cửa: tính trên từng căn nhà, từng khách sạn mình
  *                   đang có (`perHouse` / `perHotel`).
  *   · `jail-free` — vé ra tù.
+ *   · `skill`     — cộng `points` điểm kỹ năng. Điểm chỉ tới từ ô Bắt Đầu thì
+ *                   một ván mỗi người được chừng 6–8 điểm; thẻ này thêm một
+ *                   đường kiếm điểm cho người ít đi ngang ô ấy.
  *   · `demolish`  — chọn một **khu màu** của người khác rồi bốc thăm ô trong khu
  *                   ấy: `levels` ô mỗi ô mất một cấp nhà (khu chỉ có một ô có
  *                   nhà thì ô ấy chịu cả `levels` cấp), không đền một đồng.
@@ -128,6 +131,14 @@ export const CHANCE = [
            còn lô đất thì đem bán đấu giá ngay tại Toà Đô Chánh.`,
     type: 'resume', rate: 1.2,
   },
+  {
+    text: 'Theo học lớp đêm trường Bá Nghệ, cuối khoá lãnh bằng thợ cả.',
+    type: 'skill', points: 1,
+  },
+  {
+    text: 'Đi theo ông chủ hãng buôn Hoa kiều một chuyến, học được cách làm ăn.',
+    type: 'skill', points: 1,
+  },
 ];
 
 export const CHEST = [
@@ -191,6 +202,14 @@ export const CHEST = [
     text: `Toà Đô Chánh bốc thăm chọn lô đất mở đường: rút trúng lô nào thì lô ấy
            giải toả, chủ lãnh tiền đền rồi đất đem bán đấu giá.`,
     type: 'resume-random', rate: 1.2,
+  },
+  {
+    text: 'Ông thầy đồ trong xóm truyền cho mấy bí quyết buôn bán gia truyền.',
+    type: 'skill', points: 1,
+  },
+  {
+    text: 'Đọc hết bộ sách Gia Định Báo cũ để trên gác, mở mang đầu óc.',
+    type: 'skill', points: 1,
   },
 ];
 

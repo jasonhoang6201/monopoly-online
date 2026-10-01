@@ -104,12 +104,12 @@ const lv = await run(`
   const p = { skills: [], skillLv: {}, skillPoints: 6, money: 1000 };
   const a = K.learnSkill(p, 'cn1');            // mở: 1 điểm
   const blocked = K.learnSkill(p, 'cn1');      // chưa kiếm được đồng nào từ kỹ năng: chưa lên được
-  K.credit(p, 'cn1', 100);
-  const still = K.canLearn(p, 'cn1');          // 100/150$: vẫn thiếu
-  K.credit(p, 'cn1', 50);
-  const b = K.learnSkill(p, 'cn1');            // đủ 150$: lên 2, 1 điểm
-  const blocked3 = K.canLearn(p, 'cn1');       // level 3 cần 400$ cộng dồn
-  K.credit(p, 'cn1', 250);
+  K.credit(p, 'cn1', 60);
+  const still = K.canLearn(p, 'cn1');          // 60/100$: vẫn thiếu
+  K.credit(p, 'cn1', 40);
+  const b = K.learnSkill(p, 'cn1');            // đủ 100$: lên 2, 1 điểm
+  const blocked3 = K.canLearn(p, 'cn1');       // level 3 cần 250$ cộng dồn
+  K.credit(p, 'cn1', 150);
   const c2 = K.learnSkill(p, 'cn1');           // lên 3: 1 điểm
   const d = K.learnSkill(p, 'cn1');            // quá 3: không được
   const spent = K.spentTotal(p);
@@ -120,10 +120,10 @@ const lv = await run(`
            money: p.money, lvAfter: K.levelOf(p, 'cn1'), line: K.levelLine(K.skillById('cn1'), 1),
            keptUse: p.skillUse.cn1?.gain };
 `);
-check(lv.blocked === false && lv.why.includes('150$') && lv.still === false,
-  `lên level bị chặn tới khi kỹ năng kiếm đủ 150$ (${lv.why})`);
-check(lv.blocked3 === false && lv.use.n === 3 && lv.use.gain === 400, `level 3 cần cộng dồn 400$, bộ đếm ghi đủ lần và tiền (${JSON.stringify(lv.use)})`);
-check(lv.keptUse === 400, 'tẩy điểm giữ tiến độ lên level');
+check(lv.blocked === false && lv.why.includes('100$') && lv.still === false,
+  `lên level bị chặn tới khi kỹ năng kiếm đủ 100$ (${lv.why})`);
+check(lv.blocked3 === false && lv.use.n === 3 && lv.use.gain === 250, `level 3 cần cộng dồn 250$, bộ đếm ghi đủ lần và tiền (${JSON.stringify(lv.use)})`);
+check(lv.keptUse === 250, 'tẩy điểm giữ tiến độ lên level');
 check(lv.a === 1 && lv.b === 2 && lv.c === 3 && lv.d === false, `lên level 1 → 2 → 3, level 4 bị chặn (${JSON.stringify(lv)})`);
 check(lv.spent === 3 && lv.pts === 3, 'mỗi level tốn 1 điểm, tổng 3 điểm cho ô cấp 1 lên level 3');
 check(lv.refund === 3 && lv.after === 6 && lv.money === 850 && lv.lvAfter === 0, 'tẩy điểm hoàn đủ cả điểm level, phí 50$/điểm');
@@ -134,15 +134,15 @@ await reset();
 const est = await run(`
   const p = s.current; p.skills = ['ac1','ac2b','cn1','cn2b']; p.skillPoints = 9;
   const own = (ids) => { s.owner.clear(); for (const id of ids) s.owner.set(id, p.id); };
-  own([1, 3, 5, 6]);                         // 4 ô: 2 màu (nâu, xanh nhạt) + 1 bến
+  own([1, 3, 5]);                            // 3 ô: 1 màu (nâu) + 1 bến
   const noSt = K.canLearn(p, 'ac1');         // thiếu bàn cờ: coi như chưa đạt
   const four = K.canLearn(p, 'ac1', s);
   const colors3 = K.canLearn(p, 'ac2b', s);
-  own([1, 3, 5, 6, 8]);                      // 5 ô
+  own([1, 3, 5, 6]);                         // 4 ô
   const five = K.learnSkill(p, 'ac1', s);
-  own([1, 6, 11, 16, 21]);                   // 5 ô, 4 màu
+  own([1, 6, 11, 16, 21]);                   // 5 ô, 5 màu
   const colors4 = K.learnSkill(p, 'ac2b', s);
-  p.money = 1000;                           // 1000$ + 700$ đất = 1700$
+  p.money = 500;                            // 500$ + 700$ đất = 1200$
   const poor = K.canLearn(p, 'cn2b', s);
   p.money = 3000;
   const rich = K.learnSkill(p, 'cn2b', s);
@@ -150,12 +150,12 @@ const est = await run(`
     poor: poor.reason, rich: rich.level,
     tip: K.growText(K.skillById('ac1'), 2) + ' · ' + K.growProgress(p, K.skillById('ac1'), 3, s) };
 `);
-check(est.noSt === false && est.four === false && est.why.includes('4/5 ô'), `Mái Ấm cần 5 ô mới lên level 2 (${est.why})`);
-check(est.five === 2, 'đủ 5 ô: Mái Ấm lên level 2');
-check(est.colors3 === false && est.colors4 === 2, 'Đất Nhiều Màu cần đất ở 4 màu');
-check(est.poor.includes('2.000$') || est.poor.includes('2000$'), `Công Đoàn cần tổng tài sản 2000$ (${est.poor})`);
+check(est.noSt === false && est.four === false && est.why.includes('3/4 ô'), `Mái Ấm cần 4 ô mới lên level 2 (${est.why})`);
+check(est.five === 2, 'đủ 4 ô: Mái Ấm lên level 2');
+check(est.colors3 === false && est.colors4 === 2, 'Đất Nhiều Màu cần đất ở 3 màu');
+check(est.poor.includes('1.500$') || est.poor.includes('1500$'), `Công Đoàn cần tổng tài sản 1500$ (${est.poor})`);
 check(est.rich === 2, 'tổng tài sản đủ: Công Đoàn lên level 2');
-check(est.tip.startsWith('Sở hữu 5 ô') && est.tip.includes('5/8 ô'), `chữ điều kiện và tiến độ (${est.tip})`);
+check(est.tip.startsWith('Sở hữu 4 ô') && est.tip.includes('5/6 ô'), `chữ điều kiện và tiến độ (${est.tip})`);
 
 await reset();
 const rent = await run(`
@@ -261,9 +261,9 @@ check(await page.locator('.st-node[data-id="cn1"].off').count() === 0, 'ô tự 
 check(await page.locator('.st-node[data-id="cn1"].can-up').count() === 0, 'còn điểm mà chưa đạt điều kiện thì chưa có dấu lên level');
 await page.locator('.st-node[data-id="cn1"]').click();
 check(await page.locator('[data-act="learn"]:disabled').count() === 1, 'nút Lên level mờ khi chưa đạt điều kiện');
-check((await page.locator('.sd-conds').textContent()).includes('Kiếm được 150$ từ kỹ năng này (0/150$)'),
-  'thẻ chi tiết ghi điều kiện lên level kèm tiến độ 0/150$');
-check((await page.locator('.sd-lvs').textContent()).includes('cần: Kiếm được 400$'), 'dòng level 3 ghi điều kiện');
+check((await page.locator('.sd-conds').textContent()).includes('Kiếm được 100$ từ kỹ năng này (0/100$)'),
+  'thẻ chi tiết ghi điều kiện lên level kèm tiến độ 0/100$');
+check((await page.locator('.sd-lvs').textContent()).includes('cần: Kiếm được 250$'), 'dòng level 3 ghi điều kiện');
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
 // Kỹ năng đã nhặt được 150$ trong ván: đủ điều kiện lên level 2
@@ -292,14 +292,19 @@ await page.waitForTimeout(400);
 check(await run(`return s.current.skills.includes('dd2a') && !K.has(s.current, 'dd2a');`), 'kỹ năng bấm để dùng học xong nằm tắt');
 check(await page.locator('.st-node[data-id="dd2a"].off').count() === 1, 'ô đang tắt tô xám');
 await page.locator('.st-node[data-id="dd2a"]').click();
-check(await page.locator('[data-act="toggle"]', { hasText: 'Bật kỹ năng' }).count() === 1, 'thẻ chi tiết có nút Bật kỹ năng');
-await page.locator('[data-act="toggle"]').click();
+// Bật / tắt chỉ trong kho Dùng kỹ năng: cây chỉ báo trạng thái
+check(await page.locator('[data-act="toggle"]').count() === 0
+  && await page.locator('.sd-wait', { hasText: 'kho Dùng kỹ năng' }).count() === 1,
+  'thẻ chi tiết không có nút bật / tắt, chỉ chỉ sang kho');
+await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
-check(await run(`return K.has(s.current, 'dd2a');`), 'bấm Bật thì kỹ năng có tác dụng');
-check(await page.locator('[data-act="toggle"]', { hasText: 'Tắt kỹ năng' }).count() === 1, 'nút đổi thành Tắt kỹ năng');
-await page.locator('[data-act="toggle"]').click();
-await page.waitForTimeout(300);
-check(await run(`return !K.has(s.current, 'dd2a');`), 'bấm Tắt thì kỹ năng ngừng');
+// Tất Tay làm một lần: không công tắc, học xong là có tác dụng (ghi được tiến độ lên level)
+await run(`const p = s.current; p.skills = ['dd1','dd2b','dd3']; p.skillOff = []; p.skillPoints = 2;`);
+await page.locator('.st-node[data-id="ddU"]').click();
+await page.locator('[data-act="learn"]').click();
+await page.waitForTimeout(400);
+check(await run(`return K.has(s.current, 'ddU') && !s.current.skillOff.includes('ddU');`),
+  'Tất Tay học xong có tác dụng ngay, không nằm tắt');
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
 await page.keyboard.press('Escape');
@@ -558,7 +563,7 @@ check((await item('Chuyến Tàu Xuyên Việt').textContent()).includes('khi Ch
 await topBtn('Chốt').click();
 for (let i = 0; i < 20 && !(await run('return s.current.pos === 20 && !c.busy;')); i++) await wait(500);
 const tele = await run('return { pos: s.current.pos, cd: s.current.cooldowns.dhU };');
-check(tele.pos === 20 && tele.cd === 4, `đi thẳng tới Bến Đậu, chờ 4 lần qua ô Bắt Đầu (${JSON.stringify(tele)})`);
+check(tele.pos === 20 && tele.cd === 3, `đi thẳng tới Bến Đậu, chờ 3 lần qua ô Bắt Đầu (${JSON.stringify(tele)})`);
 check(await page.locator('#actions button', { hasText: 'Kết thúc lượt' }).count() === 1, 'xong thì chỉ còn nút Kết thúc lượt');
 
 /* ------------------------------------------------ 5. kỹ năng tự chạy mỗi lần qua ô Bắt Đầu */
@@ -777,12 +782,12 @@ await run('await window.__pm;');
 log('\n=== 9. KỸ NĂNG THÀNH TỰU ===');
 await reset();
 const lock = await run(`
-  const p = s.current; p.skillPoints = 5; p.feats = { share: 5 };
+  const p = s.current; p.skillPoints = 5; p.feats = { share: 3 };
   const noRoot = K.canLearn(p, 'dhX1');
   p.skills = ['dh1', 'dh2b']; p.feats = {};
   const before = K.canLearn(p, 'dhX1');
   const state0 = K.skillState(p, 'dhX1');
-  p.feats = { share: 5 };
+  p.feats = { share: 3 };
   const state1 = K.skillState(p, 'dhX1');
   const ok = K.learnSkill(p, 'dhX1');
   return { noRoot: noRoot.reason, before: before.ok, why: before.reason, state0, state1, ok: ok.ok, pts: p.skillPoints,
@@ -790,9 +795,9 @@ const lock = await run(`
 `);
 check(lock.noRoot.includes('Cần học') && lock.noRoot.includes('Về Nhà'),
   `đủ bộ đếm mà chưa học ô cấp 2 đứng trước thì vẫn khoá (${lock.noRoot})`);
-check(!lock.before && lock.why.includes('Dừng chung ô với người khác: 0/5 lần') && lock.state0 === 'locked',
-  `có ô đứng trước, Hai Ngón vẫn khoá tới khi dừng chung ô 5 lần (${lock.why})`);
-check(lock.state1 === 'ready' && lock.ok && lock.pts === 3 && lock.cost === 2, 'đủ 5 lần thì học được, tốn 2 điểm như ô cấp 3');
+check(!lock.before && lock.why.includes('Dừng chung ô với người khác: 0/3 lần') && lock.state0 === 'locked',
+  `có ô đứng trước, Hai Ngón vẫn khoá tới khi dừng chung ô 3 lần (${lock.why})`);
+check(lock.state1 === 'ready' && lock.ok && lock.pts === 4 && lock.cost === 1, 'đủ 3 lần thì học được, tốn 1 điểm như ô cấp 3');
 
 // Hình cây: mỗi nhánh 1 → 3 → 4 (2 ô dẫn lên + 2 nhánh phụ) → 2 tối thượng, mỗi ô một cha
 const treeShape = await run(`
@@ -806,8 +811,10 @@ const treeShape = await run(`
              ult: row(4).map((x) => x.requires.length).join('') };
   });
 `);
-check(treeShape.every((b) => b.rows === '1342' && b.feats.split(',').sort().join(',') === '2c,3b' && !b.orphan && b.ult === '11'),
-  `5 nhánh đều 1 → 3 → 4 → 2 tối thượng, thành tựu ở 2c và 3b, mỗi tối thượng một ô cha (${JSON.stringify(treeShape)})`);
+// An Cư: Chủ Nhà (từng là thành tựu 2c) đã lên cấp 1, nên nhánh này chỉ còn thành tựu 3b
+const featsOk = (b, i) => b.feats.split(',').sort().join(',') === (i === 4 ? '3b' : '2c,3b');
+check(treeShape.every((b, i) => b.rows === '1342' && featsOk(b, i) && !b.orphan && b.ult === '11'),
+  `5 nhánh đều 1 → 3 → 4 → 2 tối thượng, thành tựu ở 2c và 3b (An Cư chỉ 3b), mỗi tối thượng một ô cha (${JSON.stringify(treeShape)})`);
 
 // Dừng chung ô: đếm thành tựu, Hai Ngón móc túi người giàu nhất trên ô
 await reset();
@@ -952,12 +959,12 @@ check(broke.once === 1 && broke.twice === 2, `bộ đếm "tụt dưới 100$" c
 // Lão Làng: đếm lần qua từ lúc học, tặng điểm theo nhịp
 await reset();
 const vet = await run(`
-  const me = s.current; me.laps = 6; me.skills = ['cnX1']; me.skillLv = { cnX1: 3 };   // mỗi 3 lần
+  const me = s.current; me.laps = 6; me.skills = ['cnX1']; me.skillLv = { cnX1: 3 };   // mỗi 2 lần
   const got = [K.onLap(me), K.onLap(me), K.onLap(me), K.onLap(me)];
   return { got, pts: me.skillPoints, use: me.skillUse.cnX1 };
 `);
-check(JSON.stringify(vet.got) === '[1,1,2,1]' && vet.pts === 5, `Lão Làng level 3: cứ 3 lần qua được thêm 1 điểm, tính từ lúc học (${JSON.stringify(vet)})`);
-check(vet.use.n === 1, 'Lão Làng: mỗi lần tặng điểm là một lần chạy');
+check(JSON.stringify(vet.got) === '[1,2,1,2]' && vet.pts === 6, `Lão Làng level 3: cứ 2 lần qua được thêm 1 điểm, tính từ lúc học (${JSON.stringify(vet)})`);
+check(vet.use.n === 2, 'Lão Làng: mỗi lần tặng điểm là một lần chạy');
 
 // Khách Sộp: mua ô trống thì đếm, học rồi thì ngân hàng hoàn tiền
 await reset();
@@ -997,7 +1004,7 @@ const home = await run(`
   return { n1, n2: me.feats.home, gotFirst: m1 - 1500, got: me.money - m1, use: me.skillUse.acX2 };
 `);
 check(home.n1 === 1 && home.gotFirst === 0 && home.n2 === 2, `dừng trên đất mình: đếm "home", chưa học thì không có tiền (${JSON.stringify(home)})`);
-check(home.got === 45 && home.use.gain === 45, 'Chủ Nhà level 3: +45$, ghi vào tiến độ');
+check(home.got === 30 && home.use.gain === 30, 'Chủ Nhà level 3: +30$, ghi vào tiến độ');
 
 // Ảnh chụp mang tiến độ và bộ đếm thành tựu
 const snapUse = await run(`
@@ -1010,10 +1017,10 @@ check(snapUse.use.cn1.n === 2 && snapUse.use.cn1.gain === 70 && snapUse.feats.sh
 
 // Giao diện: ô thành tựu mọc từ ô cấp 2, khoá có tiến độ
 await reset();
-await run(`s.current.skillPoints = 2; s.current.skills = ['dh1', 'dh2b']; s.current.feats = { share: 3 }; c.restoreActions();`);
+await run(`s.current.skillPoints = 2; s.current.skills = ['dh1', 'dh2b']; s.current.feats = { share: 2 }; c.restoreActions();`);
 await page.locator('#actions button[data-key="k"]').click();
 await page.locator('.st-node[data-id="dhX1"]').waitFor({ timeout: 5000 });
-check(await page.locator('.st-node.feat').count() === 10, 'cây có 10 ô thành tựu');
+check(await page.locator('.st-node.feat').count() === 9, 'cây có 9 ô thành tựu');
 check(await page.locator('.st-edge[data-to="dhX1"]').count() === 1, 'Hai Ngón có đúng 1 đường nối, từ Về Nhà');
 check(await page.locator('.st-edge[data-to="dhU"]').count() === 1, 'mỗi tối thượng nối từ đúng 1 ô cấp 3');
 /* Không ô nào đè lên ô khác: so hình chữ nhật của mọi cặp ô trong cùng cột */
@@ -1027,9 +1034,9 @@ const overlap = await page.evaluate(() => {
   return bad;
 });
 check(!overlap.length, `không có ô nào đè lên nhau (${overlap.join(', ') || 'không'})`);
-check(await page.locator('.st-node[data-id="dhX1"].is-locked').count() === 1, 'Hai Ngón khoá khi mới dừng chung ô 3 lần');
+check(await page.locator('.st-node[data-id="dhX1"].is-locked').count() === 1, 'Hai Ngón khoá khi mới dừng chung ô 2 lần');
 await page.locator('.st-node[data-id="dhX1"]').click();
-check((await page.locator('.sd-conds').textContent()).includes('3/5 lần'), 'thẻ chi tiết ghi tiến độ 3/5 lần');
+check((await page.locator('.sd-conds').textContent()).includes('2/3 lần'), 'thẻ chi tiết ghi tiến độ 2/3 lần');
 check((await page.locator('.sd-eyebrow').textContent()).includes('Thành tựu'), 'thẻ chi tiết ghi "Thành tựu"');
 await page.screenshot({ path: 'test-result/skills-feat.png' });
 await page.keyboard.press('Escape');

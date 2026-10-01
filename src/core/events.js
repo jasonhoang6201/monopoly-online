@@ -15,7 +15,7 @@
  */
 import { BOARD, GROUP_TILES, GROUPS } from '../data/board.js';
 import {
-  EVENTS, EVENT_LEVELS, UNLOCK_LAPS, PRESSURE,
+  EVENTS, EVENT_LEVELS, UNLOCK_LAPS, PRESSURE, LATE_AFTER, LATE_RARE,
 } from '../data/events.js';
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -89,6 +89,20 @@ function builtGroups(st) {
   return Object.keys(GROUPS).filter((g) => GROUP_TILES[g].some((id) => st.housesOn(id) > 0));
 }
 
+/** Khu màu có ít nhất một ô có chủ. */
+function ownedGroups(st) {
+  return Object.keys(GROUPS).filter((g) => GROUP_TILES[g].some((id) => st.owner.has(id)));
+}
+
+/**
+ * Pha cuối ván: thẻ này có bị gạt khỏi lần rút này không. Gạt thì nó về lại
+ * chồng như thẻ chưa dùng được, lần rút sau vẫn còn cơ hội ra.
+ */
+function lateSkip(st, card) {
+  if ((st.eventsFired ?? 0) < LATE_AFTER || card.late === 'main') return false;
+  return card.late === 'off' || Math.random() >= LATE_RARE;
+}
+
 /**
  * Danh sách ô của một khu màu cho hai thẻ thiên tai — **kể cả ô chưa có nhà**.
  *
@@ -155,6 +169,8 @@ export function usable(st, card) {
   switch (card.id) {
     case 'thue-dien-tho':
       return [...st.houses.values()].some((h) => h > 0);
+    case 'thue-khu':
+      return ownedGroups(st).length > 0;
     case 'siet-tin-dung':
       return st.mortgaged.size > 0;
     case 'an-xa':
@@ -198,12 +214,15 @@ export function usable(st, card) {
  * hai chồng chia theo kỳ trước đây: mọi thẻ giờ có tỉ lệ ra ngang nhau, kể cả
  * mấy lá đụng tới nhà đất.
  *
+ * Pha cuối ván (`LATE_AFTER` lần nổ trở đi) thẻ ngoài nhóm tài chính bị gạt
+ * bớt, xem `lateSkip`.
+ *
  * Thẻ rút lên mà không dùng được thì để riêng ra và bốc tiếp, xong mới trả cả
  * nắm ấy về chồng: bỏ hẳn thì lần sau bàn đã đổi, thẻ ấy lại dùng được mà
  * không còn trong chồng nữa.
  */
-export function drawEvent(st) {
-  if (!st.eventPile || st.eventPile.length === 0) st.eventPile = shuffledIds(EVENTS);
+export function drawEvent(st, fresh = false) {
+  if (fresh || !st.eventPile || st.eventPile.length === 0) st.eventPile = shuffledIds(EVENTS);
   const pile = st.eventPile;
 
   const skipped = [];
@@ -211,11 +230,15 @@ export function drawEvent(st) {
   while (pile.length > 0) {
     const id = pile.pop();
     const card = EVENTS.find((e) => e.id === id);
-    if (card && usable(st, card)) { chosen = card; break; }
+    if (card && usable(st, card) && !lateSkip(st, card)) { chosen = card; break; }
     if (card) skipped.push(id);
   }
   // Trả những thẻ chưa dùng được về chồng, xáo lẫn vào chỗ còn lại
   st.eventPile = shuffle([...pile, ...skipped]);
+  /* Chồng chỉ xáo lại khi rỗng, mà thẻ bị gạt thì quay về chồng: còn toàn
+     thẻ không rút được (Giới Nghiêm ở pha cuối, Ân Xá khi không ai ngồi tù)
+     thì chồng không bao giờ rỗng và sự kiện tắt hẳn. Xáo lại cả bộ, thử lần nữa. */
+  if (!chosen && !fresh) return drawEvent(st, true);
   return chosen;
 }
 
@@ -256,6 +279,22 @@ export function planEvent(st, card) {
       return bills.length ? { bills } : null;
     }
 
+    case 'thue-khu': {
+      const group = pick(ownedGroups(st));
+      const bySeat = new Map();
+      for (const id of GROUP_TILES[group]) {
+        const seat = st.owner.get(id);
+        if (seat === undefined || st.players[seat].bankrupt) continue;
+        const h = st.housesOn(id);
+        const worth = BOARD[id].price + BOARD[id].house_cost * h;
+        bySeat.set(seat, (bySeat.get(seat) ?? 0) + worth);
+      }
+      const bills = [...bySeat].map(([seat, worth]) => ({
+        seat, amount: Math.ceil(worth * card.rate), note: `đất và nhà khu ${GROUPS[group].name}`,
+      })).filter((b) => b.amount > 0);
+      return bills.length ? { group, bills } : null;
+    }
+
     case 'siet-tin-dung': {
       const bills = alive.map((p) => {
         const cut = st.propertiesOf(p.id).filter((id) => st.isMortgaged(id));
@@ -289,7 +328,7 @@ export function planEvent(st, card) {
 
     case 'mo-duong': {
       // Chỉ tăng giá khu đã có chủ — tăng giá cho đất ế thì chẳng ai được gì
-      const owned = Object.keys(GROUPS).filter((g) => GROUP_TILES[g].some((id) => st.owner.has(id)));
+      const owned = ownedGroups(st);
       const group = pick(owned.length ? owned : Object.keys(GROUPS));
       return { group, mod: { id: `${card.id}:${group}`, type: 'group-rent', group, mult: card.mult, turns: -1 } };
     }

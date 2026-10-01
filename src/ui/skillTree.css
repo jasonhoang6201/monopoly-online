@@ -187,12 +187,12 @@
   color: var(--paper-deep);
   transition: background .3s, border-color .3s, color .3s, box-shadow .3s;
 }
-.st-face .sk-ico { width: 54%; height: 54%; }
+.st-face .sk-ico { width: 42%; height: 42%; }
 
 /* Tối thượng: hình thoi to hơn, viền kép */
 .st-node.ult { width: calc(8.2 * var(--u)); }
 .st-node.ult .st-face { border-radius: 20%; transform: rotate(45deg); }
-.st-node.ult .st-face .sk-ico { transform: rotate(-45deg); width: 58%; height: 58%; }
+.st-node.ult .st-face .sk-ico { transform: rotate(-45deg); width: 46%; height: 46%; }
 .st-node.ult::before {
   content: ""; position: absolute; inset: -9%;
   border-radius: 22%; transform: rotate(45deg);
@@ -322,20 +322,6 @@
 }
 
 /* ---------------------------------------------------- gốc */
-.st-root {
-  position: absolute; transform: translate(-50%, -50%);
-  display: flex; align-items: center; gap: calc(1 * var(--u));
-  padding: calc(.8 * var(--u)) calc(2.2 * var(--u)) calc(.8 * var(--u)) calc(1.4 * var(--u));
-  border-radius: 999px;
-  background: linear-gradient(180deg, #3A2A1A, #1C130C);
-  border: 1px solid var(--gold);
-  box-shadow: 0 0 22px rgba(200, 160, 72, .25);
-  color: var(--gold-light);
-  white-space: nowrap;
-}
-.st-root .sk-ico { width: calc(2.8 * var(--u)); height: calc(2.8 * var(--u)); }
-.st-root b { font-size: clamp(10px, calc(1.45 * var(--u)), 15px); letter-spacing: .1em; color: var(--gold-pale); }
-
 /* ---------------------------------------------------- tên nổi */
 .st-tip {
   position: absolute; z-index: 5;

@@ -75,7 +75,7 @@ await page.evaluate(([lvRolls, ultB]) => {
     ['cn1', 'cn2a', 'cn2b', 'cn3', 'cnU', 'cnX1', 'cnX2'],
     ['dh1', 'dh2a', 'dh2b', 'dh3', 'dhU', 'dhX1', 'dhX2'],
     ['dd1', 'dd2a', 'dd2b', 'dd3', 'ddU', 'ac1', 'ddX1', 'ddX2', 'acX2'],
-    ['dc1', 'dc2a', 'dc2b', 'dc3', 'dcU', 'ac1', 'ac2a', 'ac2b', 'ac3', 'acU', 'dcX1', 'dcX2', 'acX1'],
+    ['dc1', 'dc2a', 'dc2b', 'dc3', 'dcU', 'acX2', 'ac1', 'ac2a', 'ac2b', 'ac3', 'acU', 'dcX1', 'dcX2', 'acX1'],
   ];
   // Tối thượng thứ hai: đổi mọi id 'xxU' thành 'xxV'
   if (ultB) builds.forEach((b) => b.forEach((id, j) => { if (/U$/.test(id)) b[j] = id.replace(/U$/, 'V'); }));

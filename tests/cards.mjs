@@ -216,7 +216,7 @@ const r = await page.evaluate(async () => {
 
   // Mọi thẻ trong cả hai bộ đều khai báo đúng loại
   const known = ['bank', 'collect', 'repair', 'jail-free', 'demolish',
-    'seize', 'resume', 'resume-random', 'move'];
+    'seize', 'resume', 'resume-random', 'move', 'skill'];
   out.badType = [...CHANCE, ...CHEST].filter((x) => !known.includes(cr.cardType(x))).length;
   out.hasNew = ['collect', 'repair', 'jail-free', 'demolish', 'seize',
     'resume', 'resume-random', 'move'].every((t) => !!find(CHANCE.concat(CHEST), t));
@@ -445,6 +445,15 @@ const useFromBag = async () => {
   await page.locator('.bag-use:not([disabled])').first().click();
   await page.waitForTimeout(900);
 };
+
+/* --------------------------------------------- thẻ cộng điểm kỹ năng */
+for (const kind of ['chance', 'chest']) {
+  const before = await page.evaluate(() => window.__monopoly.controller.state.current.skillPoints);
+  await forceCard(kind, 'skill');
+  await clickThrough();
+  const after = await page.evaluate(() => window.__monopoly.controller.state.current.skillPoints);
+  ok(`thẻ ${kind === 'chance' ? 'Cơ Hội' : 'Khí Vận'} cộng 1 điểm kỹ năng`, after === before + 1, `${before} → ${after}`);
+}
 
 await setBoard();
 await forceCard('chest', 'demolish');       // thẻ dỡ 1 cấp

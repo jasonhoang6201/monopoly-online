@@ -8,7 +8,7 @@ import {
   START_MONEY,
   MAX_JAIL_TURNS,
 } from '../data/board.js';
-import { GameState, rollDice, orderFromRolls } from '../core/state.js';
+import { GameState, rollDice, orderFromRolls, WIN_CASH, WIN_SETS, WIN_HOTEL_SETS } from '../core/state.js';
 import {
   addPressure, eventDue, eventsOn, pressureRatio, threshold, autoRaise, PRESSURE,
 } from '../core/events.js';
@@ -21,7 +21,7 @@ import { cardOf, CARD_KINDS, cardName, cardEffect, DECKS } from '../data/cards.j
 import { inventoryModal } from '../ui/inventory.js';
 import { EventRunner } from './eventRunner.js';
 import { SkillPlay } from './skillPlay.js';
-import { has, watchCash, bumpFeat, offSpent } from '../core/skills.js';
+import { has, watchCash, bumpFeat, offSpent, grantLapPoint } from '../core/skills.js';
 import { snapshot, fromSnapshot, applySnapshot } from '../core/serialize.js';
 import { Hud, Broadcast } from '../ui/hud.js';
 import { QuickView } from '../ui/quickview.js';
@@ -198,7 +198,9 @@ export class Game {
     this.bc.clear();
 
     await this.bc.show('KHAI CUỘC',
-      `Ván cờ bắt đầu — mỗi người ${money(START_MONEY)} vốn liếng. Chúc may mắn!`, { ms: 2600 });
+      `Ván cờ bắt đầu, mỗi người ${money(START_MONEY)} vốn liếng. Thắng khi còn trụ lại một mình,
+       giữ ${WIN_SETS} bộ màu với ${WIN_HOTEL_SETS} bộ phủ kín khách sạn, hoặc ôm đủ ${money(WIN_CASH)} tiền mặt.`,
+      { ms: 4200 });
     await this.rollOff();
   }
 
@@ -469,7 +471,20 @@ export class Game {
   onSync(snap) {
     if (!this.state) return;
     if (snap.rev != null && this.state.rev != null && snap.rev <= this.state.rev) return;
+    const wasOver = this.state.over;
     applySnapshot(this.state, snap);
+    /* Ván vừa hạ màn ở máy cầm lái: `checkGameOver` chỉ chạy ở đó, máy này
+       dựng lại cửa thắng từ ảnh chụp để hiện đúng bảng tổng kết. */
+    if (this.state.over && !wasOver) {
+      const win = this.state.winCheck();
+      if (win) {
+        this.hud.refresh();
+        this.scene.refresh(this.state);
+        this.hud.clearActions();
+        this.finish(win);
+        return;
+      }
+    }
     this.skills.reconcileLearn();
     this.refreshSkillBtn();
     this.hud.refresh();
@@ -1389,6 +1404,7 @@ export class Game {
     switch (cardType(drawn.card)) {
       case 'collect': return this.cardCollect(p, kind, drawn.card, title, seed);
       case 'repair':  return this.cardRepair(p, kind, drawn.card, title, seed);
+      case 'skill':   return this.cardSkill(p, kind, drawn.card, title, seed);
       case 'move':    return this.cardMove(p, kind, drawn.card, title, seed, dice);
       default:        return this.cardMoney(p, kind, drawn.card, title, seed);
     }
@@ -1436,6 +1452,19 @@ export class Game {
   fateDone() {
     for (const done of this.fateWaiters) done();
     this.fateWaiters.clear();
+  }
+
+  /** Thẻ cộng điểm kỹ năng. Không đụng tiền nên không qua `receiveFromBank`. */
+  async cardSkill(p, kind, card, title, seed) {
+    await this.showFateCard(kind, card, {
+      seed, note: `Nhận <b>+${card.points} điểm kỹ năng</b>.`, label: 'Nhận điểm',
+    });
+    grantLapPoint(p, card.points);
+    this.hud.refresh();
+    this.sync();
+    audio.sfx('coin');
+    await this.bc.show(title,
+      `<b>${p.name}</b>: ${card.text} <b>+${card.points} điểm kỹ năng</b> (đang có ${p.skillPoints}).`);
   }
 
   /** Thẻ cũ: cộng hoặc trừ tiền với ngân hàng. */
@@ -2714,7 +2743,7 @@ export class Game {
 
   checkGameOver() {
     const st = this.state;
-    const w = st.winner();
+    const w = st.winCheck();
     if (!w) return false;
     st.over = true;
     this.clock = null;
@@ -2727,9 +2756,21 @@ export class Game {
     return true;
   }
 
-  async finish(winner) {
+  /**
+   * @param {{player:object, by:string}} win kết quả của `GameState.winCheck`
+   */
+  async finish(win) {
+    // Máy cầm lái gọi từ `checkGameOver`, máy khác gọi khi ảnh chụp báo hết ván
+    if (this.finishing) return;
+    this.finishing = true;
+    const winner = win.player;
+    const why = {
+      last: 'là người cuối cùng trụ lại',
+      empire: `giữ ${WIN_SETS} bộ màu, ${WIN_HOTEL_SETS} bộ đã phủ kín khách sạn`,
+      cash: `ôm đủ ${money(WIN_CASH)} tiền mặt`,
+    }[win.by];
     await this.bc.show('HẠ MÀN',
-      `<b>${winner.name}</b> là người cuối cùng trụ lại — <b>thắng ván này!</b>`, { ms: 6000 });
+      `<b>${winner.name}</b> ${why} — <b>thắng ván này!</b>`, { ms: 6000 });
     this.scene.celebrate(5200, winner.token.color);
     await wait(1600);
     // Ván đã hạ màn — quay về "màn hình chờ", nhạc nền nổi lại
@@ -2747,6 +2788,7 @@ export class Game {
     }
 
     if (again === 'again') {
+      this.finishing = false;
       this.bc.clear();
       await this.start();
     }

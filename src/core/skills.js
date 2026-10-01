@@ -344,8 +344,14 @@ export const isOff = (p, id) => !!p?.skillOff?.includes(id) && switchable(skillB
  * Tóm) cũng không có công tắc: hộp hỏi đã có nút bỏ qua, bắt bật trước chỉ
  * thêm một bước mà người chơi hay quên. `isOff` cũng hỏi hàm này, nên ảnh chụp
  * cũ còn ghi các ô ấy trong `skillOff` dựng lại vẫn chạy.
+ *
+ * Kỹ năng làm một lần (`once`: Tất Tay, Xuyên Việt, Nhặt Hàng Thừa, Siết Nợ)
+ * cũng không có công tắc. Trước đây chúng có, học xong nằm tắt, mà kho kỹ
+ * năng chỉ chọn cửa / chọn ô chứ không bật: `has()` trả false nên lần dùng
+ * không được ghi vào tiến độ lên level, Nhặt Hàng Thừa và Siết Nợ không thấy
+ * ô nào để chọn. Chỉ ai bật tay trong cây kỹ năng mới dùng được.
  */
-export const switchable = (s) => s?.kind === 'active' && !s.auto;
+export const switchable = (s) => s?.kind === 'active' && !s.auto && !s.once;
 
 /**
  * Bật / tắt một kỹ năng đã học. Chỉ gọi trong lượt của chính người đó (xem
@@ -455,8 +461,8 @@ export function onLap(p) {
  * Tỉ lệ quỹ Liên Đoàn Lao Động lần qua ô Bắt Đầu này: base + perLap × số lần
  * đã qua − jail × số lần vào tù, chặn trong [0, cap].
  *
- * Học tới tối thượng tốn 7 điểm = đã qua ô Bắt Đầu ít nhất 7 lần, nên lúc vừa
- * học tỉ lệ đã ở quanh 10%; trần 20% của level 3 cần 17 lần qua mà không vào
+ * Học tới tối thượng tốn 5 điểm = đã qua ô Bắt Đầu ít nhất 5 lần, nên lúc vừa
+ * học tỉ lệ đã ở quanh 8%; trần 20% của level 3 cần 17 lần qua mà không vào
  * tù. Vào tù trừ 3%, gấp ba một lần qua, vì một vòng bàn cờ chỉ có chừng 0,2–0,3
  * lần vào tù (ô Vào Tù, thẻ, đôi ba lần — đo ở tests/skills-play.mjs).
  */

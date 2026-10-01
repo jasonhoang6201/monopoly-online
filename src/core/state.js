@@ -56,6 +56,11 @@ export const TOKENS = [
  */
 export const MAX_PLAYERS = 6;
 
+/** Cửa thắng sớm — xem `GameState.winCheck`. */
+export const WIN_CASH = 11111;
+export const WIN_SETS = 3;
+export const WIN_HOTEL_SETS = 2;
+
 export class Player {
   constructor(id, name, tokenIndex) {
     this.id = id;
@@ -340,6 +345,17 @@ export class GameState {
     return [];
   }
 
+  /**
+   * Người chơi có căn nhà nào trên các ô **của mình** trong bộ màu này không.
+   *
+   * Chỉ xét ô của chính người ấy: với Chung Cư Mini và Sổ Hồng, một bộ màu có
+   * thể chia cho hai chủ mà một bên đã xây. Xét cả bộ thì một căn nhà của bên
+   * này khoá luôn việc thế chấp, ép mua ô của bên kia.
+   */
+  groupBuilt(playerId, group) {
+    return GROUP_TILES[group].some((id) => this.owner.get(id) === playerId && this.housesOn(id) > 0);
+  }
+
   /** Số nhà ga người chơi đang sở hữu. */
   stationCount(playerId) {
     return BOARD.filter((t) => t.type === 'station' && this.owner.get(t.id) === playerId).length;
@@ -597,7 +613,7 @@ export class GameState {
     const t = BOARD[tileId];
     if (t.type === 'property') {
       // Phải phá hết nhà trong cả bộ trước khi thế chấp.
-      if (GROUP_TILES[t.color_group].some((id) => this.housesOn(id) > 0)) {
+      if (this.groupBuilt(playerId, t.color_group)) {
         return { ok: false, reason: 'Phải bán hết nhà trong bộ trước.' };
       }
     }
@@ -756,10 +772,34 @@ export class GameState {
     return null;
   }
 
-  /** Người thắng khi chỉ còn 1 người trụ lại. */
-  winner() {
+  /** Người thắng, hoặc `null` khi ván chưa ngã ngũ. */
+  winner() { return this.winCheck()?.player ?? null; }
+
+  /**
+   * Ván đã có người thắng chưa, và thắng theo cửa nào:
+   *  - `last`   còn đúng một người chưa phá sản
+   *  - `empire` giữ đủ `WIN_SETS` bộ màu, trong đó `WIN_HOTEL_SETS` bộ đã lên
+   *             khách sạn ở mọi ô
+   *  - `cash`   tiền mặt đạt `WIN_CASH`
+   *
+   * Hai cửa sau có vì ván chờ tới lúc chỉ còn một người thường kéo cả tiếng:
+   * người đã nắm chắc phần thắng vẫn phải đi tiếp chục vòng. Xét ở cuối mỗi
+   * lượt; hai người cùng qua vạch trong một lượt thì ai nhiều tiền mặt hơn thắng.
+   * @returns {?{player:Player, by:'last'|'empire'|'cash'}}
+   */
+  winCheck() {
     const alive = this.alive();
-    return alive.length === 1 ? alive[0] : null;
+    if (alive.length === 1) return { player: alive[0], by: 'last' };
+    const richest = (list) => list.reduce((a, b) => (b.money > a.money ? b : a));
+    const empire = alive.filter((p) => {
+      const sets = Object.keys(GROUPS).filter((g) => this.hasFullGroup(p.id, g));
+      const hotels = sets.filter((g) => GROUP_TILES[g].every((id) => this.housesOn(id) === 5));
+      return sets.length >= WIN_SETS && hotels.length >= WIN_HOTEL_SETS;
+    });
+    if (empire.length) return { player: richest(empire), by: 'empire' };
+    const cash = alive.filter((p) => p.money >= WIN_CASH);
+    if (cash.length) return { player: richest(cash), by: 'cash' };
+    return null;
   }
 }
 

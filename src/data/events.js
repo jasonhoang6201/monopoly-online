@@ -30,6 +30,15 @@
  * (`perHouse`, `braceRate`, `rounds`…) chỉ khai một chỗ: sửa số thì dòng chữ
  * đổi theo, không có đường lệch nhau.
  *
+ * ── Cuối ván: thẻ tài chính ra dày hơn ─────────────────────────────────────
+ * Mấy lần nổ đầu cả chồng ra ngang nhau. Từ lần nổ thứ `LATE_AFTER` trở đi,
+ * thẻ mang `late: 'main'` (thuế, giá cả, thiên tai, đổi đất) vẫn ra như cũ,
+ * còn thẻ không mang cờ ấy mỗi lần bị rút lên chỉ được giữ với xác suất
+ * `LATE_RARE`. Chồng bài xáo lại liên tục nên thẻ bị gạt còn được thử lại:
+ * `tests/events.mjs` đo ra chúng xuất hiện chừng 1/3 số lần của thẻ tài chính.
+ * `late: 'off'` là không bao giờ ra nữa: Giới Nghiêm chặn đường xây nhà, mà
+ * cuối ván xây nhà là cách duy nhất để ván kết thúc.
+ *
  * `heavy` đánh dấu thẻ đụng tới nhà cửa hoặc quyền sở hữu — băng chuyền bóc
  * thẻ (`ui/caseOpen.js`) xếp mấy lá ấy vào hạng Hiếm. Trước đây nó xét theo
  * kỳ; kỳ bỏ rồi nên cờ này khai thẳng trên thẻ.
@@ -66,7 +75,7 @@ const pct = (mult) => `${mult >= 1 ? '+' : '−'}${Math.round(Math.abs(mult - 1)
 export const EVENTS = [
   /* -------------------------------------------- Tiền mặt và luật tạm thời */
   {
-    id: 'thue-dien-tho', kind: 'bad', sigil: '⚖',
+    id: 'thue-dien-tho', kind: 'bad', sigil: '⚖', late: 'main',
     title: 'SƯU CAO THUẾ NẶNG',
     text: `Toà Đô Chánh ra lệnh trưng thu sưu thuế điền thổ toàn hạt Gia Định.
            Nhà nào cửa nấy đều bị gọi tên, không ai khất được.`,
@@ -81,7 +90,21 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'lam-phat', kind: 'chaos', sigil: '↑',
+    id: 'thue-khu', kind: 'bad', sigil: '⚖', late: 'main',
+    title: 'THUẾ THỔ TRẠCH',
+    text: `Sở Địa Chính đo lại từng lô trong một khu phố, tính thuế theo giá
+           đất và số nóc nhà đang đứng trên đó.`,
+    /* Tính trên giá gốc của đất cộng giá xây đã đổ vào, nên khu đắt và khu
+       xây dày nộp nhiều hơn; khu mới mua đất trống chỉ nộp phần nhỏ. */
+    rate: 0.15,
+    effect: (c) => [
+      'Bốc thăm một khu màu đã có chủ',
+      `Chủ đất trong khu nộp ${Math.round(c.rate * 100)}% giá đất cộng giá nhà đã xây ở khu ấy`,
+      'Tiền dồn hết vào Quỹ Công',
+    ],
+  },
+  {
+    id: 'lam-phat', kind: 'chaos', sigil: '↑', late: 'main',
     title: 'GIÁ GẠO LEO THANG',
     text: `Gạo Chợ Lớn khan hàng, cái gì cũng lên giá theo. Chủ nhà nhân dịp
            hét thêm, người thuê đành cắn răng chịu.`,
@@ -92,7 +115,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'mat-mua', kind: 'bad', sigil: '☵',
+    id: 'mat-mua', kind: 'bad', sigil: '☵', late: 'main',
     title: 'MẤT MÙA',
     text: `Nước lũ về sớm, ruộng miền Tây ngập trắng. Thóc không về tới vựa,
            đồng lương cũng hụt theo.`,
@@ -103,7 +126,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'bao-gia', kind: 'bad', sigil: '⚒',
+    id: 'bao-gia', kind: 'bad', sigil: '⚒', late: 'main',
     title: 'BÃO GIÁ VẬT LIỆU',
     text: `Xi măng với gỗ lim đội giá gấp rưỡi. Nhà thầu nào cũng lắc đầu
            hẹn lại sang năm.`,
@@ -129,7 +152,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'gioi-nghiem', kind: 'chaos', sigil: '⊘',
+    id: 'gioi-nghiem', kind: 'chaos', sigil: '⊘', late: 'off',
     title: 'GIỚI NGHIÊM',
     text: `Lệnh giới nghiêm ban ra, thợ thuyền không ai được ra đường.
            Giàn giáo bỏ không giữa phố.`,
@@ -174,7 +197,7 @@ export const EVENTS = [
 
   /* ------------------------------------- Nhà cửa và quyền sở hữu (`heavy`) */
   {
-    id: 'dong-dat', kind: 'bad', sigil: '☳', heavy: true,
+    id: 'dong-dat', kind: 'bad', sigil: '☳', heavy: true, late: 'main',
     title: 'ĐỘNG ĐẤT',
     text: `Đất rung một trận, cả khu nứt tường sập mái. Người ta đổ ra đường
            đứng nhìn nhà mình.`,
@@ -194,7 +217,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'hoa-hoan', kind: 'bad', sigil: '☲', heavy: true,
+    id: 'hoa-hoan', kind: 'bad', sigil: '☲', heavy: true, late: 'main',
     title: 'HOẢ HOẠN',
     text: `Lửa bén từ một tiệm dầu, cháy lan cả dãy phố. Phu chữa cháy đứng
            chờ tiền công mới chịu kéo vòi.`,
@@ -235,7 +258,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'sang-nhuong', kind: 'chaos', sigil: '⇥', heavy: true,
+    id: 'sang-nhuong', kind: 'chaos', sigil: '⇥', heavy: true, late: 'main',
     title: 'SANG NHƯỢNG BẮT BUỘC',
     text: `Toà án tuyên phát mãi một lô đất theo lệnh cưỡng chế, dán giấy
            ngay trước cổng.`,
@@ -246,7 +269,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'hoan-doi-dia-ba', kind: 'chaos', sigil: '⇄', heavy: true,
+    id: 'hoan-doi-dia-ba', kind: 'chaos', sigil: '⇄', heavy: true, late: 'main',
     title: 'HOÁN ĐỔI ĐỊA BẠ',
     text: `Sổ địa bạ bị chép lộn cả loạt, tên chủ này nằm trên đất chủ kia.`,
     effect: () => [
@@ -256,7 +279,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'mo-duong', kind: 'good', sigil: '⌁', heavy: true,
+    id: 'mo-duong', kind: 'good', sigil: '⌁', heavy: true, late: 'main',
     title: 'MỞ ĐƯỜNG LỚN',
     text: `Đại lộ mới xẻ ngang một khu, xe cộ chạy suốt ngày đêm, đất hai bên
            đường lên giá thấy rõ.`,
@@ -333,6 +356,11 @@ export const EVENT_LEVELS = {
 };
 
 export const DEFAULT_EVENT_LEVEL = 'chuan';
+
+/** Nổ đủ bấy nhiêu lần thì vào pha cuối ván — xem ghi chú đầu tệp. */
+export const LATE_AFTER = 4;
+/** Pha cuối ván, thẻ không mang `late: 'main'` chỉ còn tỉ lệ ra này. */
+export const LATE_RARE = 0.1;
 
 /** Đủ vòng này thì mở khoá dù đất chưa bán hết — đề phòng bàn ế đất mãi. */
 export const UNLOCK_LAPS = 6;

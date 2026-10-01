@@ -93,15 +93,17 @@ export function repairBill(st, seat, card) {
 }
 
 /**
- * Khu màu chứa ô này có căn nhà nào chưa — nhà trên ô nào trong khu cũng tính.
+ * Chủ ô này đã xây căn nào trong khu màu chứa nó chưa — chỉ tính ô của chính
+ * chủ ấy. Nhà của người khác cùng khu (Chung Cư Mini, Sổ Hồng) không che chở
+ * cho ô này: không thì một căn nhà lẻ khoá cả khu, kể cả khỏi tay người xây.
  *
  * Ô không thuộc khu màu (ga tàu, dịch vụ) thì chỉ xét chính nó, vì chúng không
  * có bộ để mà phá.
  */
-function groupHasHouses(st, tileId) {
+export function groupHasHouses(st, tileId) {
   const group = BOARD[tileId].color_group;
-  const ids = group ? GROUP_TILES[group] : [tileId];
-  return ids.some((id) => st.housesOn(id) > 0);
+  if (!group) return st.housesOn(tileId) > 0;
+  return st.groupBuilt(st.owner.get(tileId), group);
 }
 
 /**

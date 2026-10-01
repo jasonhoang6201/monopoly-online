@@ -17,8 +17,11 @@
  * vì "học được ngay" chỉ có nghĩa với chính chủ cây.
  *
  * Kỹ năng bấm để dùng học xong thì nằm **tắt**; kỹ năng tự động học là chạy.
- * Bật / tắt và tẩy điểm chỉ có trong lượt của chính chủ cây (`manage`); ngoài
- * lượt vẫn mở cây để học và lên level.
+ * Cây chỉ hiện trạng thái bật / tắt, không có công tắc: bật tắt và chọn cách
+ * dùng (cửa chẵn / lẻ, số tiền cược…) chỉ làm trong kho "Dùng kỹ năng". Hai
+ * chỗ cùng bật được thì cây bật mà không hỏi cách dùng, kho lại giữ lựa chọn
+ * cũ, hai bên lệch nhau. Tẩy điểm chỉ có trong lượt của chính chủ cây
+ * (`manage`); ngoài lượt vẫn mở cây để học và lên level.
  */
 import './skillTree.css';
 import { openModal } from './modal.js';
@@ -28,7 +31,7 @@ import {
   skillById, branchByKey, skillCost, skillState, canLearn, learnSkill, levelOf,
   canLevelUp, nextCost, lvParams, levelLine, spentIn, branchMax, fillText,
   canRespec, respec, featMet, featText, growNeed, growText, growProgress, rivalUlt,
-  isOff, setSkillOn, switchable,
+  isOff, switchable,
 } from '../core/skills.js';
 import { audio } from '../audio/audio.js';
 import { money } from '../data/board.js';
@@ -49,7 +52,6 @@ const COL_X = [140, 420, 700, 980, 1260];
    mỗi cột chỉ đủ chỗ cho 3 ô cạnh nhau, dồn 4 ô lên một hàng thì ô đè sang
    cột bên cạnh. */
 const TIER_Y = { 4: 166, 3: 296, side: 392, 2: 488, 1: 588 };
-const ROOT = { x: 700, y: 664 };
 /**
  * Độ lệch khỏi trục cột theo `slot`. Mỗi ô một cha (xem `requires` trong
  * data/skills.js), nên ô con đứng gần thẳng trên ô cha và đường nối gần như
@@ -81,10 +83,8 @@ function curve(a, b) {
   return `M${a.x} ${a.y} C${a.x} ${my} ${b.x} ${my} ${b.x} ${b.y}`;
 }
 
-/** Danh sách cạnh: `from` = null là mọc từ gốc. */
-const EDGES = SKILLS.flatMap((s) => (s.requires?.length
-  ? s.requires.map((r) => ({ from: r, to: s.id }))
-  : [{ from: null, to: s.id }]));
+/** Danh sách cạnh. Ô cấp 1 không có cạnh nào: cây không vẽ nút gốc chung. */
+const EDGES = SKILLS.flatMap((s) => (s.requires ?? []).map((r) => ({ from: r, to: s.id })));
 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -128,7 +128,7 @@ function buildTree(player, readOnly, manage) {
 
   const edges = EDGES.map((e) => {
     const to = skillById(e.to);
-    const a = e.from ? posOf(skillById(e.from)) : ROOT;
+    const a = posOf(skillById(e.from));
     const col = branchByKey(to.branch).color;
     return `<path class="st-edge" data-from="${e.from ?? ''}" data-to="${e.to}"
                   style="--c:${col}" d="${curve(a, posOf(to))}" pathLength="100"/>`;
@@ -143,8 +143,8 @@ function buildTree(player, readOnly, manage) {
         <span class="st-plabel">điểm kỹ năng</span>
       </div>
       <span class="st-hint">${readOnly ? 'Bấm vào một ô để xem tác dụng và level'
-        : manage ? '+1 điểm mỗi lần đi qua ô Bắt Đầu · kỹ năng bấm để dùng học xong nằm tắt, bấm vào ô để bật'
-          : 'Chưa tới lượt bạn: học và lên level được, bật / tắt và tẩy điểm thì chờ tới lượt'}</span>
+        : manage ? '+1 điểm mỗi lần đi qua ô Bắt Đầu · kỹ năng bấm để dùng bật trong kho Dùng kỹ năng'
+          : 'Chưa tới lượt bạn: học và lên level được, tẩy điểm thì chờ tới lượt'}</span>
       <span class="st-count"></span>
       ${readOnly || !manage ? '' : `<button type="button" class="btn btn-sm btn-ghost st-respec" data-act="respec-open"
               title="Hoàn lại toàn bộ điểm đã tiêu để học lại từ đầu">Tẩy điểm</button>`}
@@ -155,10 +155,6 @@ function buildTree(player, readOnly, manage) {
         <svg class="st-links" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${edges}</svg>
         ${heads}
         ${nodes}
-        <div class="st-root" style="${pct(ROOT)}">
-          ${skillIcon('root')}
-          <b>KHỞI NGHIỆP</b>
-        </div>
         <div class="st-tip" role="tooltip"></div>
       </div>
     </div>
@@ -217,6 +213,9 @@ function detailHtml(player, s, readOnly, manage, st) {
         : 'Tự động, không cần bấm. Hiệu ứng <b>vĩnh viễn</b> từ lúc học tới hết ván.')
     : s.auto
       ? `Không cần bật: học xong là game tự hỏi bạn ${esc(s.when)}, muốn dùng thì chọn, không thì bỏ qua. <b>${esc(s.uses)}</b>.`
+      : s.once
+        ? `Không cần bật: mở kho <b>Dùng kỹ năng</b> trên thanh nút, bấm vào ô để chọn rồi bấm Chốt, kỹ năng chạy ngay lúc ấy. `
+        + `Dùng được ${esc(s.when)}. <b>${esc(s.uses)}</b>.`
       : `Học xong kỹ năng nằm <b>tắt</b> trong kho <b>Dùng kỹ năng</b> trên thanh nút. Trong kho, bấm vào ô để bật (ô có màu) `
       + `hoặc chọn cách dùng, chọn "Không" là tắt; bấm Chốt để áp dụng. Dùng được ${esc(s.when)}. <b>${esc(s.uses)}</b>. `
       + 'Dùng hết lượt thì cuối lượt tự về tắt.') + ultNote;
@@ -234,20 +233,16 @@ function detailHtml(player, s, readOnly, manage, st) {
   const upLabel = lv ? `Lên level ${lv + 1}` : 'Nâng cấp';
   const off = lv && isOff(player, s.id);
   const onTag = lv && switchable(s) ? `<span class="sd-onoff ${off ? 'is-off' : 'is-on'}">${off ? 'Đang tắt' : 'Đang bật'}</span>` : '';
-  /* Công tắc chỉ có trong lượt của chủ cây. Ngoài lượt vẫn hiện trạng thái
-     để người chơi biết phải bật cái gì khi tới lượt. */
+  // Cây chỉ báo trạng thái; bật / tắt nằm ở kho Dùng kỹ năng (xem đầu tệp)
   const toggle = !lv || readOnly || !switchable(s) ? ''
-    : manage
-      ? `<button type="button" class="btn ${off ? 'btn-jade' : 'btn-ghost'} sd-toggle" data-act="toggle"${maxed ? ' data-primary' : ''}>
-           ${off ? 'Bật kỹ năng' : 'Tắt kỹ năng'}</button>`
-      : '<span class="sd-wait">Bật / tắt trong lượt của bạn</span>';
+    : '<span class="sd-wait">Bật / tắt trong kho Dùng kỹ năng</span>';
   const foot = readOnly
     ? `${lv ? `<div class="sd-learned">${skillIcon('check')} Level ${lv}/${MAX_LEVEL}${onTag}</div>` : '<div class="sd-learned sd-not">Chưa học</div>'}
        <button type="button" class="btn btn-ghost" data-act="cancel" data-primary>Đóng</button>`
     : maxed
       ? `<div class="sd-learned">${skillIcon('check')} Đã đạt level ${MAX_LEVEL}${onTag}</div>
          ${toggle}
-         <button type="button" class="btn btn-ghost" data-act="cancel">Đóng</button>`
+         <button type="button" class="btn btn-ghost" data-act="cancel" data-primary>Đóng</button>`
       : `${lv ? `<div class="sd-learned">${skillIcon('check')} Level ${lv}/${MAX_LEVEL}${onTag}</div>` : ''}
          ${toggle}
          <button type="button" class="btn btn-ghost" data-act="cancel">Huỷ<kbd class="btn-key">Esc</kbd></button>
@@ -290,7 +285,7 @@ function detailHtml(player, s, readOnly, manage, st) {
             ${conds.map((c) => `<li class="${c.ok ? 'ok' : 'no'}">${c.ok ? '✓' : '✕'} ${c.text}</li>`).join('')}
           </ul>
           ${!maxed && check.ok ? `<p class="sd-after">Nâng xong còn <b>${after}</b> điểm.${
-            lv || !switchable(s) ? '' : ' Học xong kỹ năng nằm <b>tắt</b>, bật lên trong lượt của bạn thì mới dùng được.'}</p>` : ''}
+            lv || !switchable(s) ? '' : ' Học xong kỹ năng nằm <b>tắt</b>, bật trong kho <b>Dùng kỹ năng</b> thì mới dùng được.'}</p>` : ''}
           ${!maxed && !check.ok ? `<p class="sd-why">${esc(check.reason)}</p>` : ''}
         </section>`}
       </div>
@@ -344,9 +339,9 @@ function respecHtml(player) {
  *   bị sửa trực tiếp khi nâng cấp hay tẩy điểm (không bao giờ ở `readOnly`).
  * @param {object} [o]
  * @param {boolean} [o.readOnly] chỉ xem — không nút học, không tẩy điểm
- * @param {boolean} [o.manage=true] được bật / tắt và tẩy điểm — `false` khi
+ * @param {boolean} [o.manage=true] được tẩy điểm — `false` khi
  *   mở cây ngoài lượt của mình: chỉ học và lên level
- * @param {()=>void} [o.onChange] gọi sau mỗi lần nâng cấp, bật / tắt hoặc tẩy điểm
+ * @param {()=>void} [o.onChange] gọi sau mỗi lần nâng cấp hoặc tẩy điểm
  * @param {(id:string)=>void} [o.onLearn] gọi sau mỗi lần học ô mới hoặc lên level
  * @param {()=>void} [o.onClose] bấm nút ✕ trên thanh điểm
  * @param {()=>?object} [o.state] trả GameState hiện tại — điều kiện lên level
@@ -521,17 +516,6 @@ export function mountSkillTree(player, o = {}) {
     o.onChange?.();
   }
 
-  /** Bật / tắt ô đang mở. Thẻ chi tiết giữ nguyên, chỉ vẽ lại nút và nhãn. */
-  function doToggle() {
-    if (!manage || !openId) return;
-    if (!setSkillOn(player, openId, isOff(player, openId))) return;
-    refresh();
-    detail.innerHTML = detailHtml(player, skillById(openId), readOnly, manage, board());
-    detail.querySelector('[data-act="toggle"]')?.focus({ preventScroll: true });
-    audio.sfx(isOff(player, openId) ? 'click' : 'build');
-    o.onChange?.();
-  }
-
   function doRespec() {
     if (readOnly) return;
     const res = respec(player);
@@ -604,7 +588,6 @@ export function mountSkillTree(player, o = {}) {
     if (act === 'close') o.onClose?.();
     else if (act === 'cancel') closeDetail();
     else if (act === 'learn') doLearn();
-    else if (act === 'toggle') doToggle();
     else if (act === 'respec-open') openDetail('respec');
     else if (act === 'respec') doRespec();
     // Bấm ra vùng tối quanh thẻ = huỷ

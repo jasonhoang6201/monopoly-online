@@ -49,7 +49,7 @@ export function rankOf(kind, card) {
   if (KEEPABLE.has(card.type)) return 'hiem';  // thẻ cất túi, chờ đúng lúc mới nổ
   // Thẻ dắt quân đi chỗ khác đổi thế cờ nhiều hơn một khoản tiền lẻ
   if (card.type === 'move') return card.jail ? 'hiem' : 'quy';
-  if (card.type === 'repair' || card.type === 'collect') return 'quy';
+  if (card.type === 'repair' || card.type === 'collect' || card.type === 'skill') return 'quy';
   return Math.abs(card.amount ?? 0) >= 150 ? 'kha' : 'thuong';
 }
 
@@ -59,6 +59,7 @@ export function shortLabel(kind, card) {
   switch (card.type) {
     case 'collect':       return 'TIỀN MỪNG';
     case 'repair':        return 'THUẾ NHÀ';
+    case 'skill':         return `+${card.points} ĐIỂM KỸ NĂNG`;
     case 'jail-free':     return 'VÉ RA TÙ';
     case 'demolish':      return 'DỠ NHÀ';
     case 'seize':         return 'CƯỠNG CHẾ';
@@ -445,7 +446,7 @@ async function reveal(stage, reel, cell, kind, card, rank, o) {
  */
 export function fateCase(kind, card, o = {}) {
   const amount = o.amount ?? null;
-  const up = amount !== null && amount > 0;
+  const up = (amount !== null && amount > 0) || card.type === 'skill';
   /* Thẻ Cơ Hội / Khí Vận là chuyện của riêng người vừa đáp xuống ô: nút và phím
      Enter chỉ có trên máy ấy. Máy ngồi xem nhận `closeOn` — không dựng nút nên
      `openModal` cũng không gắn Enter, và hộp tắt theo cú bấm bên kia. Bỏ luôn

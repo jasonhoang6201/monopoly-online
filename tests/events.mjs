@@ -292,7 +292,7 @@ async function clearModals(page, ms = 120000) {
 
 console.log('\n--- từng thẻ đụng nhà đất ---');
 const HEAVY = ['dong-dat', 'hoa-hoan', 'mat-giay-to', 'trung-thu',
-               'sang-nhuong', 'hoan-doi-dia-ba', 'mo-duong', 'dai-ha-gia'];
+               'sang-nhuong', 'hoan-doi-dia-ba', 'mo-duong', 'dai-ha-gia', 'thue-khu'];
 
 for (const id of HEAVY) {
   const before = errors.length;
@@ -314,7 +314,8 @@ for (const id of HEAVY) {
     [11, 13, 14].forEach((tile) => { st.owner.set(tile, 0); st.houses.set(tile, 3); });
     st.bankHouses = 32 - 9;
     st.eventPile = [cardId];
-    st.eventsFired = 5;
+    // Dưới mốc pha cuối ván (LATE_AFTER = 4): ở pha ấy thẻ ngoài nhóm tài chính bị gạt bớt
+    st.eventsFired = 3;
     st.laps = 99;
     st.pressure = 999;
     c.hud.refresh();
@@ -334,9 +335,28 @@ for (const id of HEAVY) {
     };
   });
   ok(`thẻ ${id} chạy trọn không lỗi`,
-    shown && state.fired === 6 && errors.length === before,
+    shown && state.fired === 4 && errors.length === before,
     `thẻ hiện=${shown} ${JSON.stringify(state)} ${errors.slice(before).join(' | ')}`);
 }
+
+console.log('\n--- pha cuối ván ---');
+const late = await page.evaluate(async () => {
+  const E = await import('/src/core/events.js');
+  const st = window.__monopoly.controller.state;
+  const seen = {};
+  const saved = { fired: st.eventsFired, pile: st.eventPile };
+  st.eventsFired = 10;
+  for (let i = 0; i < 400; i++) {
+    const card = E.drawEvent(st);
+    if (card) seen[card.id] = (seen[card.id] ?? 0) + 1;
+  }
+  st.eventsFired = saved.fired; st.eventPile = saved.pile;
+  return seen;
+});
+const lateMain = ['thue-khu', 'lam-phat', 'dong-dat', 'hoa-hoan', 'mo-duong'];
+ok('pha cuối ván không còn Giới Nghiêm', !late['gioi-nghiem'], JSON.stringify(late));
+ok('pha cuối ván thẻ tài chính ra nhiều hơn thẻ khác',
+  lateMain.some((id) => (late[id] ?? 0) > (late['hoi-cho'] ?? 0)), JSON.stringify(late));
 
 console.log(errors.length ? `\nLỖI TRANG:\n${errors.join('\n')}` : '\nKhông có lỗi trang.');
 await browser.close();

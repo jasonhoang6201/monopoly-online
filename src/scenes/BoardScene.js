@@ -615,8 +615,15 @@ export default class BoardScene extends Phaser.Scene {
     };
   }
 
-  /** Quân nhảy từng ô một tới đích. */
+  /**
+   * Quân nhảy từng ô một tới đích, mỗi ô `STEP_MS`. Trước đây 190ms một ô: một
+   * bước lắc trung bình 7 ô mất 1,3 giây, cộng thêm thẻ di chuyển và Tàu Tốc
+   * Hành thì cả bàn ngồi nhìn quân đi. 120ms còn chừng 0,85 giây mà vẫn đếm
+   * được từng ô qua tiếng gõ.
+   */
   moveToken(playerIndex, fromPos, steps, onPass) {
+    const STEP_MS = 120;
+    const HALF = STEP_MS / 2;
     const spr = this.tokens[playerIndex];
     if (!spr || steps === 0) return Promise.resolve();
     const dir = Math.sign(steps);
@@ -635,21 +642,21 @@ export default class BoardScene extends Phaser.Scene {
         this.tweens.add({
           targets: spr,
           x: t.x,
-          duration: 190,
+          duration: STEP_MS,
           ease: 'Sine.easeInOut',
           onStart: () => {
             // Mỗi nhịp nhảy một tiếng gõ gỗ — nghe rõ quân đang đếm mấy ô
             audio.sfx('step', { i });
             this.tweens.add({
-              targets: spr, y: t.y - hop, duration: 95, ease: 'Quad.easeOut',
+              targets: spr, y: t.y - hop, duration: HALF, ease: 'Quad.easeOut',
               onComplete: () => {
-                this.tweens.add({ targets: spr, y: t.y, duration: 95, ease: 'Quad.easeIn' });
+                this.tweens.add({ targets: spr, y: t.y, duration: HALF, ease: 'Quad.easeIn' });
               },
             });
             this.tweens.add({
               targets: spr,
               scaleX: spr.scaleX * 1.08, scaleY: spr.scaleY * 1.08,
-              duration: 95, yoyo: true, ease: 'Sine.easeOut',
+              duration: HALF, yoyo: true, ease: 'Sine.easeOut',
             });
           },
           onComplete: () => {
