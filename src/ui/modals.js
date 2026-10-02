@@ -13,7 +13,7 @@ import { DECK_META } from '../data/cards.js';
 import { EVENT_LEVELS, DEFAULT_EVENT_LEVEL } from '../data/events.js';
 import { deedCard, deedGrid, rentLevels, priceItems, tileCardUrl } from './deed.js';
 import { PEEK_HINT, pickTilesOnBoard } from './tilePicker.js';
-import { tokenImage } from './hud.js';
+import { tokenImage, elapsedLabel, gameElapsed } from './hud.js';
 import { buildGlyphs, buildLabel, houseSvg, hotelSvg, bankSvg, keySvg } from '../render/glyphs.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => (
@@ -1123,15 +1123,30 @@ export function bankruptModal(state, playerId, forced, owed, raisable) {
   });
 }
 
+/**
+ * Thứ hạng cuối ván: người thắng đứng đầu, kế đến những người còn trụ (so gia
+ * sản), cuối cùng là người phá sản — ai vỡ nợ sau đứng trên ai vỡ nợ trước.
+ *
+ * Người phá sản đã trả hết tài sản về ngân hàng, gia sản ai cũng là 0$, nên
+ * không đem tiền ra so được; thứ tự vỡ nợ (`outRank`) là thứ duy nhất phân
+ * định họ. Ảnh chụp cũ chưa có `outRank` (0) thì xếp chót.
+ */
+export function finalRanking(state, winner) {
+  const alive = state.players
+    .filter((p) => !p.bankrupt && p.id !== winner.id)
+    .sort((a, b) => state.netWorth(b.id) - state.netWorth(a.id));
+  const out = state.players
+    .filter((p) => p.bankrupt && p.id !== winner.id)
+    .sort((a, b) => (b.outRank || 0) - (a.outRank || 0));
+  return [winner, ...alive, ...out];
+}
+
 export function winnerModal(state, winner) {
-  const rank = [...state.players].sort((a, b) => {
-    if (a.bankrupt !== b.bankrupt) return a.bankrupt ? 1 : -1;
-    return state.netWorth(b.id) - state.netWorth(a.id);
-  });
+  const rank = finalRanking(state, winner);
   return openModal({
     eyebrow: 'HẠ MÀN',
     title: `${esc(winner.name)} thắng ván này!`,
-    sub: 'Bảng tổng kết gia sản',
+    sub: `Bảng xếp hạng · ván kéo dài ${elapsedLabel(gameElapsed(state))}`,
     dismissible: false, // Esc lỡ tay không nên khởi động ván mới
     body: `<div class="crown">👑</div>
       ${rank.map((p, i) => `
@@ -1139,9 +1154,11 @@ export function winnerModal(state, winner) {
           <span class="arow-chip" style="background:${p.token.css}"></span>
           <span class="arow-main">
             <span class="arow-name">${i + 1}. ${esc(p.name)} · ${p.token.name}</span>
-            <span class="arow-meta">${p.bankrupt ? 'Đã phá sản' : `${state.propertiesOf(p.id).length} ô đất · tiền mặt ${money(p.money)}`}</span>
+            <span class="arow-meta">${p.bankrupt
+              ? (p.outRank ? `Phá sản thứ ${p.outRank}` : 'Đã phá sản')
+              : `${state.propertiesOf(p.id).length} ô đất · tiền mặt ${money(p.money)}`}</span>
           </span>
-          <span class="arow-side" style="font-family:var(--serif);color:var(--gold-light)">${money(state.netWorth(p.id))}</span>
+          ${p.bankrupt ? '' : `<span class="arow-side" style="font-family:var(--serif);color:var(--gold-light)">${money(state.netWorth(p.id))}</span>`}
         </div>`).join('')}`,
     buttons: [{ label: 'Chơi ván mới', value: 'again', cls: 'btn-primary' }],
   });

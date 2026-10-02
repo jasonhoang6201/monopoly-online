@@ -143,15 +143,16 @@ const r = await page.evaluate(async () => {
   out.heavyDrawnEarly = seen.has('dong-dat') || seen.has('hoa-hoan');
   out.noEraField = EVENTS.every((c) => c.era === undefined);
 
-  /* Thẻ đổi giá chạy tới hết ván (`turns: -1`), và rút lại lần nữa thì bị bỏ
-     qua vì `addMod` gộp theo id — bày lá ấy ra cũng không đổi được gì. */
+  /* Tăng thuê chạy tới hết ván (`turns: -1`); cắt lương và đội giá xây thì
+     đếm ngược. Đang có hiệu lực thì rút lại bị bỏ qua cả ba. */
   st.mods = [];
   const priceCards = ['lam-phat', 'mat-mua', 'bao-gia'];
-  out.priceForever = priceCards.every((id) => ev.planEvent(st, EVENT_BY_ID[id]).mod.turns === -1);
+  out.priceForever = ev.planEvent(st, EVENT_BY_ID['lam-phat']).mod.turns === -1;
+  out.squeezeTimed = ['mat-mua', 'bao-gia'].every((id) => ev.planEvent(st, EVENT_BY_ID[id]).mod.turns > 0);
   for (const id of priceCards) st.addMod(ev.planEvent(st, EVENT_BY_ID[id]).mod);
-  st.tickMods(); st.tickMods(); st.tickMods(); st.tickMods();
-  out.priceSurvivesTicks = st.mods.length === 3;
   out.priceSkippedTwice = priceCards.every((id) => !ev.usable(st, EVENT_BY_ID[id]));
+  for (let i = 0; i < 2 * st.alive().length; i++) st.tickMods();
+  out.priceSurvivesTicks = st.mods.length === 1 && st.mods[0].id === 'lam-phat';
   // Giới nghiêm vẫn có hạn: cấm xây vĩnh viễn là khoá luôn đường làm tiền thuê lớn lên
   out.curfewStillTimed = ev.planEvent(st, EVENT_BY_ID['gioi-nghiem']).mod.turns > 0;
   st.mods = [];
@@ -190,7 +191,7 @@ ok('cấn nợ tự động thế chấp đủ tiền', r.autoRaise);
 ok('mọi thẻ đều lập được kế hoạch', r.badPlan.length === 0, r.badPlan.join(','));
 ok('thẻ nhà đất rút được ngay từ đầu', r.heavyDrawnEarly && r.noEraField,
   r.drawnKinds.join(','));
-ok('thẻ đổi giá chạy tới hết ván', r.priceForever && r.priceSurvivesTicks);
+ok('tăng thuê chạy tới hết ván, cắt lương và giá xây hết sau 2 vòng', r.priceForever && r.squeezeTimed && r.priceSurvivesTicks);
 ok('rút lại thẻ đổi giá đang có hiệu lực thì bỏ qua', r.priceSkippedTwice);
 ok('giới nghiêm vẫn có hạn', r.curfewStillTimed);
 ok('ảnh chụp mang đủ phần Thời Cuộc', r.roundTrip);

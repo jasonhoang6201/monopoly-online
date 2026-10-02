@@ -14,11 +14,6 @@ thẳng ở gốc repo.
 | `npm test` | bộ kiểm thử một máy | cần dev server ở **5178** |
 | `npm run test:online` | bộ kiểm thử nhiều máy | cần dev server ở **5179** |
 
-Trước đây repo này nằm ở `Desktop/monopoly/monopoly-online`, cạnh một bản offline
-`monopoly-base`. Ngày 2026-09-13 bản offline bị xoá và repo dời lên thẳng
-`Desktop/`. Ghi chú hay tài liệu nào còn nhắc tới `monopoly-base` hoặc đường dẫn
-cũ là đã lỗi thời.
-
 ## Quy ước sửa mã
 
 - Ghi chú và tên biến trong mã dùng **tiếng Việt**, theo đúng giọng văn sẵn có —

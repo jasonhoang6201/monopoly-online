@@ -1786,12 +1786,18 @@ export class Game {
    * nhắm vào chỗ nào là chuyện hên xui — và người bị dỡ có cớ để rải nhà ra
    * nhiều ô thay vì dồn hết vào một lô.
    *
+   * Cả bàn chỉ một khu có nhà thì khỏi hỏi: bảng chọn lúc ấy chỉ có đúng một
+   * lựa chọn, bấm "Dùng" trong túi thẻ đã là lời xác nhận. Khu ấy có một ô có
+   * nhà thì ô ấy lãnh luôn; có nhiều ô (kể cả nhà Chung Cư Mini của hai chủ
+   * khác nhau trong cùng khu) thì `demolishInGroup` quay bốc thăm như cũ.
+   *
    * @returns {Promise<?string>} khoá khu, `null` nếu bỏ ngang hoặc hết mục tiêu
    */
   async askDemolishGroup(p, card) {
     const st = this.state;
     const groups = demolishGroups(st, card, p.id);
     if (groups.length === 0) return null;
+    if (groups.length === 1) return groups[0];
     const data = {
       groups,
       ids: cardTargets(st, card, p.id),
@@ -1829,9 +1835,11 @@ export class Game {
     const { candidates, hits } = demolishPicks(st, card, p.id, key);
     if (hits.length === 0) return;
 
-    await this.bc.show(title,
-      `<b>${p.name}</b> nhắm vào khu <b>${GROUPS[key].name}</b>.
-       Bàn cờ đang bốc thăm giữa <b>${candidates.length}</b> ô.`, { kind: 'bad', ms: 2200 });
+    await this.bc.show(title, candidates.length > 1
+      ? `<b>${p.name}</b> nhắm vào khu <b>${GROUPS[key].name}</b>.
+         Bàn cờ đang bốc thăm giữa <b>${candidates.length}</b> ô.`
+      : `<b>${p.name}</b> nhắm vào khu <b>${GROUPS[key].name}</b>.
+         Khu chỉ có <b>${tileLabel(candidates[0])}</b> có nhà, ô ấy lãnh đủ.`, { kind: 'bad', ms: 2200 });
 
     /* Bốc thăm từng ô một, quay xong ô nào dỡ ô ấy: quay cả hai rồi mới dỡ thì
        người xem không biết cấp nhà vừa mất là của vòng quay nào. Ô đã bốc rồi
@@ -2738,7 +2746,8 @@ export class Game {
     const sure = await bankruptModal(this.state, seat, false);
     if (!sure) { this.restoreActions(); return; }
     await this.doBankrupt(seat);
-    if (!this.checkGameOver()) await this.endTurn();
+    if (this.checkGameOver()) { this.sync(); return; }
+    await this.endTurn();
   }
 
   /** Giải thể tài sản về ngân hàng + hiệu ứng. */
@@ -2796,6 +2805,7 @@ export class Game {
     const w = st.winCheck();
     if (!w) return false;
     st.over = true;
+    st.endedAt = Date.now();
     this.clock = null;
     this.hud.setClock(null);
     this.hud.refresh();

@@ -14,11 +14,13 @@
  * lần nổ đầu tiên. Thẻ nào lúc ấy vô nghĩa (ân xá khi không ai ngồi tù) thì
  * `core/events.js` bỏ qua và bốc lá kế tiếp, nên không cần chia kỳ để chặn.
  *
- * ── Đổi giá thì vĩnh viễn, cấm đoán thì có hạn ─────────────────────────────
- * Thẻ đụng tới **giá cả** (tiền thuê, lương, giá xây) không còn đếm ngược:
- * chúng dời hẳn mặt bằng giá của ván. Thẻ **chặn một việc** (giới nghiêm cấm
- * xây, mất giấy tờ treo một ô) thì vẫn có hạn — cấm xây vĩnh viễn là khoá luôn
- * đường duy nhất làm tiền thuê lớn lên, ván sẽ đứng im chứ không ngắn lại.
+ * ── Thẻ đẩy tiền ra thì vĩnh viễn, thẻ siết tiền vào thì có hạn ───────────
+ * Thẻ **tăng tiền thuê** (lạm phát, mở đường) dời hẳn mặt bằng giá của ván:
+ * thuê cao hơn thì người ta vỡ nợ sớm hơn, ván ngắn lại. Thẻ **siết dòng tiền
+ * vào** (mất mùa cắt lương, bão giá đội giá xây) thì có hạn: để vĩnh viễn thì
+ * cả bàn ít tiền, ít xây, tiền thuê không lớn lên được, ván kéo dài chứ không
+ * ngắn lại. Thẻ **chặn một việc** (giới nghiêm cấm xây, mất giấy tờ treo một
+ * ô) cũng có hạn vì cùng lý do.
  *
  * ── Hai phần chữ trên một mặt thẻ ──────────────────────────────────────────
  * `text` là lời văn: chuyện gì đang xảy ra ngoài phố, đọc cho có không khí.
@@ -57,12 +59,15 @@ import { money } from './board.js';
 const lasts = (c) => `Kéo dài ${c.rounds} vòng, hết thì luật trả về như cũ`;
 
 /**
- * Dòng đóng của mấy thẻ **đổi giá vĩnh viễn**.
+ * Dòng đóng của mấy thẻ **tăng tiền thuê vĩnh viễn**.
  *
- * Thẻ đổi giá mà hết hạn sau hai vòng thì cả bàn chỉ việc ngồi im chờ nó qua:
- * không xây, không đổi chác, đợi luật trả về như cũ rồi chơi tiếp — đúng cái
- * thế bí mà bộ thẻ này sinh ra để phá. Đổi giá vĩnh viễn thì mặt bằng giá của
- * ván dịch hẳn đi, ai cũng phải tính lại từ nước kế tiếp.
+ * Tăng thuê mà hết hạn sau hai vòng thì cả bàn chỉ việc ngồi im chờ nó qua —
+ * đúng cái thế bí mà bộ thẻ này sinh ra để phá. Tăng vĩnh viễn thì mặt bằng
+ * giá của ván dịch hẳn đi, ai cũng phải tính lại từ nước kế tiếp.
+ *
+ * Mất Mùa và Bão Giá thì ngược lại, có hạn: chúng siết tiền **vào** túi người
+ * chơi. Để vĩnh viễn thì lương mãi một nửa, giá xây mãi gấp rưỡi, cả bàn ít
+ * tiền nên ít mua ít xây, tiền thuê không lớn lên và ván kéo dài thêm.
  *
  * `addMod` gộp theo `id` nên rút lại lá cũ không nhân đôi hệ số; `usable` bên
  * `core/events.js` cũng bỏ qua lá nào đã nằm sẵn trên bàn.
@@ -119,10 +124,10 @@ export const EVENTS = [
     title: 'MẤT MÙA',
     text: `Nước lũ về sớm, ruộng miền Tây ngập trắng. Thóc không về tới vựa,
            đồng lương cũng hụt theo.`,
-    mult: 0.5,
+    mult: 0.5, rounds: 2,
     effect: (c) => [
       `Lương lãnh khi qua ô Bắt Đầu ${pct(c.mult)}`,
-      forever,
+      lasts(c),
     ],
   },
   {
@@ -130,11 +135,11 @@ export const EVENTS = [
     title: 'BÃO GIÁ VẬT LIỆU',
     text: `Xi măng với gỗ lim đội giá gấp rưỡi. Nhà thầu nào cũng lắc đầu
            hẹn lại sang năm.`,
-    mult: 1.5,
+    mult: 1.5, rounds: 2,
     effect: (c) => [
       `Giá xây mỗi căn nhà ${pct(c.mult)}`,
       'Nhà đã xây rồi thì không phải bù thêm',
-      forever,
+      lasts(c),
     ],
   },
   {

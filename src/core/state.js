@@ -71,6 +71,11 @@ export class Player {
     this.inJail = false;
     this.jailTurns = 0;
     this.bankrupt = false;
+    /**
+     * Thứ tự phá sản: 1 là người vỡ nợ đầu tiên, 0 là còn trụ. Bảng hạ màn
+     * xếp hạng người phá sản theo số này — họ không còn đồng nào để so tiền.
+     */
+    this.outRank = 0;
     /** Số lần đổ đôi liên tiếp trong lượt hiện tại. */
     this.doubles = 0;
     /**
@@ -216,6 +221,13 @@ export class GameState {
      * trong cùng một lượt (ảnh chụp về, sổ ghế đổi), xoá cờ ở đó là cho dùng lại.
      */
     this.turnNo = 0;
+    /**
+     * Mốc giờ khai cuộc và hạ màn (ms, đồng hồ máy dựng ván). Đi theo ảnh chụp
+     * nên người vào lại giữa ván vẫn thấy đúng thời gian đã chơi, không đếm
+     * lại từ 0. `endedAt` còn `null` là ván đang chạy.
+     */
+    this.startedAt = Date.now();
+    this.endedAt = null;
   }
 
   // ------------------------------------------------- hiệu ứng đang hiệu lực
@@ -749,6 +761,7 @@ export class GameState {
     // Thẻ còn trong túi người vỡ nợ thì trả về bộ, đừng chôn theo họ
     while (p.cards.length) this.dropCard(playerId);
     p.money = 0;
+    if (!p.bankrupt) p.outRank = this.players.filter((x) => x.bankrupt).length + 1;
     p.bankrupt = true;
     p.inJail = false;
   }

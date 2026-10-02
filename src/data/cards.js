@@ -317,8 +317,9 @@ export const CARD_KINDS = {
     name: 'Dỡ nhà', sigil: '⚒',
     effect: (card) => {
       const n = Math.max(1, card?.levels ?? 1);
-      return `Chọn một khu màu người khác đang có nhà, bàn cờ bốc thăm ${n} ô
-              trong khu ấy. Mỗi ô mất một cấp nhà, chủ đất không được đền.`;
+      return `Chọn một khu màu người khác đang có nhà (tính cả nhà Chung Cư Mini
+              trên đất lẻ), bàn cờ bốc thăm ${n} ô trong khu ấy. Cả bàn chỉ một
+              khu có nhà thì khỏi chọn. Mỗi ô mất một cấp nhà, chủ đất không được đền.`;
     },
   },
   seize: {

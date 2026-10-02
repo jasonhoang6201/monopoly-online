@@ -12,6 +12,26 @@ import {
 
 const $ = (id) => document.getElementById(id);
 
+/** 75_000 → "1:15", 3_725_000 → "1:02:05". */
+export function elapsedLabel(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const mm = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(mm).padStart(2, '0')}:${ss}` : `${mm}:${ss}`;
+}
+
+/** Ván đã chơi bao lâu: tới lúc hạ màn nếu đã hết ván, không thì tới bây giờ. */
+export function gameElapsed(st) {
+  return (st.endedAt ?? Date.now()) - st.startedAt;
+}
+
+/**
+ * Hẹn giờ vẽ đồng hồ ván. Để ở cấp mô-đun vì mỗi ván dựng một `Hud` mới:
+ * giữ trên từng đối tượng thì hẹn giờ của ván cũ vẫn chạy, đọc state cũ.
+ */
+let elapsedTimer = 0;
+
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -47,6 +67,15 @@ export class Hud {
      */
     this.seatStatus = [];
     this.buildPlayers();
+    clearInterval(elapsedTimer);
+    elapsedTimer = setInterval(() => this.drawElapsed(), 1000);
+    this.drawElapsed();
+  }
+
+  /** Đồng hồ ván ở chân cột trái — chỉ đổi chữ, không vẽ lại cả HUD mỗi giây. */
+  drawElapsed() {
+    const el = $('game-time');
+    if (el) el.textContent = elapsedLabel(gameElapsed(this.state));
   }
 
   /** Cập nhật tình trạng đường truyền rồi vẽ lại danh sách bên cột trái. */
@@ -404,6 +433,7 @@ export class Hud {
 
     this.paintStrip();
 
+    this.drawElapsed();
     $('bank-houses').textContent =
       `${st.bankHouses}/${TOTAL_HOUSES} nhà · ${st.bankHotels} k.sạn`;
 

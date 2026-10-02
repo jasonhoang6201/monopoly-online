@@ -24,6 +24,7 @@ export function snapshot(st) {
       inJail: p.inJail,
       jailTurns: p.jailTurns,
       bankrupt: p.bankrupt,
+      outRank: p.outRank,
       doubles: p.doubles,
       cards: p.cards.map((c) => ({ ...c })),
       skillPoints: p.skillPoints,
@@ -74,6 +75,8 @@ export function snapshot(st) {
     heritage: [...st.heritage],
     passedUp: [...st.passedUp].map(([id, seats]) => [id, [...seats]]),
     turnNo: st.turnNo,
+    startedAt: st.startedAt,
+    endedAt: st.endedAt,
   };
 }
 
@@ -102,6 +105,7 @@ export function applySnapshot(st, snap) {
     p.inJail = s.inJail;
     p.jailTurns = s.jailTurns;
     p.bankrupt = s.bankrupt;
+    p.outRank = s.outRank ?? p.outRank;
     p.doubles = s.doubles;
     // `jailCards` là tên cũ hồi túi thẻ mới chỉ đựng vé ra tù
     p.cards = (s.cards ?? s.jailCards ?? []).map((c) => ({ ...c }));
@@ -154,6 +158,8 @@ export function applySnapshot(st, snap) {
   if (snap.heritage) st.heritage = new Set(snap.heritage);
   st.passedUp = new Map((snap.passedUp ?? []).map(([id, seats]) => [id, [...seats]]));
   st.turnNo = snap.turnNo ?? st.turnNo;
+  st.startedAt = snap.startedAt ?? st.startedAt;
+  if ('endedAt' in snap) st.endedAt = snap.endedAt;
   if (snap.eventPile) st.eventPile = [...snap.eventPile];
   else if (snap.eventPiles) st.eventPile = [...(snap.eventPiles[1] ?? []), ...(snap.eventPiles[2] ?? [])];
   return st;

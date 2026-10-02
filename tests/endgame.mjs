@@ -188,6 +188,29 @@ const final = await st();
 log(`  ván kết thúc: over=${final.over}, còn sống=${final.alive}`);
 log('  modal:', await page.locator('.scrim.show .modal-title').textContent().catch(() => '(không có)'));
 
+/* Bảng xếp hạng: người thắng đứng đầu, người phá sản xếp theo thứ tự vỡ nợ
+   (Chú Hoả vỡ trước nên đứng chót) và không hiện tiền. */
+const rows = await page.locator('.scrim.show .arow').evaluateAll((els) => els.map((el) => ({
+  name: el.querySelector('.arow-name')?.textContent ?? '',
+  meta: el.querySelector('.arow-meta')?.textContent ?? '',
+  money: !!el.querySelector('.arow-side'),
+})));
+const ranks = await page.evaluate(() => window.__monopoly.controller.state.players
+  .map((p) => ({ name: p.name, out: p.outRank, bk: p.bankrupt })));
+log('  xếp hạng:', rows.map((r) => `${r.name} [${r.meta}]${r.money ? ' $' : ''}`).join(' | '));
+const bust = ranks.filter((p) => p.bk).sort((a, b) => b.out - a.out).map((p) => p.name);
+const want = rows.slice(1).map((r) => r.name.replace(/^\d+\. /, '').split(' · ')[0]);
+const rankOk = rows.length === ranks.length && rows[0].money
+  && rows.slice(1).every((r) => !r.money && /Phá sản thứ/.test(r.meta))
+  && want.join() === bust.join();
+log(`  ${rankOk ? '✓' : '✗'} người phá sản xếp theo thứ tự vỡ nợ, không hiện tiền`);
+if (!rankOk) errors.push('bảng xếp hạng sai');
+const sub = await page.locator('.scrim.show .modal-sub').textContent().catch(() => '');
+const clock = await page.locator('#game-time').textContent();
+const clockOk = /ván kéo dài \d+:\d\d/.test(sub) && /^\d+:\d\d/.test(clock);
+log(`  ${clockOk ? '✓' : '✗'} đồng hồ ván: cột trái ${clock}, bảng hạ màn "${sub}"`);
+if (!clockOk) errors.push('đồng hồ ván sai');
+
 log('\n=== LỖI (' + errors.length + ') ===');
 for (const e of errors.slice(0, 15)) log(e);
 await browser.close();

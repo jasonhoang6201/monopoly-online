@@ -179,8 +179,8 @@ export function usable(st, card) {
       return st.owner.size > 0 && !hasMod(st, card.id);
     case 'mo-duong':
       return st.owner.size > 0;
-    /* Ba thẻ đổi giá chạy tới hết ván, và `addMod` gộp theo id nên rút lại lần
-       nữa chẳng đổi gì — bỏ qua để bốc lá khác thay vì bày một thẻ rỗng. */
+    /* Đang có hiệu lực mà rút lại thì `addMod` chỉ nối thêm hạn — cắt lương
+       liền bốn vòng là siết quá tay, bỏ qua để bốc lá khác. */
     case 'mat-mua':
     case 'bao-gia':
       return !hasMod(st, card.id);
@@ -315,14 +315,14 @@ export function planEvent(st, card) {
     case 'quy-cong-phat-chan':
       return { amount: card.bonus };
 
-    /* Ba thẻ đổi giá mang `turns: -1` — chạy tới hết ván. Xem ghi chú "Đổi giá
-       thì vĩnh viễn" ở `data/events.js`. */
+    /* Tăng thuê thì `turns: -1`, chạy tới hết ván; cắt lương và đội giá xây
+       thì đếm ngược. Xem ghi chú đầu `data/events.js`. */
     case 'lam-phat':
       return { mod: { id: card.id, type: 'rent', mult: card.mult, turns: -1 } };
     case 'mat-mua':
-      return { mod: { id: card.id, type: 'salary', mult: card.mult, turns: -1 } };
+      return { mod: { id: card.id, type: 'salary', mult: card.mult, turns: rounds(st, card.rounds) } };
     case 'bao-gia':
-      return { mod: { id: card.id, type: 'build', mult: card.mult, turns: -1 } };
+      return { mod: { id: card.id, type: 'build', mult: card.mult, turns: rounds(st, card.rounds) } };
     case 'gioi-nghiem':
       return { mod: { id: card.id, type: 'freeze-build', turns: rounds(st, card.rounds) } };
 

@@ -97,6 +97,16 @@ const r = await page.evaluate(async () => {
     && lone.hits[0].levels === 2;
   st.houses.set(brown[0], 3);
 
+  /* Chung Cư Mini: hai chủ khác nhau mỗi người một ô trong khu xanh nhạt, mỗi
+     ô một căn. Cả hai ô đều nằm trong tầm ngắm, khu bày ra để chọn. */
+  st.owner.set(light[0], 1); st.owner.set(light[1], 2);
+  st.houses.set(light[0], 1); st.houses.set(light[1], 1);
+  const mini = cr.demolishPicks(st, { type: 'demolish', levels: 1 }, 0, 'light_blue');
+  out.demolishMini = cr.demolishGroups(st, { type: 'demolish' }, 0).includes('light_blue')
+    && mini.candidates.length === 2 && mini.hits.length === 1;
+  st.owner.delete(light[0]); st.owner.delete(light[1]);
+  st.houses.delete(light[0]); st.houses.delete(light[1]);
+
   // Cưỡng chiếm: chỉ lô trống, chưa thế chấp, và phải đủ tiền mặt đền
   light.forEach((id) => st.owner.set(id, 1));
   st.mortgaged.add(light[0]);
@@ -251,6 +261,7 @@ ok('thẻ dỡ nhà nhắm được vào khu có nhà của người khác',
   r.demolishGroups.includes('brown'), r.demolishGroups.join());
 ok('thẻ dỡ 2 nhà rải vào hai ô khác nhau trong khu', r.demolishTwoTiles);
 ok('khu chỉ còn một ô có nhà thì ô ấy chịu cả hai cấp', r.demolishLone);
+ok('nhà Chung Cư Mini của hai chủ cùng khu đều vào vòng bốc thăm', r.demolishMini);
 ok('giải toả nhắm được cả đất của mình', r.resumeIncludesOwn);
 ok('giải toả bỏ qua ô đã xây nhà', r.resumeSkipsBuilt);
 ok('tiền đền giải toả là giá gốc +20%', r.resumePrice);
@@ -477,6 +488,8 @@ const pickGroup = async (id) => {
 /* Lôi thẻ ra rồi đổi ý: bảng chọn có nút bỏ ngang, và thẻ phải còn nguyên
    trong túi. Trước đây thẻ rời túi ngay lúc bấm "Dùng" nên bỏ ngang là mất
    trắng — mở ra ngắm bàn cờ rồi thấy chưa đáng dùng là chuyện thường. */
+// Thêm một khu có nhà (ô 24 của người kia) để bảng chọn khu có hai lựa chọn
+await page.evaluate(() => { window.__monopoly.controller.state.houses.set(24, 1); });
 await useFromBag();
 await page.locator('.tile-pick .tp-cancel').click();
 await page.waitForTimeout(900);
@@ -489,10 +502,10 @@ await useFromBag();
 ok('thẻ dỡ nhà mời chọn khu ngay trên bàn cờ', await picking(page));
 const chips = (await page.locator('.tile-pick .tp-chip').allTextContents())
   .map((t) => t.trim());
-ok('chỉ khu có nhà của người khác được bày ra', chips.length === 1, chips.join());
+ok('chỉ khu có nhà của người khác được bày ra', chips.length === 2, chips.join());
 // Phiên chọn thật (`markSet`), không phải vệt chỉ trỏ: bấm vào ô là ăn
 const litIds = await markedTiles(page);
-ok('ô trong tầm ngắm sáng sẵn trên bàn cờ', litIds.join() === '39', litIds.join());
+ok('ô trong tầm ngắm sáng sẵn trên bàn cờ', [...litIds].sort((a, b) => a - b).join() === '24,39', litIds.join());
 await pickGroup(39);
 const after = await page.evaluate(() => {
   const st = window.__monopoly.controller.state;
@@ -504,14 +517,20 @@ ok('dỡ nhà hạ đúng một cấp, đất vẫn của chủ cũ', after.hous
   JSON.stringify(after));
 ok('thẻ đã dùng rời túi và trả về bộ', after.held === 0 && after.inDeck);
 
-// Thẻ dỡ 2 cấp của bộ Cơ Hội: khu chỉ có một ô có nhà nên ô ấy chịu cả hai cấp
-await page.evaluate(() => { window.__monopoly.controller.state.houses.set(39, 4); });
+/* Thẻ dỡ 2 cấp của bộ Cơ Hội: cả bàn chỉ còn một khu có nhà nên khỏi chọn
+   khu, và khu chỉ có một ô có nhà nên ô ấy chịu cả hai cấp */
+await page.evaluate(() => {
+  const st = window.__monopoly.controller.state;
+  st.houses.set(39, 4);
+  st.houses.delete(24);
+});
 await forceCard('chance', 'demolish');
 await page.waitForTimeout(900);
 await page.locator('.scrim.show .modal-foot button.btn').first().click();
 await page.waitForTimeout(1400);
 await useFromBag();
-await pickGroup(39);
+ok('chỉ một khu có nhà thì không mở bảng chọn khu', !(await picking(page)));
+await page.waitForTimeout(3200);
 ok('thẻ Cơ Hội dỡ đúng hai cấp', await page.evaluate(() => (
   window.__monopoly.controller.state.housesOn(39) === 2)));
 
