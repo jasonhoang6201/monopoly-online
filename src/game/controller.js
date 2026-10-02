@@ -104,6 +104,15 @@ export class Game {
      * mất gì ngoài quyền chọn nước đi lượt ấy.
      */
     this.turnMs = 60000;
+    /**
+     * Trọng tài vắng bấy lâu thì ghế kế tiếp mới nhận màn lắc giành quyền.
+     *
+     * Presence của Supabase hay chập chờn một hai nhịp lúc cả bàn vừa vào ván.
+     * Nhận ngay thì máy kia mở thêm một vòng lắc song song với vòng của trọng
+     * tài thật: người chơi bị hỏi lắc lại, rồi thứ tự của vòng về sau ghi đè
+     * lên ván đã bắt đầu.
+     */
+    this.rollOffTakeoverMs = 10000;
     /** Hạn để trả lời một đề nghị giao dịch. */
     this.tradeMs = 45000;
     /**
@@ -295,6 +304,7 @@ export class Game {
       const rolls = [];
       for (const p of seats) {
         await this.askRollOff(p.id, rolls);
+        if (this.rollOffStale()) return;
         const d = rollDice();
         this.netEmit('dice', d);
         await this.scene.rollDiceAnim(d.a, d.b);
@@ -308,6 +318,7 @@ export class Game {
         ...orderFromRolls(rolls),
         ...st.players.filter((p) => p.bankrupt).map((p) => p.id),
       ];
+      if (this.rollOffStale()) return;
       const sums = new Map(rolls.map((r) => [r.seat, r.sum]));
       const tied = rolls.length > 1 && sums.get(order[0]) === sums.get(order[1]);
 
@@ -326,8 +337,38 @@ export class Game {
         { ms: 4600 });
     } finally {
       this.announcing = false;
+      /* Kể cả lúc bỏ ngang: ảnh chụp mang thứ tự đã chốt có thể tới giữa lúc
+         `busy`, khi ấy `onSync` không bày lượt — phải bày ở đây. */
+      this.beginTurn();
     }
-    this.beginTurn();
+  }
+
+  /**
+   * Vòng lắc đang chạy ở máy này có còn là vòng được tính không.
+   *
+   * Hết là trọng tài (ghế nhỏ hơn đã quay lại), hoặc thứ tự đã chốt ở máy khác
+   * và về qua ảnh chụp: dừng ngay, kẻo hỏi người chơi lắc thêm một lượt rồi phát
+   * một thứ tự thứ hai ghi đè lên ván đã bắt đầu.
+   */
+  rollOffStale() {
+    if (!this.net) return false;
+    if (!this.state.order && this.net.isArbiter) return false;
+    this.scene.hideDice();
+    return true;
+  }
+
+  /**
+   * Còn phải chờ bao lâu mới được nhận màn lắc thay ghế trọng tài nhỏ hơn.
+   * 0 là nhận ngay được: hoặc mình là trọng tài từ đầu, hoặc ghế trước đã vắng
+   * quá `rollOffTakeoverMs`.
+   */
+  rollOffTakeoverWait() {
+    let wait = 0;
+    for (let i = 0; i < this.net.mySeat; i++) {
+      if (this.state.players[i]?.bankrupt || this.net.seats[i]?.kicked) continue;
+      wait = Math.max(wait, this.rollOffTakeoverMs - this.net.awayFor(i));
+    }
+    return wait;
   }
 
   /**
@@ -369,8 +410,20 @@ export class Game {
    */
   beginRollOff() {
     this.hud.refresh();
-    if (this.net.isArbiter) { this.guard(() => this.rollOff()); return; }
     this.showRollOffWaiting();
+    if (!this.net.isArbiter) return;
+    const wait = this.rollOffTakeoverWait();
+    if (wait > 0) {
+      /* Sổ ghế không đổi thì không có tin nào gọi lại `beginTurn`, nên tự hẹn
+         giờ xét lại. Trọng tài cũ quay về trước hạn thì lúc ấy `isArbiter` đã
+         là false và lần xét lại không làm gì. */
+      clearTimeout(this.rollOffRetry);
+      this.rollOffRetry = setTimeout(() => {
+        if (!this.busy && !this.state.order) this.beginTurn();
+      }, wait + 50);
+      return;
+    }
+    this.guard(() => this.rollOff());
   }
 
   /**
