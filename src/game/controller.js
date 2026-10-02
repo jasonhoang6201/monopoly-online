@@ -270,8 +270,8 @@ export class Game {
 
     this.onRoomChange();
     this.bc.show('KHAI CUỘC',
-      `Ván bắt đầu với <b>${this.state.players.length} người</b> — mỗi người ${money(START_MONEY)}
-       vốn liếng. Chúc may mắn!`, { ms: 2600 });
+      `Ván bắt đầu với <b>${this.state.players.length} người</b>, mỗi người có ${money(START_MONEY)}.
+       Chúc may mắn!`, { ms: 2600 });
     this.beginTurn();
   }
 
@@ -292,7 +292,7 @@ export class Game {
     this.announcing = true;
     try {
       await this.bc.show('GIÀNH QUYỀN ĐI TRƯỚC',
-        'Mỗi người lắc một lần — ai cao nhất được đi đầu, hoà nhau thì bốc thăm.',
+        'Mỗi người lắc một lần. Ai cao nhất đi đầu, hoà thì bốc thăm.',
         { ms: 2800 });
 
       /* Chỉ người còn trong ván mới lắc. Lúc khai cuộc thì ai cũng còn, nhưng
@@ -332,7 +332,7 @@ export class Game {
         `${order.filter((seat) => sums.has(seat)).map((seat, i) => `
            <b style="color:${st.players[seat].token.css}">${i + 1}. ${st.players[seat].name}</b>
            (${sums.get(seat)})`).join(' · ')}
-         <br>${tied ? '<i>Hoà điểm đầu bảng — thứ tự giữa những người hoà là bốc thăm.</i>'
+         <br>${tied ? '<i>Hoà điểm đầu bảng, thứ tự người hoà do bốc thăm.</i>'
           : `<b>${st.players[order[0]].name}</b> đi trước.`}`,
         { ms: 4600 });
     } finally {
@@ -874,8 +874,8 @@ export class Game {
   async stallBankrupt(p) {
     this.stallStreak = 0;
     await this.bc.show('BỎ VÁN',
-      `<b>${p.name}</b> để hết giờ ${this.maxStalls} lượt liền mà không đi —
-       coi như bỏ cuộc, tài sản trả về <b>ngân hàng</b>.`, { kind: 'bad', ms: 4200 });
+      `<b>${p.name}</b> để hết giờ ${this.maxStalls} lượt liền mà không đi,
+       coi như bỏ cuộc. Tài sản trả về <b>ngân hàng</b>.`, { kind: 'bad', ms: 4200 });
     await this.doBankrupt(p.id);
     if (this.checkGameOver()) { this.sync(); return; }
     if (this.state.turn === p.id) await this.endTurn();
@@ -889,7 +889,7 @@ export class Game {
    */
   async autoMove(p) {
     await this.bc.show('HẾT GIỜ',
-      `<b>${p.name}</b> chưa đi — lắc hộ một lượt cho ván khỏi đứng.`, { ms: 2000 });
+      `<b>${p.name}</b> chưa đi, bàn lắc hộ một lượt.`, { ms: 2000 });
     if (this.state.turn !== p.id || p.bankrupt) return;
     if (p.inJail) return this.rollInJail();
     if (this.lastRolled) return this.endTurn();
@@ -952,7 +952,7 @@ export class Game {
     // Người ra tay có thể đang không tới lượt, nhưng lời báo này cả bàn phải nghe.
     this.announcing = true;
     await this.bc.show('RỜI BÀN',
-      `<b>${p.name}</b> mất kết nối quá lâu — ${props} ô đất cùng toàn bộ nhà cửa
+      `<b>${p.name}</b> mất kết nối quá lâu. ${props} ô đất và toàn bộ nhà cửa
        trả về <b>ngân hàng</b>, ai cũng mua lại được.`,
       { kind: 'bad', ms: 5000 });
     this.announcing = false;
@@ -984,7 +984,7 @@ export class Game {
     // quá hạn vắng mặt đã có `checkAbsent` lo.
     this.clearClock();
     await this.bc.show('BỎ QUA LƯỢT',
-      `<b>${p.name}</b> đang mất kết nối — bỏ qua lượt này, tài sản vẫn giữ nguyên.`,
+      `<b>${p.name}</b> đang mất kết nối nên mất lượt này. Tài sản vẫn giữ nguyên.`,
       { ms: 2600 });
     await wait(900);
     if (this.isDriver() && this.state.turn === p.id) await this.endTurn();
@@ -1103,7 +1103,7 @@ export class Game {
         // Có vé thì bày trước tiên — ra tù miễn phí thì chẳng ai muốn nộp tiền
         ...(ticket >= 0 ? [{
           label: 'Dùng vé ra tù', key: 'v', cls: 'btn-jade', icon: coinSvg(), pulse: true,
-          title: 'Chìa tờ giấy bãi nại — được thả ngay, miễn phí',
+          title: 'Dùng giấy bãi nại: ra tù ngay, miễn phí',
           onClick: () => this.guard(() => this.useJailCard()),
         }] : []),
         // Khách Quen Nhà Đá ra tù không mất tiền — cùng nút, cùng phím, chỉ đổi chữ
@@ -1229,13 +1229,13 @@ export class Game {
       if (p.doubles >= 3) {
         if (await this.skills.jackpot(p)) { await this.endTurn(); return; }
         await this.bc.show('ĐỔ ĐÔI LẦN THỨ BA',
-          `<b>${p.name}</b> đổ đôi ba lần liên tiếp — mời về <b>Khám Lớn</b>!`, { kind: 'bad' });
+          `<b>${p.name}</b> đổ đôi ba lần liên tiếp, phải vào <b>Khám Lớn</b>!`, { kind: 'bad' });
         await this.goToJail(p);
         await this.endTurn();
         return;
       }
       await this.bc.show('ĐỔ ĐÔI',
-        `<b>${p.name}</b> ra đôi ${d.a} — được đi thêm một lượt nữa.`, { ms: 2200 });
+        `<b>${p.name}</b> ra đôi ${d.a}, được đi thêm một lượt.`, { ms: 2200 });
     }
 
     await this.advance(p, back ? -d.sum : d.sum, d);
@@ -1347,14 +1347,14 @@ export class Game {
             `<b>${p.name}</b> bị giải về <b>Khám Lớn Sài Gòn</b>.`, { kind: 'bad' });
           await this.goToJail(p);
         } else if (t.id === JAIL_TILE) {
-          await this.bc.show('GHÉ THĂM', `<b>${p.name}</b> chỉ ghé ngang Khám Lớn — vô sự.`, { ms: 2000 });
+          await this.bc.show('GHÉ THĂM', `<b>${p.name}</b> chỉ ghé thăm Khám Lớn, vô sự.`, { ms: 2000 });
         } else if (t.id === 20) {
           // Quỹ Công chỉ có khi bật thẻ Thời Cuộc; không thì đây vẫn là ô nghỉ chân
           if (st.pot > 0) {
             const won = st.pot;
             st.pot = 0;
             await this.bc.show('QUỸ CÔNG',
-              `<b>${p.name}</b> ghé Bến Đậu đúng lúc — ẵm trọn Quỹ Công
+              `<b>${p.name}</b> ghé Bến Đậu, ẵm trọn Quỹ Công
                <span class="up">${money(won)}</span>.`, { ms: 3600 });
             await this.receiveFromBank(p.id, won);
           } else {
@@ -1410,7 +1410,7 @@ export class Game {
     // Đất đang thế chấp → miễn tiền thuê
     if (st.isMortgaged(t.id)) {
       await this.bc.show('ĐANG THẾ CHẤP',
-        `<b>${tileLabel(t.id)}</b> đang cầm cố ở ngân hàng — miễn tiền thuê.`, { ms: 2600 });
+        `<b>${tileLabel(t.id)}</b> đang thế chấp, miễn tiền thuê.`, { ms: 2600 });
       return;
     }
 
@@ -1554,7 +1554,7 @@ export class Game {
       seed,
     });
     await this.bc.show(title,
-      `<b>${p.name}</b>: ${card.text} — mỗi người góp
+      `<b>${p.name}</b>: ${card.text} Mỗi người góp
        <span class="up">${money(each)}</span>.`);
     for (const seat of othersOf(st, p.id)) {
       if (st.players[seat].bankrupt) continue;
@@ -1618,7 +1618,7 @@ export class Game {
     const meta = CARD_KINDS[cardType(drawn.card)];
     const name = cardName(drawn.card);
     await this.showFateCard(kind, drawn.card, {
-      note: `<b>${meta.sigil} ${name}</b> — ${cardEffect(drawn.card)}`,
+      note: `<b>${meta.sigil} ${name}</b>: ${cardEffect(drawn.card)}`,
       label: 'Cất vào túi',
       seed,
     });
@@ -1749,7 +1749,7 @@ export class Game {
         eyebrow: 'GIẢI TOẢ',
         title: 'Cắm mốc giải toả lô nào?',
         sub: `Chủ lô nhận tiền đền <b>giá gốc +20%</b>, rồi lô ấy đem
-              <b>đấu giá kín</b> — ai trả cao nhất thì lấy.`,
+              <b>đấu giá kín</b>, ai trả cao nhất thì lấy.`,
         note: 'Chọn được cả đất của mình: lãnh tiền đền rồi tranh mua lại cũng là một nước cờ.',
         confirm: 'Cắm mốc lô này',
       },
@@ -1830,8 +1830,8 @@ export class Game {
     if (hits.length === 0) return;
 
     await this.bc.show(title,
-      `<b>${p.name}</b> nhắm vào khu <b>${GROUPS[key].name}</b> —
-       bàn cờ đang bốc thăm giữa <b>${candidates.length}</b> ô.`, { kind: 'bad', ms: 2200 });
+      `<b>${p.name}</b> nhắm vào khu <b>${GROUPS[key].name}</b>.
+       Bàn cờ đang bốc thăm giữa <b>${candidates.length}</b> ô.`, { kind: 'bad', ms: 2200 });
 
     /* Bốc thăm từng ô một, quay xong ô nào dỡ ô ấy: quay cả hai rồi mới dỡ thì
        người xem không biết cấp nhà vừa mất là của vòng quay nào. Ô đã bốc rồi
@@ -1863,8 +1863,8 @@ export class Game {
     const tileId = ids[Math.floor(Math.random() * ids.length)];
 
     await this.bc.show(title,
-      `<b>${p.name}</b> bốc thăm giữa <b>${ids.length}</b> lô đất trống trên bàn —
-       bàn cờ đang quay.`, { kind: 'trade', ms: 2200 });
+      `<b>${p.name}</b> bốc thăm giữa <b>${ids.length}</b> lô đất trống trên bàn.
+       Bàn cờ đang quay.`, { kind: 'trade', ms: 2200 });
     this.netEmit('spin', { ids, tileId });
     await this.scene.spinTiles(ids, tileId);
     this.scene.highlightTile(p.pos, p.token.color);
@@ -1892,8 +1892,8 @@ export class Game {
     this.sync();
     await this.bc.show(title,
       `<b>${p.name}</b> cho dỡ <b>${before === 5 && gone === 1 ? 'khách sạn' : `${gone} cấp nhà`}</b>
-       của <b>${owner.name}</b> ở <b>${tileLabel(tileId)}</b> —
-       <span class="down">không đền một đồng nào</span>.`, { kind: 'bad' });
+       của <b>${owner.name}</b> ở <b>${tileLabel(tileId)}</b>,
+       <span class="down">không đền đồng nào</span>.`, { kind: 'bad' });
     await this.spot([tileId]);
   }
 
@@ -1917,7 +1917,7 @@ export class Game {
     this.sync();
 
     await this.bc.show(title,
-      `<b>${p.name}</b> cắm mốc giải toả <b>${tileLabel(tileId)}</b> —
+      `<b>${p.name}</b> cắm mốc giải toả <b>${tileLabel(tileId)}</b>.
        <b>${owner.name}</b> lãnh tiền đền <span class="up">${money(payout)}</span>
        (giá gốc +20%).`, { kind: 'trade' });
     await this.spot([tileId]);
@@ -1925,7 +1925,7 @@ export class Game {
 
     await this.events.auction(tileId, {
       seller: null,
-      reason: `Lô đất vừa giải toả khỏi tay ${owner.name} — Toà Đô Chánh đem bán lại cho ai trả cao nhất.`,
+      reason: `Lô đất vừa giải toả khỏi tay ${owner.name}. Toà Đô Chánh bán lại cho ai trả cao nhất.`,
     });
   }
 
@@ -1937,7 +1937,7 @@ export class Game {
 
     await this.bc.show(title,
       `<b>${p.name}</b> cưỡng chế mua <b>${tileLabel(tileId)}</b> của <b>${owner.name}</b>,
-       trả <span class="down">${money(price)}</span> — giá gốc +25%.`, { kind: 'trade' });
+       trả <span class="down">${money(price)}</span> (giá gốc +25%).`, { kind: 'trade' });
     await this.spot([tileId]);
     // Trả tiền đền trước: người dùng thẻ vỡ nợ ngay tại đây thì đất không đi đâu cả
     if (!(await this.payPlayer(p.id, owner.id, price))) return;
@@ -2037,7 +2037,7 @@ export class Game {
     // Chủ nợ cũng đã rời ván thì không còn ai để trả — đừng in tiền vô chủ
     if (!to || to.bankrupt) { this.sync(); return; }
     await this.bc.show('NGÂN HÀNG TRẢ THAY',
-      `<b>${st.players[d.from].name}</b> vỡ nợ — ngân hàng trả thay
+      `<b>${st.players[d.from].name}</b> vỡ nợ, ngân hàng trả thay
        <span class="up">${money(d.amount)}</span> cho <b>${to.name}</b>.`, { ms: 3200 });
     await this.receiveFromBank(d.to, d.amount);
   }
@@ -2077,7 +2077,7 @@ export class Game {
       && st.liquidValue(playerId) >= amount;
     if (relay) {
       await handoff(p.name, p.token.css,
-        `${p.name} đang thiếu tiền — chuyền máy cho họ bán nhà hoặc thế chấp.`);
+        `${p.name} đang thiếu tiền. Chuyền máy cho họ bán nhà hoặc thế chấp.`);
     }
     const { bankrupt } = await this.runRaise(playerId, amount);
     if (relay) {
@@ -2111,7 +2111,7 @@ export class Game {
       // Gửi ván đi trước khi hỏi, để máy bên kia bày đúng số dư và đúng đất
       this.sync();
       await this.bc.show('CHỜ XOAY TIỀN',
-        `<b>${p.name}</b> còn thiếu <span class="down">${money(amount - p.money)}</span> —
+        `<b>${p.name}</b> còn thiếu <span class="down">${money(amount - p.money)}</span>,
          đang chờ họ bán nhà hoặc thế chấp…`, { kind: 'bad', ms: 2600 });
 
       /* Đồng hồ chuyển sang con nợ: cả bàn đang chờ họ chứ không chờ người đang
@@ -2203,7 +2203,7 @@ export class Game {
         if (raised) {
           const gone = [...mortgaged, ...sold].map((id) => tileLabel(id));
           await this.bc.show('HẾT GIỜ',
-            `<b>${p.name}</b> chưa xoay tiền — cấn nợ hộ cho đủ
+            `<b>${p.name}</b> chưa xoay tiền. Ngân hàng cấn nợ hộ cho đủ
              <span class="down">${money(amount)}</span>: ${gone.join(' · ')}.`,
             { kind: 'bad', ms: 3600 });
         }
@@ -2246,7 +2246,7 @@ export class Game {
       onMount: (body, close) => {
         if (ms) {
           ticker = attachTimer(body, ms, close, 'auto',
-            'để xoay tiền — quá hạn thì ngân hàng cấn nợ hộ.');
+            'để xoay tiền. Hết giờ thì ngân hàng cấn nợ hộ.');
         }
       },
     });
@@ -2303,7 +2303,7 @@ export class Game {
     /* Một dòng cho cả loạt, không phải mỗi thao tác một dòng: người thiếu tiền
        thường cầm liền ba bốn ô, mà cả bàn chỉ cần biết họ xoay được bao nhiêu. */
     await this.bc.show('XOAY TIỀN',
-      `<b>${p.name}</b> ${words.join(' · ')} —
+      `<b>${p.name}</b> ${words.join(' · ')},
        ${gained >= 0 ? `nhận <span class="up">${money(gained)}</span>` : `chi <span class="down">${money(-gained)}</span>`}.`,
       { ms: 3600 });
     await this.spot(touched);
@@ -2328,7 +2328,7 @@ export class Game {
     if (mortgaged.length || sold.length) {
       const gone = [...mortgaged, ...sold].map((id) => tileLabel(id));
       await this.bc.show('CẤN NỢ',
-        `<b>${p.name}</b> chưa xoay tiền — ngân hàng cấn nợ hộ cho đủ
+        `<b>${p.name}</b> chưa xoay tiền. Ngân hàng cấn nợ hộ cho đủ
          <span class="down">${money(amount)}</span>: ${gone.join(' · ')}.`,
         { kind: 'bad', ms: 3600 });
       await this.spot([...mortgaged, ...sold]);
@@ -2336,7 +2336,7 @@ export class Game {
     if (ok) return true;
 
     await this.bc.show('VỠ NỢ',
-      `<b>${p.name}</b> không xoay nổi <span class="down">${money(amount)}</span> — vỡ nợ.`,
+      `<b>${p.name}</b> không xoay nổi <span class="down">${money(amount)}</span>, vỡ nợ.`,
       { kind: 'bad', ms: 4000 });
     await this.doBankrupt(playerId);
     return false;
@@ -2375,7 +2375,7 @@ export class Game {
     this.hud.refresh();
     this.sync();
     await this.bc.show('DÙNG VÉ RA TÙ',
-      `<b>${p.name}</b> chìa tờ giấy bãi nại ra — cửa Khám Lớn mở, khỏi tốn một đồng.`);
+      `<b>${p.name}</b> dùng giấy bãi nại, ra khỏi Khám Lớn không tốn đồng nào.`);
     await this.takeRoll();
   }
 
@@ -2387,7 +2387,7 @@ export class Game {
     p.jailSits = (p.jailSits ?? 0) + 1;
     this.sync();
     await this.bc.show('NGỒI YÊN',
-      `<b>${p.name}</b> ở lại Khám Lớn cho lành — không tính vào hạn 3 lượt.`, { ms: 2200 });
+      `<b>${p.name}</b> ở lại Khám Lớn. Lượt này không tính vào hạn 3 lượt.`, { ms: 2200 });
     await this.endTurn();
   }
 
@@ -2426,7 +2426,7 @@ export class Game {
     if (d.isDouble) {
       st.releaseFromJail(p);
       this.hud.refresh();
-      await this.bc.show('RA ĐÔI — ĐƯỢC THA',
+      await this.bc.show('RA ĐÔI, ĐƯỢC THA',
         `<b>${p.name}</b> đổ đôi ${d.a}, rời Khám Lớn và đi ${d.sum} ô.`);
       await this.advance(p, d.sum, d);
       // Ra đôi để thoát tù không cho thêm lượt lắc.
@@ -2443,7 +2443,7 @@ export class Game {
       await this.bc.show('HẾT HẠN 3 LƯỢT',
         free
           ? `<b>${p.name}</b> cầu đôi hụt lần thứ ${MAX_JAIL_TURNS}, là <b>Khách Quen Nhà Đá</b> nên khỏi nộp phạt, đi ${d.sum} ô.`
-          : `<b>${p.name}</b> cầu đôi hụt lần thứ ${MAX_JAIL_TURNS} — phải nộp
+          : `<b>${p.name}</b> cầu đôi hụt lần thứ ${MAX_JAIL_TURNS}, phải nộp
          <span class="down">${money(JAIL_FINE)}</span> rồi đi ${d.sum} ô.`,
         { kind: 'bad' });
       if (!free && !(await this.payBank(p.id, JAIL_FINE))) { await this.endTurn(); return; }
@@ -2456,7 +2456,7 @@ export class Game {
     }
 
     await this.bc.show('CHƯA RA ĐÔI',
-      `<b>${p.name}</b> ngồi tiếp — đã cầu đôi hụt <b>${p.jailTurns}/${MAX_JAIL_TURNS}</b> lượt.`,
+      `<b>${p.name}</b> ngồi tiếp, đã cầu đôi hụt <b>${p.jailTurns}/${MAX_JAIL_TURNS}</b> lượt.`,
       { kind: 'bad' });
     // Hết lượt: lần cầu đôi kế tiếp phải chờ vòng sau.
     await this.endTurn();
@@ -2597,7 +2597,7 @@ export class Game {
       if (accepted === 'timeout') {
         accepted = false;
         await this.bc.show('HẾT GIỜ',
-          `<b>${B.name}</b> không trả lời kịp — đề nghị coi như bị từ chối.`,
+          `<b>${B.name}</b> không trả lời kịp, đề nghị coi như bị từ chối.`,
           { kind: 'bad', ms: 3200 });
       }
     } else {
@@ -2703,7 +2703,7 @@ export class Game {
       // Cả bàn một máy: chuyền máy cho chủ mới rồi mới hỏi
       if (!this.net && playerId !== st.turn) {
         await handoff(p.name, p.token.css,
-          `${p.name} vừa nhận đất đang thế chấp — chuyền máy cho họ quyết định.`);
+          `${p.name} vừa nhận đất đang thế chấp. Chuyền máy cho họ quyết định.`);
       }
       choice = await litTiles(this.scene, ids, () => redeemPromptModal(st, playerId, ids));
     }
@@ -2713,7 +2713,7 @@ export class Game {
        thể đã vơi đi (trả tiền thuê, bóc thẻ) nên không tin câu trả lời suông. */
     if (choice !== 'all' || p.money < total) {
       await this.bc.show('CÒN NỢ NGÂN HÀNG',
-        `<b>${p.name}</b> giữ ${ids.length} ô đang thế chấp — có thể chuộc sau ở mục Quản lý tài sản.`,
+        `<b>${p.name}</b> giữ ${ids.length} ô đang thế chấp, chuộc sau ở mục Quản lý tài sản.`,
         { ms: 3600 });
       return;
     }
@@ -2820,7 +2820,7 @@ export class Game {
       cash: `ôm đủ ${money(WIN_CASH)} tiền mặt`,
     }[win.by];
     await this.bc.show('HẠ MÀN',
-      `<b>${winner.name}</b> ${why} — <b>thắng ván này!</b>`, { ms: 6000 });
+      `<b>${winner.name}</b> ${why}, <b>thắng ván này!</b>`, { ms: 6000 });
     this.scene.celebrate(5200, winner.token.color);
     await wait(1600);
     // Ván đã hạ màn — quay về "màn hình chờ", nhạc nền nổi lại

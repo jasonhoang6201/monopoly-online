@@ -80,8 +80,8 @@ export const CHANCE = [
     type: 'move', nearest: 'station',
   },
   {
-    text: `Nhà Máy Điện với Thuỷ Cục gọi lên đối chiếu công tơ — cái nào gần
-           thì tới cái đó.`,
+    text: `Nhà Máy Điện với Thuỷ Cục gọi lên đối chiếu công tơ. Tới chỗ nào gần
+           hơn.`,
     type: 'move', nearest: 'utility',
   },
   {
@@ -123,7 +123,7 @@ export const CHANCE = [
   },
   {
     text: `Lục lại văn khế cũ trong hộc tủ, thì ra một lô đất người ta đang giữ
-           vốn có chủ khác — toà cho chuộc lại theo giá toà định.`,
+           vốn có chủ khác. Toà cho chuộc lại theo giá toà định.`,
     type: 'seize',
   },
   {
@@ -195,7 +195,7 @@ export const CHEST = [
   },
   {
     text: `Đội lục lộ đo lại lộ giới cả khu phố rồi bốc thăm, trúng nhà nào thì
-           nhà ấy bị phán là cất lấn ra đường — phải dỡ.`,
+           nhà ấy bị phán cất lấn ra đường, phải dỡ.`,
     type: 'demolish', levels: 1,
   },
   {
@@ -318,13 +318,13 @@ export const CARD_KINDS = {
     effect: (card) => {
       const n = Math.max(1, card?.levels ?? 1);
       return `Chọn một khu màu người khác đang có nhà, bàn cờ bốc thăm ${n} ô
-              trong khu ấy — mỗi ô mất một cấp nhà, chủ đất không được đền.`;
+              trong khu ấy. Mỗi ô mất một cấp nhà, chủ đất không được đền.`;
     },
   },
   seize: {
     name: 'Cưỡng chế mua đất', sigil: '⚑',
     effect: `Lấy một lô đất của người khác, trả cho họ giá gốc +25%. Chỉ nhắm được
-             vào khu màu chưa có căn nhà nào — xây rồi thì cả khu ấy miễn nhiễm.`,
+             vào khu màu chưa có nhà. Khu đã xây nhà thì miễn nhiễm.`,
   },
   resume: {
     name: 'Giải toả chọn lô', sigil: '⌁',

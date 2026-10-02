@@ -21,7 +21,7 @@ const label = (kind, c, i) => {
 function fillCards() {
   const kind = $('f-kind').value;
   const pool = POOLS[kind];
-  $('f-card').innerHTML = '<option value="-1">— bốc ngẫu nhiên —</option>'
+  $('f-card').innerHTML = '<option value="-1">(bốc ngẫu nhiên)</option>'
     + pool.map((c, i) => `<option value="${i}">${label(kind, c, i)}</option>`).join('');
 }
 
@@ -80,7 +80,7 @@ async function open(forceIndex = null, seed = null) {
     : fateCase(kind, card, { ...opts, amount: card.amount ?? null }));
 
   $('log').textContent = `seed ${lastSeed} · ${kind} #${idx} · hạng ${RANKS[rank].name}`
-    + ' — chạy lại đúng seed này thì dải xếp y hệt.';
+    + '. Chạy lại seed này thì dải xếp y hệt.';
 }
 
 // Nghe thử riêng từng tiếng có sẵn của game, khỏi phải bóc cả lượt mới nghe được

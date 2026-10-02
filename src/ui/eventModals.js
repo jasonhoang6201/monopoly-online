@@ -96,7 +96,7 @@ export function bracePromptModal(state, playerId, lots, ms = 0) {
       { label: 'Đành chịu', value: null, cls: 'btn-danger' },
     ],
     onMount: (body, close) => {
-      if (ms) ticker = attachTimer(body, ms, close, null, 'để quyết định — quá hạn coi như chịu mất.');
+      if (ms) ticker = attachTimer(body, ms, close, null, 'để quyết định. Hết giờ coi như chịu mất.');
     },
   });
   pr.finally(() => clearInterval(ticker));
@@ -131,7 +131,7 @@ export function firePromptModal(state, playerId, lots, ms = 0) {
       { label: 'Để mặc nó cháy', value: null, cls: 'btn-danger' },
     ],
     onMount: (body, close) => {
-      if (ms) ticker = attachTimer(body, ms, close, null, 'để quyết định — quá hạn thì cứ để cháy.');
+      if (ms) ticker = attachTimer(body, ms, close, null, 'để quyết định. Hết giờ thì nhà cháy.');
     },
   });
   pr.finally(() => clearInterval(ticker));
@@ -194,7 +194,7 @@ export function auctionBidModal(state, playerId, tileId, o = {}) {
     eyebrow: o.eyebrow ?? 'ĐẤU GIÁ',
     title: `${esc(t.name.split(' (')[0])}`,
     sub: `${o.reason ?? 'Lô đất này được đem bán đấu giá.'}
-          Ghi số tiền bạn trả — <b>cao nhất thì lấy đất</b>, ghi 0 là bỏ qua.
+          Ghi số tiền bạn trả: <b>cao nhất thì lấy đất</b>, ghi 0 là bỏ qua.
           Bạn có ${money(max)}.`,
     dismissible: false,
     body: `
@@ -212,7 +212,7 @@ export function auctionBidModal(state, playerId, tileId, o = {}) {
           }).join('')}
         </div>
       </div>
-      <div class="trade-summary">Đấu giá kín — mọi người ghi cùng lúc, hoà nhau thì
+      <div class="trade-summary">Đấu giá kín: mọi người ghi cùng lúc. Hoà giá thì
         người đi trước trong vòng lượt thắng.</div>
       ${PEEK_HINT}`,
     buttons: [{ label: 'Chốt giá', value: 'bid', cls: 'btn-gold' }],
@@ -235,7 +235,7 @@ export function auctionBidModal(state, playerId, tileId, o = {}) {
         let msg = '';
         if (raw !== '' && !Number.isFinite(n)) msg = 'Chỉ ghi bằng số.';
         else if (n < 0) msg = 'Không ghi giá âm.';
-        else if (n > max) msg = `Bạn chỉ có ${money(max)} — hạ giá xuống.`;
+        else if (n > max) msg = `Bạn chỉ có ${money(max)}. Hạ giá xuống.`;
 
         input.classList.toggle('bad', !!msg);
         err.hidden = !msg;
@@ -248,7 +248,7 @@ export function auctionBidModal(state, playerId, tileId, o = {}) {
         b.addEventListener('click', () => { input.value = b.dataset.v; read(); });
       });
       setTimeout(() => input.focus(), 60);
-      if (o.ms) ticker = attachTimer(body, o.ms, close, 'bid', 'để ghi giá — quá hạn coi như bỏ qua.');
+      if (o.ms) ticker = attachTimer(body, o.ms, close, 'bid', 'để ghi giá. Hết giờ coi như bỏ qua.');
     },
   });
   return pr.finally(() => clearInterval(ticker)).then(() => bid);
@@ -289,10 +289,10 @@ export function auctionResultModal(state, tileId, rows, o) {
     const won = r.seat === o.winner;
     /* Hoà giá mà thua thì phải nói rõ vì sao, không thì bảng hiện "hụt 0$" —
        người ấy tưởng máy tính sai chứ không nhớ ra luật hoà. */
-    const meta = won ? 'Trả cao nhất — lấy đất'
-      : r.bid === paid ? 'Bằng giá — thua vì đi sau trong vòng lượt'
+    const meta = won ? 'Trả cao nhất, lấy đất'
+      : r.bid === paid ? 'Bằng giá, thua vì đi sau'
       : r.bid > 0 ? `Hụt ${money(paid - r.bid)}`
-      : 'Không ghi giá — bỏ qua phiên';
+      : 'Không ghi giá';
     return `
       <div class="arow bid-row${won ? ' win' : ''}${r.bid > 0 ? '' : ' pass'}">
         <span class="bid-rank">${won ? '★' : i + 1}</span>
@@ -301,7 +301,7 @@ export function auctionResultModal(state, tileId, rows, o) {
           <span class="arow-name">${esc(p.name)}</span>
           <span class="arow-meta">${meta}</span>
         </span>
-        <span class="bid-money">${r.bid > 0 ? money(r.bid) : '—'}</span>
+        <span class="bid-money">${money(r.bid)}</span>
       </div>`;
   };
 
@@ -309,7 +309,7 @@ export function auctionResultModal(state, tileId, rows, o) {
     eyebrow: 'CHỐT PHIÊN ĐẤU GIÁ',
     title: esc(t.name.split(' (')[0]),
     sub: `<b style="color:${win.token.css}">${esc(win.name)}</b> trả
-          <b>${money(paid)}</b> — cao nhất bàn, lô đất về tay họ.`,
+          <b>${money(paid)}</b>, cao nhất bàn. Lô đất về tay họ.`,
     scrimClose: true,
     yieldToNext: true,
     body: `
@@ -321,8 +321,8 @@ export function auctionResultModal(state, tileId, rows, o) {
         ${list.map(line).join('')}
       </div>
       <div class="trade-summary">Tiền về
-        ${o.sellerName ? `tay <b>${esc(o.sellerName)}</b>` : '<b>kho ngân hàng</b>'} —
-        giá kín chỉ kín tới lúc chốt, giờ cả bàn cùng thấy.</div>`,
+        ${o.sellerName ? `tay <b>${esc(o.sellerName)}</b>` : '<b>kho ngân hàng</b>'}.
+        Chốt phiên rồi nên giá của mọi người được công khai.</div>`,
     buttons: [{ label: 'Đã rõ', value: true, cls: 'btn-gold' }],
   });
 }

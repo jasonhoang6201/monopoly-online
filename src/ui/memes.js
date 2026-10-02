@@ -203,7 +203,7 @@ export class MemeDeck {
     const out = left <= 0;
     this.quotaEl.classList.toggle('out', out);
     this.quotaEl.textContent = out
-      ? `Hết lượt — chờ ${Math.ceil(this.#waitMs() / 1000)} giây`
+      ? `Hết lượt, chờ ${Math.ceil(this.#waitMs() / 1000)} giây`
       : `Còn ${left}/${MEME_QUOTA} lượt`;
     for (const b of this.pop.querySelectorAll('.meme-pick')) b.disabled = out;
   }

@@ -35,8 +35,8 @@ function modeModal(back) {
     body: `<div class="mode-pick">
         <p>Chơi <b>trên một máy</b> thì cả bàn ngồi quanh, chuyền máy cho nhau theo lượt.
            Mở <b>phòng online</b> thì mỗi người một máy, ai có đường mời là vào được.</p>
-        ${local ? `<p class="lobby-warn">Chưa cắm khoá Supabase — phòng online lúc này
-           <b>chỉ nối được các tab trên cùng máy</b> (đủ để chơi thử).
+        ${local ? `<p class="lobby-warn">Chưa có khoá Supabase nên phòng online lúc này
+           <b>chỉ nối các tab trên cùng máy</b> (đủ để chơi thử).
            Xem <code>.env.example</code> để nối nhiều máy thật.</p>` : ''}
       </div>`,
     buttons: [
@@ -188,7 +188,7 @@ async function runRoom(controller, room) {
   }
   if (res === 'closed') {
     dropSeat(room.code);
-    await errorModal('Chủ phòng đã rời — phòng này đóng rồi.');
+    await errorModal('Chủ phòng đã rời, phòng đã đóng.');
     window.location.href = homeUrl();
     return 'left';
   }

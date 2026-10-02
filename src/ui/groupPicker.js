@@ -67,9 +67,9 @@ export function pickGroupOnBoard(scene, state, data, ms = 0) {
       <div class="tp-eyebrow">DỠ NHÀ LẤN LỘ GIỚI</div>
       <div class="tp-title">Dỡ nhà ở khu nào?</div>
       <div class="tp-sub">Bạn chỉ chọn khu. Bàn cờ sẽ <b>bốc thăm ${levels} ô</b>
-        trong khu ấy, mỗi ô mất một cấp nhà — chủ đất không được đền đồng nào.</div>
-      <div class="tp-call">Bấm vào <b>ô đang sáng</b> để chọn cả khu của ô ấy —
-        có <b>${groups.length}</b> khu chọn được</div>
+        trong khu ấy, mỗi ô mất một cấp nhà. Chủ đất không được đền.</div>
+      <div class="tp-call">Bấm vào <b>ô đang sáng</b> để chọn cả khu của ô ấy.
+        Có <b>${groups.length}</b> khu chọn được.</div>
       <div class="tp-chosen">${groups.map((g) => `<span class="tp-chip"
         style="border-color:${GROUPS[g].hex}">${esc(GROUPS[g].name)}</span>`).join('')}</div>
       <div class="tp-timer" hidden></div>
@@ -167,8 +167,8 @@ export function pickGroupOnBoard(scene, state, data, ms = 0) {
       const until = Date.now() + ms;
       const tick = () => {
         const left = Math.max(0, until - Date.now());
-        timer.innerHTML = `Còn <b>${Math.ceil(left / 1000)} giây</b> để chọn —
-          quá hạn thì ${cancel ? 'thẻ ở lại trong túi' : 'bàn cờ tự chọn'}.`;
+        timer.innerHTML = `Còn <b>${Math.ceil(left / 1000)} giây</b> để chọn.
+          Hết giờ thì ${cancel ? 'thẻ ở lại trong túi' : 'bàn cờ tự chọn'}.`;
         timer.classList.toggle('warn', left <= 10000);
         if (left <= 0) finish(cancel ? null : groups[0]);
       };

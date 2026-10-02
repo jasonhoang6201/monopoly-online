@@ -270,7 +270,7 @@ export class Room {
       const timer = setTimeout(() => {
         if (done) return;
         done = true;
-        reject(new Error('Không tìm thấy phòng — kiểm tra lại mã, hoặc chủ phòng đã rời.'));
+        reject(new Error('Không tìm thấy phòng. Kiểm tra lại mã, hoặc chủ phòng đã rời.'));
       }, JOIN_TIMEOUT_MS);
 
       const settle = (fn) => (...a) => {

@@ -103,7 +103,7 @@ export function setupModal() {
           <div class="trade-summary" style="margin-top:16px;text-align:left">
             <b style="color:var(--gold-light)">Luật rút gọn</b>
             <ul class="rules" style="margin-top:6px">
-              <li>Đổ đôi được đi tiếp — <b>đổ đôi 3 lần liên tiếp thì vào tù</b>.</li>
+              <li>Đổ đôi được đi tiếp. <b>Đổ đôi 3 lần liên tiếp thì vào tù</b>.</li>
               <li>Trong tù: nộp <b>${money(JAIL_FINE)}</b> hoặc đổ ra đôi, tối đa <b>3 lượt</b>.</li>
               <li>Đủ bộ màu mới được xây nhà. Cả bàn chỉ có <b>32 căn nhà</b>.</li>
               <li>Đủ 4 nhà mới lên khách sạn, và <b>trả lại 4 căn nhà</b> cho ngân hàng.</li>
@@ -201,10 +201,10 @@ export function buyModal(tileId, player) {
   const afford = player.money >= t.price;
   return openModal({
     eyebrow: 'CƠ HỘI TẬU ĐẤT',
-    title: `${esc(t.name.split(' (')[0])} — ${money(t.price)}`,
+    title: `${esc(t.name.split(' (')[0])} · ${money(t.price)}`,
     sub: afford
       ? `Bạn đang có ${money(player.money)}. Mua xong còn ${money(player.money - t.price)}.`
-      : `Bạn chỉ có ${money(player.money)} — không đủ tiền mua.`,
+      : `Bạn chỉ có ${money(player.money)}, không đủ tiền mua.`,
     body: deedHtml(tileId),
     buttons: [
       { label: `Mua ${money(t.price)}`, value: 'buy', cls: 'btn-gold', disabled: !afford },
@@ -330,7 +330,7 @@ export function manageModal(state, playerId, onChange) {
  * @param {string} tip   phần còn lại của chú thích (giá tiền, hoặc lý do bị khoá)
  */
 function actBtn(act, id, { cls, label, tip, icon, ok }) {
-  const title = esc(tip ? `${label} — ${tip}` : label);
+  const title = esc(tip ? `${label}: ${tip}` : label);
   return `<button class="btn btn-sm btn-ico ${cls}" data-act="${act}" data-tile="${id}"
       ${ok ? '' : 'disabled'} title="${title}" aria-label="${title}">${icon}</button>`;
 }
@@ -537,7 +537,7 @@ export function tradeBuildModal(state, fromId, toId, scene) {
             <div class="tcards" data-side="${cls}"></div>
             <div class="side-note" data-side="${cls}"></div>
             ${blocked.length ? `<div class="empty-note" style="padding:8px 0 0">
-                ${blocked.length} ô đang có nhà — bán nhà trước mới trao đổi được.</div>` : ''}
+                ${blocked.length} ô đang có nhà. Bán nhà trước mới trao đổi được.</div>` : ''}
           </div>`;
       };
 
@@ -558,7 +558,7 @@ export function tradeBuildModal(state, fromId, toId, scene) {
           ? `<span class="none">${esc(p.name)} không có ô đất nào trao đổi được.</span>`
           : sel.size === 0
             ? '<span class="none">Chưa chọn ô đất nào.</span>'
-            : `Đang chọn <b>${sel.size}</b>/${ids.length} ô — bấm thẻ để bỏ ra.`;
+            : `Đang chọn <b>${sel.size}</b>/${ids.length} ô. Bấm thẻ để bỏ ra.`;
         host.querySelector(`.side-pick[data-side="${cls}"]`).textContent = sel.size
           ? `Sửa đất đã chọn · ${sel.size} ô`
           : 'Chọn đất trên bàn cờ';
@@ -621,7 +621,7 @@ export function tradeBuildModal(state, fromId, toId, scene) {
             title: `Đất của ${esc(p.name)}`,
             sub: `Chỉ đất của <b>${esc(p.name)}</b> đang sáng. Chọn xong bấm
                   <b>Xong</b> để về bảng đề nghị.`,
-            note: 'Ô đang có nhà không sáng — phải bán hết nhà mới trao đổi được.',
+            note: 'Ô có nhà không sáng. Bán hết nhà mới trao đổi được.',
           });
           stash(false);
           if (out) { sel.clear(); for (const id of out) sel.add(id); }
@@ -684,7 +684,7 @@ export function tradeReviewModal(state, offer, ms = 0) {
   const p = openModal({
     eyebrow: 'XÉT DUYỆT GIAO DỊCH',
     title: `${esc(A.name)} muốn thương lượng`,
-    sub: `Quyết định thuộc về ${esc(B.name)} — giao dịch chỉ thành khi cả hai đồng ý.`,
+    sub: `${esc(B.name)} quyết định. Giao dịch chỉ thành khi cả hai đồng ý.`,
     wide: true,
     body: `
       <div class="trade-grid">
@@ -716,7 +716,7 @@ export function tradeReviewModal(state, offer, ms = 0) {
     onMount: (body, close) => {
       if (!ms) return;
       ticker = attachTimer(body, ms, close, 'timeout',
-        'để trả lời — quá hạn coi như từ chối.');
+        'để trả lời. Hết giờ coi như từ chối.');
     },
   });
   // Bấm nút hay hết giờ đều đi qua đây, nên dọn nhịp hẹn giờ ở đúng một chỗ
@@ -799,7 +799,7 @@ export function redeemPromptModal(state, playerId, tileIds, ms = 0) {
     ],
     onMount: (body, close) => {
       if (!ms) return;
-      ticker = attachTimer(body, ms, close, null, 'để quyết định — quá hạn coi như để sau.');
+      ticker = attachTimer(body, ms, close, null, 'để quyết định. Hết giờ coi như để sau.');
     },
   });
   pr.finally(() => clearInterval(ticker));
@@ -841,13 +841,13 @@ export function rollOffModal(state, playerId, rolls = [], ms = 0) {
               <span class="arow-meta">${q.token.name}</span></span>
             <span class="arow-side" style="font-family:var(--serif);color:var(--gold-light)">
               ${done.has(q.id) ? done.get(q.id)
-                : q.id === playerId ? 'đang lắc…' : '—'}</span>
+                : q.id === playerId ? 'đang lắc…' : 'chờ'}</span>
           </div>`).join('')}
       </div>`,
     buttons: [{ label: 'Lắc xí ngầu', value: true, cls: 'btn-primary' }],
     onMount: (body, close) => {
       if (!ms) return;
-      ticker = attachTimer(body, ms, close, true, 'để bấm — quá hạn thì bàn lắc hộ.');
+      ticker = attachTimer(body, ms, close, true, 'để bấm. Hết giờ thì bàn lắc hộ.');
     },
   });
   pr.finally(() => clearInterval(ticker));
@@ -893,7 +893,7 @@ export function tileModal(state, tileId) {
              ${mortgaged ? ' · <b style="color:#FF8A7A">đang thế chấp</b>' : ''}</span>
          </div>`
       : `<div class="owner-line"><span class="dot" style="background:#5A4632"></span>
-           <span>Chưa có chủ — ai dừng lại đây cũng được quyền mua với giá
+           <span>Chưa có chủ. Ai dừng ở đây đều mua được với giá
              <b style="color:var(--gold-light)">${money(t.price)}</b>.</span></div>`;
   }
 
@@ -1046,7 +1046,7 @@ export function playerModal(state, playerId) {
           </div>`).join('')}</div>`}
 
     ${mortgaged.length ? `<div class="trade-summary" style="text-align:left">
-        <b style="color:#FF8A7A">Đang thế chấp</b> — tổng tiền chuộc lại
+        <b style="color:#FF8A7A">Đang thế chấp</b>: tổng tiền chuộc
         <b>${money(mortgaged.reduce((s, id) => s + BOARD[id].redeem, 0))}</b>
         (đã gồm lãi 10%): ${mortgaged.map((id) => esc(tileLabel(id))).join(' · ')}
       </div>` : ''}
@@ -1101,7 +1101,7 @@ export function bankruptModal(state, playerId, forced, owed, raisable) {
     title: forced ? `${esc(p.name)} vỡ nợ` : 'Bạn muốn phá sản?',
     sub: forced
       ? (raisable != null
-          ? `Còn thiếu ${money(owed)}. Bán sạch nhà và thế chấp toàn bộ đất cũng chỉ được ${money(raisable)} — vỡ nợ ngay.`
+          ? `Còn thiếu ${money(owed)}. Bán sạch nhà và thế chấp toàn bộ đất cũng chỉ được ${money(raisable)}, nên vỡ nợ ngay.`
           : `Còn thiếu ${money(owed)} mà tài sản đã cạn.`)
       : 'Toàn bộ tài sản sẽ được trả về ngân hàng và bạn rời khỏi ván đấu.',
     body: `<div class="trade-summary" style="background:rgba(179,50,42,.14);border-color:rgba(179,50,42,.45)">

@@ -67,7 +67,7 @@ const lasts = (c) => `Kéo dài ${c.rounds} vòng, hết thì luật trả về 
  * `addMod` gộp theo `id` nên rút lại lá cũ không nhân đôi hệ số; `usable` bên
  * `core/events.js` cũng bỏ qua lá nào đã nằm sẵn trên bàn.
  */
-const forever = 'Hiệu lực vĩnh viễn — từ giờ tới hết ván';
+const forever = 'Hiệu lực vĩnh viễn, tới hết ván';
 
 /** Phần trăm gọn gàng: 1.25 → "+25%", 0.5 → "−50%". */
 const pct = (mult) => `${mult >= 1 ? '+' : '−'}${Math.round(Math.abs(mult - 1) * 100)}%`;
@@ -211,7 +211,7 @@ export const EVENTS = [
      */
     braceRate: 1,
     effect: (c) => [
-      'Bốc thăm một khu màu — cả khu cùng rung, ô chưa cất nhà thì vô sự',
+      'Bốc thăm một khu màu. Cả khu cùng rung, ô chưa có nhà thì vô sự',
       `Chủ đất được hỏi: trả ${Math.round(c.braceRate * 100)}% giá xây mỗi ô có nhà để giữ nguyên`,
       'Không trả thì mỗi ô ấy sập một cấp nhà, không đền một đồng',
     ],
@@ -230,7 +230,7 @@ export const EVENTS = [
      */
     saveRate: 0.8,
     effect: (c) => [
-      'Bốc thăm một khu màu — cả khu cùng cháy, ô chưa cất nhà thì vô sự',
+      'Bốc thăm một khu màu. Cả khu cùng cháy, ô chưa có nhà thì vô sự',
       `Chủ đất được hỏi: trả ${Math.round(c.saveRate * 100)}% giá xây phần sắp cháy thì nhà còn nguyên`,
       'Không trả thì mỗi ô mất nửa số nhà, làm tròn lên',
     ],
@@ -264,7 +264,7 @@ export const EVENTS = [
            ngay trước cổng.`,
     effect: () => [
       'Bốc thăm một lô đất chưa xây nhà trên bàn',
-      'Đem đấu giá kín — chủ cũ đứng ngoài, không được mua lại',
+      'Đem đấu giá kín, chủ cũ không được mua lại',
       'Bán được bao nhiêu chủ cũ nhận trọn bấy nhiêu',
     ],
   },
@@ -331,7 +331,7 @@ export const EVENT_BY_ID = Object.fromEntries(EVENTS.map((e) => [e.id, e]));
 export const EVENT_LEVELS = {
   off: {
     key: 'off', name: 'Tắt', short: 'Không có sự kiện',
-    desc: 'Chơi đúng luật cổ điển — không có thẻ Thời Cuộc nào.',
+    desc: 'Chơi luật cổ điển, không có thẻ Thời Cuộc.',
   },
   nhe: {
     key: 'nhe', name: 'Nhẹ', short: 'Thưa và êm',

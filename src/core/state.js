@@ -439,7 +439,7 @@ export class GameState {
   canBuild(playerId, tileId, o = {}) {
     const t = BOARD[tileId];
     if (t.type !== 'property') return { ok: false, reason: 'Chỉ đất mới xây được nhà.' };
-    if (!o.free && this.hasMod('freeze-build')) return { ok: false, reason: 'Đang giới nghiêm — thợ thuyền nghỉ hết.' };
+    if (!o.free && this.hasMod('freeze-build')) return { ok: false, reason: 'Đang giới nghiêm, thợ nghỉ hết.' };
     if (this.owner.get(tileId) !== playerId) return { ok: false, reason: 'Không phải đất của bạn.' };
     let group = this.buildGroup(playerId, t.color_group);
     /* Chung Cư Mini: chưa đủ bộ thì ô này đứng riêng một mình — luật xây đều

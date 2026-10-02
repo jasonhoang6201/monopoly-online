@@ -26,7 +26,7 @@ const IDLE_HTML = `
 const CORNER_NOTE = {
   0:  'Đi ngang hay dừng lại đều lãnh lương 200$.',
   10: 'Ghé thăm thì vô sự. Bị giải vào thì nộp 50$, đổ ra đôi, hoặc ngồi đủ 3 lượt.',
-  20: 'Nghỉ chân — không mất tiền, cũng không được tiền.',
+  20: 'Nghỉ chân: không mất tiền, cũng không được tiền.',
   30: 'Về thẳng Khám Lớn, không lãnh lương dọc đường.',
 };
 

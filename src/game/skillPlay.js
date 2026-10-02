@@ -1240,7 +1240,7 @@ export class SkillPlay {
     const v = await this.ask({
       id: 'dc3',
       body: `<p>Mua lại <b>${tileLabel(tileId)}</b> của ${named(owner)} với giá
-        <b>${money(price)}</b> (${Math.round(premium * 100)}% giá gốc) — chủ đất không được từ chối.</p>
+        <b>${money(price)}</b> (${Math.round(premium * 100)}% giá gốc). Chủ đất không được từ chối.</p>
         <p>Không dùng thì trả thuê <b>${money(rent)}</b> như thường.</p>`,
       buttons: [
         { label: `Thâu Tóm · ${money(price)}`, value: true, cls: 'btn-gold' },

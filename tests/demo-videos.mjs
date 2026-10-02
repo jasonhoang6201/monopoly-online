@@ -109,7 +109,7 @@ if (want(1)) {
   const g = await openGame({ width: 1600, height: 1000 });
   const { page, run } = g;
   await run(`s.current.skillPoints = 9; c.restoreActions();`);
-  await cap(page, '9 điểm kỹ năng — bấm nút Kỹ năng để mở cây');
+  await cap(page, '9 điểm kỹ năng. Bấm nút Kỹ năng để mở cây');
   await page.waitForTimeout(1500);
   await page.locator('#actions button', { hasText: 'Kỹ năng' }).click();
   await page.locator('.st-node[data-id="cn1"]').waitFor();
@@ -122,7 +122,7 @@ if (want(1)) {
   };
   await cap(page, 'Level 1: số tiền ngẫu nhiên trong khoảng (10–40$), 1 điểm');
   await node('cn1').click(); await learn();
-  await cap(page, 'Lên level cần điều kiện: kỹ năng phải nhặt đủ 150$ — nút Lên level còn mờ');
+  await cap(page, 'Lên level cần điều kiện: kỹ năng phải nhặt đủ 150$, nút Lên level còn mờ');
   await node('cn1').click();
   await page.waitForTimeout(5000);
   await page.keyboard.press('Escape');
@@ -131,12 +131,12 @@ if (want(1)) {
   await cap(page, 'Sau vài vòng kỹ năng đã nhặt được 420$: đủ điều kiện level 2 (150$) và level 3 (400$)');
   await page.waitForTimeout(1500);
   await node('cn1').click(); await learn(3500);
-  await cap(page, 'Level 3: 45% khả năng, 40$ — 3 chấm level sáng');
+  await cap(page, 'Level 3: 45% khả năng, 40$, sáng 3 chấm level');
   await node('cn1').click(); await learn();
   await cap(page, 'Học tiếp tầng 2 và tầng 3 (level 1 là đủ để mở tối thượng)');
   await node('cn2a').click(); await learn(1800);
   await node('cn3').click(); await learn(1800);
-  await cap(page, 'Tối thượng Liên Đoàn Lao Động — 3 điểm');
+  await cap(page, 'Tối thượng Liên Đoàn Lao Động · 3 điểm');
   await node('cnU').click(); await learn(3500);
   await page.waitForTimeout(1500);
   await cap(page, 'Đóng cây → quân có hào quang màu nhánh Công Nhân');
@@ -200,7 +200,7 @@ if (want(3)) {
   await run('c.showPlayer(s.players[1].id);');
   await page.locator('.ptab[data-tab="skills"]').waitFor();
   await page.waitForTimeout(2000);
-  await cap(page, 'Tab "Cây kỹ năng" — chỉ xem, không học hộ được');
+  await cap(page, 'Tab "Cây kỹ năng": chỉ xem, không học hộ được');
   await page.locator('.ptab[data-tab="skills"]').click();
   await page.waitForTimeout(3500);
   await cap(page, 'Bấm một ô để xem level đã có');
@@ -269,7 +269,7 @@ if (want(5)) {
     await page.waitForTimeout(500);
   }
   await page.waitForTimeout(4000);
-  await cap(page, 'Bấm Ga Sài Gòn trên bàn cờ — có nút "Ở lại" nếu không muốn đi');
+  await cap(page, 'Bấm Ga Sài Gòn trên bàn cờ. Không muốn đi thì bấm "Ở lại"');
   await page.waitForTimeout(1500);
   await page.evaluate(() => { window.__monopoly.scene.onTileClick(35); });
   await page.waitForTimeout(6000);
@@ -328,13 +328,13 @@ if (want(7)) {
     const p = s.current; p.skills = ['dh1','dh2a','dh3']; p.pos = 12;
     c.scene.refresh(s); await c.scene.jumpToken(s.players.indexOf(p), 12); c.restoreActions();
   `);
-  await cap(page, 'Quay Đầu: lắc xong, ô đi tới và ô đi lùi cùng sáng — bấm ô nào đi ô đó');
+  await cap(page, 'Quay Đầu: lắc xong, ô đi tới và ô đi lùi cùng sáng. Bấm ô nào đi ô đó');
   await page.waitForTimeout(2500);
   await forceDice(page, 3, 4);
   await page.locator('#actions button', { hasText: 'Lắc xí ngầu' }).click();
   await page.locator('.tile-pick[data-quick]').waitFor({ timeout: 15000 });
   await page.waitForTimeout(4000);
-  await cap(page, 'Bấm ô đi lùi (ô 5) — nút "Đi tới như thường" để không dùng kỹ năng');
+  await cap(page, 'Bấm ô đi lùi (ô 5). Nút "Đi tới như thường" để bỏ kỹ năng');
   await page.waitForTimeout(1500);
   await page.evaluate(() => { window.__monopoly.scene.onTileClick(5); });
   await page.waitForTimeout(5000);
@@ -363,7 +363,7 @@ if (want(8)) {
   await page.waitForTimeout(1500);
   await openTree();
   await page.waitForTimeout(2500);
-  await cap(page, 'Hai Ngón (cấp 3): đã học Về Nhà ở cấp 2, nhưng còn cần dừng chung ô với người khác 5 lần — mới được 3/5');
+  await cap(page, 'Hai Ngón (cấp 3): đã học Về Nhà ở cấp 2, nhưng còn cần dừng chung ô với người khác 5 lần, mới được 3/5');
   await node('dhX1').click();
   await page.waitForTimeout(5000);
   await page.keyboard.press('Escape');

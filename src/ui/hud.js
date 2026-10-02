@@ -382,7 +382,7 @@ export class Hud {
         rchip.classList.toggle('is-away', away);
         rchip.querySelector('.rchip-name').textContent = p.name;
         rchip.querySelector('.rchip-money').textContent =
-          p.bankrupt ? '—' : (away ? 'mất kết nối' : money(p.money));
+          p.bankrupt ? 'phá sản' : (away ? 'mất kết nối' : money(p.money));
         rchip.title = away
           ? `${p.name} đang mất kết nối`
           : `Xem bảng tài sản của ${p.name}`;
@@ -427,8 +427,8 @@ export class Hud {
     box.hidden = false;
     box.style.setProperty('--pc', p.token.css);
     tok.style.backgroundImage = `url('${tokenImage(p.token)}')`;
-    cash.textContent = p.bankrupt ? '—' : money(p.money);
-    box.title = `${p.name} — ${p.bankrupt ? 'đã phá sản' : money(p.money)}`;
+    cash.textContent = p.bankrupt ? 'phá sản' : money(p.money);
+    box.title = `${p.name}: ${p.bankrupt ? 'đã phá sản' : money(p.money)}`;
   }
 
   /**
@@ -466,7 +466,7 @@ export class Hud {
     note.textContent = bits.join(' · ');
     note.hidden = bits.length === 0;
     box.title = ready
-      ? `Áp lực ${st.pressure}/${threshold(st)} — đầy thì nổ một thẻ Thời Cuộc.`
+      ? `Áp lực ${st.pressure}/${threshold(st)}. Đầy thanh thì nổ một thẻ Thời Cuộc.`
       : 'Sự kiện chỉ bắt đầu khi bàn đã bán gần hết đất.';
   }
 

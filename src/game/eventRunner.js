@@ -122,21 +122,21 @@ export class EventRunner {
          cất nhà thì không mất gì — nói rõ ra để người chơi khỏi chờ một khoản
          thiệt hại không tới. */
       case 'dong-dat':
-        return `Khu <b>${GROUPS[plan.group].name}</b> — ${hitCount(plan)} trong
+        return `Khu <b>${GROUPS[plan.group].name}</b>: ${hitCount(plan)} trong
                 ${plan.tiles.length} ô có nhà để mất.`;
       case 'hoa-hoan':
-        return `Khu <b>${GROUPS[plan.group].name}</b> — lửa lan cả khu,
+        return `Khu <b>${GROUPS[plan.group].name}</b>: lửa lan cả khu,
                 ${hitCount(plan)} trong ${plan.tiles.length} ô đang có nhà.`;
       case 'mo-duong':
         return `Khu <b>${GROUPS[plan.group].name}</b> lên giá thuê <b>+50%</b>, vĩnh viễn.`;
       case 'trung-thu':
         return `Trưng thu <b>${tileLabel(plan.tileId)}</b> của ${who(plan.seat)}, đền ${money(plan.payout)}.`;
       case 'sang-nhuong':
-        return `Phát mãi <b>${tileLabel(plan.tileId)}</b> — đang thuộc về ${who(plan.seat)}.`;
+        return `Phát mãi <b>${tileLabel(plan.tileId)}</b> của ${who(plan.seat)}.`;
       case 'dai-ha-gia':
         return `Đem <b>${tileLabel(plan.tileId)}</b> ra bán đấu giá.`;
       case 'hoi-cho':
-        return `${who(plan.seat)} nghèo nhất bàn — nhận ${money(plan.amount)}.`;
+        return `${who(plan.seat)} nghèo nhất bàn, nhận ${money(plan.amount)}.`;
       case 'an-xa':
         return plan.seats.length
           ? `Thả ${plan.seats.map(who).join(', ')} khỏi Khám Lớn.`
@@ -145,12 +145,12 @@ export class EventRunner {
         return `${plan.bills.length} người phải nộp, tổng
                 <b>${money(plan.bills.reduce((s, b) => s + b.amount, 0))}</b> vào Quỹ Công.`;
       case 'thue-khu':
-        return `Khu <b>${GROUPS[plan.group].name}</b> — ${plan.bills.length} chủ đất nộp tổng
+        return `Khu <b>${GROUPS[plan.group].name}</b>: ${plan.bills.length} chủ đất nộp tổng
                 <b>${money(plan.bills.reduce((s, b) => s + b.amount, 0))}</b> vào Quỹ Công.`;
       case 'siet-tin-dung':
         return `${plan.bills.length} người đang cắm đất phải đóng lãi ngay.`;
       case 'mat-giay-to':
-        return `Mỗi người chọn một ô của mình — ô ấy ngưng thu tiền thuê.`;
+        return `Mỗi người chọn một ô của mình. Ô ấy ngưng thu tiền thuê.`;
       case 'hoan-doi-dia-ba':
         return plan.pairs.map((x) => `${who(x.from)} → ${who(x.to)}`).join(' · ');
       case 'quy-cong-phat-chan':
@@ -201,7 +201,7 @@ export class EventRunner {
     }
     this.g.sync();
     await this.g.bc.show('QUỸ CÔNG',
-      `Quỹ Công giờ có <b>${money(st.pot)}</b> — ai ghé <b>Bến Đậu</b> trước thì ẵm trọn.`,
+      `Quỹ Công có <b>${money(st.pot)}</b>. Ai ghé <b>Bến Đậu</b> trước thì ẵm trọn.`,
       { ms: 3600 });
   }
 
@@ -237,8 +237,8 @@ export class EventRunner {
     this.state.pot += plan.amount;
     this.g.sync();
     await this.g.bc.show('QUỸ CÔNG',
-      `Ngân hàng bỏ vào Quỹ Công <span class="up">${money(plan.amount)}</span> —
-       tổng còn <b>${money(this.state.pot)}</b>, chờ người đầu tiên ghé Bến Đậu.`);
+      `Ngân hàng bỏ vào Quỹ Công <span class="up">${money(plan.amount)}</span>.
+       Quỹ có <b>${money(this.state.pot)}</b>, chờ người đầu tiên ghé Bến Đậu.`);
   }
 
   async applyMod(card, plan) {
@@ -300,7 +300,7 @@ export class EventRunner {
            tưởng thẻ rỗng. Chỉ bỏ cảnh căn nhà văng ra vì nhà còn đứng nguyên. */
         this.g.tileFx('quake', lots.filter((l) => l.lose > 0).map((l) => l.id), false);
         await this.g.bc.show('CHỐNG ĐỠ KỊP',
-          `<b>${p.name}</b> bỏ <span class="down">${money(total)}</span> gia cố ${lots.length} ô — nhà đứng nguyên.`);
+          `<b>${p.name}</b> bỏ <span class="down">${money(total)}</span> gia cố ${lots.length} ô, nhà còn nguyên.`);
         await this.g.payBank(seat, total);
         continue;
       }
@@ -311,7 +311,7 @@ export class EventRunner {
       this.g.sync();
       this.g.tileFx('quake', hit);
       await this.g.bc.show('NHÀ SẬP',
-        `<b>${p.name}</b> mất một tầng nhà ở ${lots.map((l) => tileShortLabel(l.id)).join(', ')} — không đền bù.`,
+        `<b>${p.name}</b> mất một tầng nhà ở ${lots.map((l) => tileShortLabel(l.id)).join(', ')}, không đền bù.`,
         { kind: 'bad', ms: 4200 });
       await this.g.spot(lots.map((l) => l.id), 1600);
     }
@@ -356,7 +356,7 @@ export class EventRunner {
         // Như động đất: lửa vẫn bốc lên rồi tắt, chỉ không có căn nhà cháy rụi
         this.g.tileFx('fire', lots.filter((l) => l.lose > 0).map((l) => l.id), false);
         await this.g.bc.show('DẬP LỬA KỊP',
-          `<b>${p.name}</b> trả <span class="down">${money(total)}</span> cho phu chữa cháy —
+          `<b>${p.name}</b> trả <span class="down">${money(total)}</span> cho phu chữa cháy,
            nhà cửa ở ${lots.map((l) => tileShortLabel(l.id)).join(', ')} còn nguyên.`);
         await this.g.payBank(seat, total);
         continue;
@@ -378,7 +378,7 @@ export class EventRunner {
       this.g.sync();
       this.g.tileFx('fire', burnt);
       await this.g.bc.show('CHÁY NHÀ',
-        `<b>${p.name}</b> để mặc lửa cháy — mất <b>${gone} cấp nhà</b> ở
+        `<b>${p.name}</b> để mặc lửa cháy, mất <b>${gone} cấp nhà</b> ở
          ${lots.map((l) => tileShortLabel(l.id)).join(', ')}, không đền bù.`,
         { kind: 'bad', ms: 4600 });
       await this.g.spot(lots.map((l) => l.id), 1600);
@@ -461,7 +461,7 @@ export class EventRunner {
     if (st.owner.get(plan.tileId) !== plan.seat) return;
     await this.auction(plan.tileId, {
       seller: plan.seat,
-      reason: `Toà phát mãi lô đất này của ${st.players[plan.seat].name} — tiền bán trả về cho họ.`,
+      reason: `Toà phát mãi lô đất này của ${st.players[plan.seat].name}. Tiền bán được trả cho họ.`,
       // Chủ cũ đứng ngoài: cho họ tự mua lại thì hoá ra chỉ chuyền tiền từ túi
       // này sang túi kia, đất chẳng đi đâu, mà thẻ này sinh ra để đất đổi chủ.
       exclude: [plan.seat],
@@ -473,7 +473,7 @@ export class EventRunner {
     if (this.state.owner.has(plan.tileId)) return;
     await this.auction(plan.tileId, {
       seller: null,
-      reason: 'Ngân hàng dọn kho — lô đất chưa ai mua này đem bán đấu giá.',
+      reason: 'Ngân hàng đem lô đất chưa ai mua này ra đấu giá.',
     });
   }
 
@@ -487,7 +487,7 @@ export class EventRunner {
       eyebrow: 'HOÁN ĐỔI ĐỊA BẠ',
       title: `Giao ô nào cho ${toName}?`,
       sub: 'Ô bạn chọn sang tên ngay cho họ. Đổi lại, bạn nhận một ô từ người phía trước.',
-      note: 'Chỉ chọn được ô chưa xây nhà — nhà cửa không sang tên theo.',
+      note: 'Chỉ chọn được ô chưa xây nhà.',
       confirm: 'Giao ô này',
     });
 
@@ -547,7 +547,7 @@ export class EventRunner {
       `<b style="color:${st.players[seat].token.css}">${st.players[seat].name}</b>`;
 
     await this.g.bc.show('MỞ PHIÊN ĐẤU GIÁ',
-      `<b>${tileLabel(tileId)}</b> — ghi giá kín, cao nhất thì lấy đất.<br>
+      `<b>${tileLabel(tileId)}</b>: ghi giá kín, cao nhất thì lấy đất.<br>
        Tham gia: ${bidders.map(named).join(', ')}
        ${barred.length ? `<br>Đứng ngoài: ${barred.map(named).join(', ')}` : ''}`,
       { kind: 'trade', ms: 3000 });
@@ -583,7 +583,7 @@ export class EventRunner {
 
     if (bids.length === 0) {
       await this.g.bc.show('PHIÊN ĐẤU GIÁ Ế',
-        `Không ai trả giá cho <b>${tileLabel(tileId)}</b> —
+        `Không ai trả giá cho <b>${tileLabel(tileId)}</b>,
          ${o.seller === null ? 'đất nằm lại trong kho ngân hàng' : 'chủ cũ giữ nguyên đất'}.`,
         { ms: 3600 });
       return;
@@ -640,7 +640,7 @@ export class EventRunner {
         this.g.scene.refresh(st);
         this.g.sync();
         await this.g.bc.show('CẤN NỢ',
-          `<b>${p.name}</b> không đủ tiền mặt — ngân hàng
+          `<b>${p.name}</b> không đủ tiền mặt. Ngân hàng
            ${mortgaged.length ? `giữ thế chấp <b>${mortgaged.length}</b> ô` : ''}
            ${mortgaged.length && sold.length ? ' và ' : ''}
            ${sold.length ? `hạ <b>${sold.length}</b> căn nhà` : ''} để thu đủ.`,
@@ -648,7 +648,7 @@ export class EventRunner {
       }
       if (!ok) {
         await this.g.bc.show('VỠ NỢ',
-          `<b>${p.name}</b> không xoay nổi ${money(amount)} — vỡ nợ.`, { kind: 'bad', ms: 4000 });
+          `<b>${p.name}</b> không xoay nổi ${money(amount)}, vỡ nợ.`, { kind: 'bad', ms: 4000 });
         await this.g.doBankrupt(seat);
         return false;
       }
@@ -659,7 +659,7 @@ export class EventRunner {
     this.g.sync();
     this.g.hud.flashMoney(seat, false);
     await this.g.bc.show('NỘP THUẾ',
-      `<b>${p.name}</b> nộp <span class="down">${money(amount)}</span> — ${why}.`, { ms: 2400 });
+      `<b>${p.name}</b> nộp <span class="down">${money(amount)}</span>: ${why}.`, { ms: 2400 });
     await this.g.scene.flyMoney(this.g.hud.cardEl(seat), this.g.hud.bankEl(), amount,
       { text: `−${money(amount)}`, color: '#FF8A7A' });
     return true;
@@ -677,7 +677,7 @@ export class EventRunner {
     if (!g.net) {
       if (q.seat !== st.turn) {
         await handoff(st.players[q.seat].name, st.players[q.seat].token.css,
-          `${st.players[q.seat].name} — ${q.note}. Chuyền máy cho họ quyết định.`);
+          `${st.players[q.seat].name}: ${q.note}. Chuyền máy cho họ quyết định.`);
       }
       const v = await q.local();
       if (q.seat !== st.turn) {

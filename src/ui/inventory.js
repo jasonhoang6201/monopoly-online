@@ -51,13 +51,13 @@ export function inventoryModal(state, playerId) {
     title: p.name,
     sub: items.length
       ? `Đang giữ <b>${items.length}</b> thẻ. Thẻ đã dùng sẽ được trả về bộ bài.`
-      : 'Túi trống — bóc trúng thẻ giữ được thì nó nằm ở đây.',
+      : 'Túi trống. Thẻ giữ được sẽ nằm ở đây.',
     wide: true,
     body: items.length
       ? `<div class="bag-list">${items.map(cardRow).join('')}</div>`
-      : `<div class="trade-summary">Vé ra tù, dỡ nhà, cưỡng chế mua đất, giải toả —
-           mấy thẻ ấy không nổ ngay lúc bóc mà nằm chờ trong túi cho tới khi bạn
-           thấy đúng lúc.</div>`,
+      : `<div class="trade-summary">Vé ra tù, dỡ nhà, cưỡng chế mua đất, giải toả:
+           các thẻ này không dùng ngay lúc bóc mà nằm trong túi,
+           chờ bạn chọn lúc dùng.</div>`,
     buttons: [{ label: 'Đóng', value: null, cls: 'btn-ghost' }],
     onMount: (body, close) => {
       body.querySelectorAll('.bag-use').forEach((b) => {

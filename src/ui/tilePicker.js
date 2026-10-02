@@ -67,8 +67,8 @@ export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
       <div class="tp-eyebrow">${text.eyebrow}</div>
       <div class="tp-title">${text.title}</div>
       <div class="tp-sub">${text.sub}</div>
-      <div class="tp-call">Bấm vào <b>ô đang sáng</b> trên bàn cờ —
-        ${text.quick ? 'bấm là đi luôn' : `có <b>${ids.length}</b> ô chọn được`}${
+      <div class="tp-call">Bấm vào <b>ô đang sáng</b> trên bàn cờ.
+        ${text.quick ? 'Bấm là đi luôn.' : `Có <b>${ids.length}</b> ô chọn được.`}${
         text.dice ? '<br>Bấm vào <b>viên xí ngầu</b> nào thì lắc lại viên đó' : ''}</div>
       ${text.note ? `<div class="tp-note">${text.note}</div>` : ''}
       <div class="tp-timer" hidden></div>
@@ -173,8 +173,8 @@ export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
       const until = Date.now() + ms;
       const tick = () => {
         const left = Math.max(0, until - Date.now());
-        timer.innerHTML = `Còn <b>${Math.ceil(left / 1000)} giây</b> để chọn —
-          quá hạn thì ${cancel ? 'bỏ ngang' : 'lấy ô rẻ nhất'}.`;
+        timer.innerHTML = `Còn <b>${Math.ceil(left / 1000)} giây</b> để chọn.
+          Hết giờ thì ${cancel ? 'bỏ ngang' : 'lấy ô rẻ nhất'}.`;
         timer.classList.toggle('warn', left <= 10000);
         if (left <= 0) finish(cancel ? null : cheapest);
       };
@@ -211,8 +211,8 @@ export function pickTilesOnBoard(scene, ids, chosen, text) {
       <div class="tp-eyebrow">${text.eyebrow}</div>
       <div class="tp-title">${text.title}</div>
       <div class="tp-sub">${text.sub}</div>
-      <div class="tp-call">Bấm vào <b>ô đang sáng</b> để thêm hoặc bỏ —
-        có <b>${ids.length}</b> ô chọn được</div>
+      <div class="tp-call">Bấm vào <b>ô đang sáng</b> để thêm hoặc bỏ.
+        Có <b>${ids.length}</b> ô chọn được.</div>
       <div class="tp-chosen"></div>
       ${text.note ? `<div class="tp-note">${text.note}</div>` : ''}
       <div class="tp-acts">
@@ -290,7 +290,7 @@ export function pickTilesOnBoard(scene, ids, chosen, text) {
  * chơi biết ô đang được nói tới đã sáng sẵn dưới bàn, và ngó bằng cách nào.
  */
 export const PEEK_HINT = `<div class="peek-hint">Ô đang nói tới
-  <b>đã sáng trên bàn cờ</b> — giữ <b>Space</b> hoặc bấm 👁 để ngó qua.</div>`;
+  <b>đang sáng trên bàn cờ</b>. Giữ <b>Space</b> hoặc bấm 👁 để xem.</div>`;
 
 /**
  * Sáng mấy ô mà một hộp thoại đang nói tới, tắt lúc hộp đóng.

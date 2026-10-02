@@ -53,8 +53,8 @@ export function lobbyModal(room, handle = {}) {
             <input id="lobby-link" type="text" readonly value="${esc(link)}" />
             <button class="btn btn-gold" id="lobby-copy" type="button">Chép</button>
           </div>
-          ${local ? `<p class="lobby-warn">Chưa cắm khoá Supabase — đường mời này
-            <b>chỉ nối được các tab trên cùng máy</b>. Muốn chơi nhiều máy thì
+          ${local ? `<p class="lobby-warn">Chưa có khoá Supabase nên đường mời này
+            <b>chỉ nối các tab trên cùng máy</b>. Muốn chơi nhiều máy thì
             điền <code>.env.local</code> theo <code>.env.example</code>.</p>` : ''}
         </div>
         <div class="lobby-count"></div>
@@ -116,8 +116,8 @@ export function lobbyModal(room, handle = {}) {
           const other = held >= 0 && !isMine ? room.seats[held] : null;
           const who = other ? (other.ready ? other.name : 'người khác') : '';
           const label = other
-            ? `${t.name} — ${who} đang giữ`
-            : isMine ? `${t.name} — màu của bạn` : t.name;
+            ? `${t.name}: ${who} đang giữ`
+            : isMine ? `${t.name}: màu của bạn` : t.name;
           return `
             <button type="button" class="color-swatch
                       ${isMine ? 'on' : ''} ${other ? 'taken' : ''}"
@@ -135,7 +135,7 @@ export function lobbyModal(room, handle = {}) {
           </div>
           <div class="color-pick ${locked ? 'is-locked' : ''}">${swatches}</div>
           <p class="color-note ${colorWarn ? 'warn' : ''}">${colorWarn || (locked
-            ? 'Bạn đã sẵn sàng — bấm <b>Sửa lại</b> nếu muốn đổi màu.'
+            ? 'Bạn đã sẵn sàng. Muốn đổi màu thì bấm <b>Sửa lại</b>.'
             : 'Bấm một ô để đổi màu quân của bạn.')}</p>`;
 
         colorsEl.querySelectorAll('[data-tk]').forEach((b) => {
@@ -147,8 +147,8 @@ export function lobbyModal(room, handle = {}) {
             } else if (held >= 0 && held !== mine) {
               const o = room.seats[held];
               colorWarn = o.ready
-                ? `<b>${esc(o.name)}</b> đã sẵn sàng với màu <b>${esc(TOKENS[i].name)}</b> — chọn màu khác giùm.`
-                : `Màu <b>${esc(TOKENS[i].name)}</b> đang có người giữ — chọn màu khác.`;
+                ? `<b>${esc(o.name)}</b> đã chốt màu <b>${esc(TOKENS[i].name)}</b>. Chọn màu khác nhé.`
+                : `Màu <b>${esc(TOKENS[i].name)}</b> đã có người giữ. Chọn màu khác.`;
             } else {
               colorWarn = '';
               room.setToken(i);
