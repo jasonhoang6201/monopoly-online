@@ -315,6 +315,18 @@ export class Hud {
     return document.body.classList.contains('side-open') ? null : el;
   }
 
+  /**
+   * Đưa các phần tử con về đúng thứ tự đi. Chỉ đụng DOM khi thứ tự lệch,
+   * vì dời một nút đang được focus sẽ làm nó mất focus giữa chừng.
+   */
+  sortByOrder(parent, els) {
+    if (!parent) return;
+    const want = this.state.playOrder.map((id) => els.get(id)).filter(Boolean);
+    const now = [...parent.children];
+    if (want.every((el, i) => now[i] === el)) return;
+    for (const el of want) parent.appendChild(el);
+  }
+
   refresh() {
     const st = this.state;
     for (const p of st.players) {
@@ -384,6 +396,11 @@ export class Hud {
         dot.classList.toggle('is-bankrupt', p.bankrupt);
       }
     }
+
+    // Lắc giành quyền xong thì xếp thẻ nhỏ và chấm ghế theo thứ tự đi,
+    // nhìn từ trái qua phải là biết sau ai tới ai.
+    this.sortByOrder($('roster'), this.chips);
+    this.sortByOrder($('strip-seats'), this.dots);
 
     this.paintStrip();
 
