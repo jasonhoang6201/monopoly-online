@@ -15,6 +15,7 @@ import { deedCard, deedGrid, rentLevels, priceItems, tileCardUrl } from './deed.
 import { PEEK_HINT, pickTilesOnBoard } from './tilePicker.js';
 import { tokenImage, elapsedLabel, gameElapsed } from './hud.js';
 import { buildGlyphs, buildLabel, houseSvg, hotelSvg, bankSvg, keySvg } from '../render/glyphs.js';
+import { raisePlan } from '../core/raisePlan.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -252,12 +253,14 @@ export function fateCardBody(kind, card, o = {}) {
  * @param {GameState} state
  * @param {number} playerId
  * @param {Function} onChange gọi sau mỗi thao tác để cập nhật bàn cờ + HUD
+ * @param {number} [need] > 0 ⇒ bảng mở ra để xoay tiền trả nợ: trên đầu bày
+ *   khoản nợ, và thẻ nào nằm trong gợi ý `raisePlan` thì sáng viền
  */
-export function manageModal(state, playerId, onChange) {
+export function manageModal(state, playerId, onChange, need = 0) {
   const p = state.players[playerId];
 
   return openModal({
-    eyebrow: 'QUẢN LÝ TÀI SẢN',
+    eyebrow: need > 0 ? 'XOAY TIỀN TRẢ NỢ' : 'QUẢN LÝ TÀI SẢN',
     title: p.name,
     sub: 'Xây nhà, bán nhà, thế chấp lấy tiền mặt hoặc chuộc lại tài sản.',
     wide: true,
@@ -278,6 +281,11 @@ export function manageModal(state, playerId, onChange) {
           return;
         }
 
+        /* Tính lại gợi ý sau mỗi cú bấm: người chơi cầm một ô ngoài gợi ý thì
+           khoản thiếu đổi, tổ hợp vừa khít cũng đổi theo. */
+        const plan = need > 0 ? raisePlan(state, playerId, need) : null;
+        const hints = planHints(plan);
+
         // Gom theo nhóm màu, rồi tới bến/nhà ga và công ích
         const groups = [];
         for (const [key, g] of Object.entries(GROUPS)) {
@@ -288,17 +296,24 @@ export function manageModal(state, playerId, onChange) {
         const utils = props.filter((id) => BOARD[id].type === 'utility');
         if (stations.length) groups.push({ label: 'Bến · Nhà ga', hex: '#27418C', ids: stations });
         if (utils.length) groups.push({ label: 'Công ích', hex: '#2E6B52', ids: utils });
+        /* Đang xoay tiền: nhóm có ô nằm trong gợi ý lên đầu bảng, khỏi phải
+           cuộn xuống tìm (bộ màu đắt nhất, chỗ hay có nhà để bán, nằm cuối). */
+        if (hints.size) {
+          const lit = (g) => (g.ids.some((id) => hints.has(id)) ? 0 : 1);
+          groups.sort((a, b) => lit(a) - lit(b));
+        }
 
         /* Một lưới hai cột duy nhất cho cả bảng: tiêu đề nhóm màu chiếm trọn
            bề ngang, các ô đất trong nhóm rải thành thẻ hai cột phía dưới.
            Xếp thế thì hai nhóm liền nhau không bị so le, mà mỗi nhóm vẫn
            đứng thành một khối riêng. */
-        host.innerHTML = `<div class="mg-grid">${groups.map((g) => `
+        host.innerHTML = `${plan ? debtPanelHtml(p.money, need, plan, { compact: true }) : ''}
+          <div class="mg-grid">${groups.map((g) => `
             <div class="asset-group-head">
               <span class="swatch" style="background:${g.hex}"></span>${esc(g.label)}
               ${g.full ? '<span class="monopoly-tag">ĐỦ BỘ</span>' : ''}
             </div>
-            ${g.ids.map((id) => assetCardHtml(state, playerId, id)).join('')}
+            ${g.ids.map((id) => assetCardHtml(state, playerId, id, hints.get(id))).join('')}
           `).join('')}</div>`;
 
         host.querySelectorAll('[data-act]').forEach((btn) => {
@@ -343,7 +358,7 @@ const signed = (svg, sign) => `<span class="mg-ico">${svg}<b class="mg-sign">${s
  * dải màu trên đầu, nền nhuộm nhạt cùng sắc, mức xây dựng vẽ bằng hình nhà
  * thật thay cho ký tự, rồi mới tới các khoản tiền và nút thao tác.
  */
-function assetCardHtml(state, playerId, id) {
+function assetCardHtml(state, playerId, id, hint = null) {
   const t = BOARD[id];
   const h = state.housesOn(id);
   const mortgaged = state.isMortgaged(id);
@@ -373,7 +388,15 @@ function assetCardHtml(state, playerId, id) {
          ${buildGlyphs(h)}<span class="mg-build-n">${buildLabel(h)}</span></span>`
     : '<span class="mg-build is-empty">Đất trống</span>';
 
-  return `<article class="mg-card${mortgaged ? ' is-mortgaged' : ''}"
+  /* Bước gợi ý **kế tiếp** trên ô này: còn nhà phải bán thì nút bán sáng
+     trước, bán xong gợi ý tính lại và tới lượt nút thế chấp. */
+  const next = hint ? (hint.sells ? 'sell' : 'mortgage') : null;
+  const hintTag = hint
+    ? `<span class="mg-hint-tag">${hint.sells ? `Bán ${hint.sells} căn` : 'Thế chấp'}
+         <b>+${money(hint.gain)}</b></span>`
+    : '';
+
+  return `<article class="mg-card${mortgaged ? ' is-mortgaged' : ''}${hint ? ' is-hint' : ''}"
         style="--tile:${hex};--tile-soft:${hexA(hex, 0.14)};--tile-edge:${hexA(hex, 0.45)}">
       <span class="mg-band"></span>
       <header class="mg-head">
@@ -384,6 +407,7 @@ function assetCardHtml(state, playerId, id) {
         </span>
         ${mortgaged ? '<span class="mg-flag">THẾ CHẤP</span>' : ''}
       </header>
+      ${hintTag}
       <div class="mg-figs">
         ${figs.map(([k, v]) => `<span class="mg-fig"><span>${k}</span><b>${v}</b></span>`).join('')}
       </div>
@@ -398,7 +422,7 @@ function assetCardHtml(state, playerId, id) {
               icon: signed(h >= 4 ? hotelSvg() : houseSvg(), '+'),
             })}
             ${actBtn('sell', id, {
-              cls: 'btn-ghost', ok: sell.ok,
+              cls: `btn-ghost${next === 'sell' ? ' is-hint' : ''}`, ok: sell.ok,
               label: 'Bán lại một căn nhà',
               tip: sell.ok ? `nhận ${money(sell.refund)}` : sell.reason,
               icon: signed(houseSvg(), '−'),
@@ -411,7 +435,7 @@ function assetCardHtml(state, playerId, id) {
               icon: keySvg(),
             })
             : actBtn('mortgage', id, {
-              cls: 'btn-danger', ok: mort.ok,
+              cls: `btn-danger${next === 'mortgage' ? ' is-hint' : ''}`, ok: mort.ok,
               label: 'Thế chấp',
               tip: mort.ok ? `nhận ${money(mort.amount)}` : mort.reason,
               icon: bankSvg(),
@@ -419,6 +443,84 @@ function assetCardHtml(state, playerId, id) {
         </span>
       </footer>
     </article>`;
+}
+
+/* ==================================================================
+   Khoản nợ đang treo + gợi ý xoay tiền
+   ================================================================== */
+
+/**
+ * Gom các bước của `raisePlan` theo ô: ô nào được gợi ý, bán mấy căn, cầm hay
+ * không, tổng cộng mang về bao nhiêu.
+ *
+ * @returns {Map<number, {sells:number, mortgage:boolean, gain:number}>}
+ */
+export function planHints(plan) {
+  const out = new Map();
+  for (const s of plan?.steps ?? []) {
+    const h = out.get(s.id) ?? { sells: 0, mortgage: false, gain: 0 };
+    if (s.act === 'sell') h.sells += 1;
+    else h.mortgage = true;
+    h.gain += s.gain;
+    out.set(s.id, h);
+  }
+  return out;
+}
+
+/** Một dòng gợi ý: "Thế chấp [A] [B] · Bán 2 căn ở [C] → +$N". */
+function planLineHtml(plan) {
+  const hints = planHints(plan);
+  if (hints.size === 0) return '';
+  const chip = (id, extra = '') => `<span class="debt-chip" style="--tile:${chipColor(id)}">
+      <i></i><span class="debt-chip-t">${esc(tileShortLabel(id))}</span>${extra}</span>`;
+  const pawn = [...hints].filter(([, h]) => h.mortgage && !h.sells).map(([id]) => chip(id));
+  const sell = [...hints].filter(([, h]) => h.sells)
+    .map(([id, h]) => chip(id, ` <em>×${h.sells}${h.mortgage ? ' + cầm' : ''}</em>`));
+  const parts = [];
+  if (pawn.length) parts.push(`<span class="debt-verb mort">Thế chấp</span>${pawn.join('')}`);
+  if (sell.length) parts.push(`<span class="debt-verb sell">Bán nhà</span>${sell.join('')}`);
+  return `<div class="debt-tip">
+      <span class="debt-tip-ico">✦</span>
+      <span class="debt-tip-body"><span class="debt-tip-head">Gợi ý</span>${parts.join('<span class="debt-sep">rồi</span>')}
+        <span class="debt-gain">→ +${money(plan.gain)}</span></span>
+    </div>`;
+}
+
+/**
+ * Bảng nợ: Cần trả − Tiền mặt = Còn thiếu, thanh tiến độ, và dòng gợi ý.
+ * Dùng chung cho hộp "Thiếu tiền" và đầu bảng quản lý lúc đang xoay tiền.
+ *
+ * @param {number} cash tiền mặt hiện có
+ * @param {number} need khoản phải trả
+ * @param {ReturnType<typeof raisePlan>} plan
+ * @param {{compact?:boolean}} [o] compact: bỏ phần hướng dẫn hai bước
+ */
+export function debtPanelHtml(cash, need, plan, o = {}) {
+  const short = Math.max(0, need - cash);
+  const pct = Math.max(0, Math.min(100, Math.round((cash / need) * 100)));
+  const done = short === 0;
+  return `<div class="debt-panel${done ? ' is-done' : ''}${o.compact ? ' compact' : ''}">
+      <div class="debt-stats">
+        <div class="debt-stat need"><span>Cần trả</span><b>${money(need)}</b></div>
+        <div class="debt-op">−</div>
+        <div class="debt-stat cash"><span>Tiền mặt</span><b>${money(cash)}</b></div>
+        <div class="debt-op">=</div>
+        <div class="debt-stat short"><span>${done ? 'Đã đủ' : 'Còn thiếu'}</span>
+          <b>${done ? '✓' : money(short)}</b></div>
+      </div>
+      <div class="debt-bar" title="Đã có ${pct}% khoản phải trả"><i style="width:${pct}%"></i></div>
+      ${done
+        ? '<div class="debt-ok">Đủ tiền rồi. Bấm <b>Xong</b> để trả nợ.</div>'
+        : o.compact ? '' : `<ol class="debt-how">
+            <li><span class="debt-n">1</span><span class="debt-verb mort">Thế chấp đất</span>
+              nhận ngay giá thế chấp, chuộc lại sau chịu <b>lãi 10%</b></li>
+            <li><span class="debt-n">2</span><span class="debt-verb sell">Bán nhà</span>
+              khi hết đất trống để cầm, nhận lại <b>nửa giá xây</b></li>
+          </ol>`}
+      ${done ? '' : planLineHtml(plan)}
+      ${!done && !o.compact && plan.steps.length
+        ? '<div class="debt-foot">Các ô trong gợi ý sẽ sáng viền ở bảng tài sản.</div>' : ''}
+    </div>`;
 }
 
 /* ==================================================================

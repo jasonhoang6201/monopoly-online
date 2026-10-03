@@ -53,6 +53,9 @@ export class Hud {
   constructor(state, onPlayerClick, quick) {
     this.state = state;
     this.onPlayerClick = onPlayerClick;
+    /** Rê lên / rời khỏi một người trong danh sách — `null` là rời. Controller
+     *  gắn vào để soi đất của người ấy trên bàn cờ. */
+    this.onPeek = null;
     this.quick = quick ?? null;
     this.cards = new Map();
     this.chips = new Map();
@@ -246,12 +249,14 @@ export class Hud {
     el.innerHTML = this.popHtml(playerId);
     el.classList.add('show');
     this.placePop(playerId);
+    this.onPeek?.(playerId);
   }
 
   hidePop(playerId) {
     if (playerId != null && this.popFor !== playerId) return;
     this.popFor = null;
     this.popEl().classList.remove('show');
+    this.onPeek?.(null);
   }
 
   /** Neo bảng ngay dưới thẻ nhỏ, không để tràn ra ngoài màn hình. */

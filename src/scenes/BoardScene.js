@@ -1562,7 +1562,7 @@ export default class BoardScene extends Phaser.Scene {
    *
    * @param {number[]} ids
    * @param {{focus?:number, color?:number, pick?:boolean, sel?:number[],
-   *   ms?:number, until?:number}} [o]
+   *   ms?:number, until?:number, veil?:number}} [o]
    *   `focus` là ô vừa bấm, đang chờ xác nhận — sáng gắt hơn hẳn phần còn lại
    *   cho khỏi lẫn. `sel` là những ô **đã chọn xong** trong một phiên chọn
    *   nhiều ô (dựng đề nghị giao dịch): tô nước ngọc thay vì nước vàng, nhìn
@@ -1570,7 +1570,7 @@ export default class BoardScene extends Phaser.Scene {
    *   hộp thoại đang nói tới mấy ô này chứ không mời bấm, nên không đụng tới
    *   `markSet` — con trỏ chuột giữ nguyên. Kiểu chỉ trỏ luôn có hạn: `ms` là
    *   hạn sống (mặc định `MARK_HINT_MS`), `until` là mốc tắt đã tính sẵn của
-   *   một vệt đang được dựng lại.
+   *   một vệt đang được dựng lại. `veil` ghi đè độ đậm màn tối.
    */
   markTiles(ids, o = {}) {
     this.markTween?.remove();
@@ -1583,13 +1583,13 @@ export default class BoardScene extends Phaser.Scene {
        vẫn là của mình mà thu lại lúc hết giờ. */
     this.marked = o === this.marked
       ? o
-      : { ids: [...ids], focus: o.focus, color: o.color, pick, until: o.until,
+      : { ids: [...ids], focus: o.focus, color: o.color, pick, until: o.until, veil: o.veil,
           sel: o.sel ? [...o.sel] : undefined };
     this.markSet = pick ? new Set(ids) : null;
     const selSet = new Set(o.sel ?? []);
     if (!pick) this.armMarkGuard(this.marked, o.ms);
 
-    this.drawMarkVeil(ids, pick ? VEIL_PICK : VEIL_HINT);
+    this.drawMarkVeil(ids, o.veil ?? (pick ? VEIL_PICK : VEIL_HINT));
 
     /* Trên nền đã tối, nước vàng phủ mặt ô chỉ cần mỏng — đủ để ô chọn được ngả
        ấm hơn ô thường, không đủ để lấp mất nước màu chủ đất hay tên đất. Ô đang
@@ -1692,6 +1692,45 @@ export default class BoardScene extends Phaser.Scene {
         resolve();
       });
     });
+  }
+
+  /**
+   * Rê chuột lên một người trong danh sách: tối bàn cờ, chừa sáng đúng mấy ô
+   * người ấy đang giữ, viền theo màu quân của họ.
+   *
+   * Vệt này sống tới khi chuột rời đi (`unpeekTiles`), nên hạn đặt rất dài.
+   * Đang mời bấm chọn ô thì không chen ngang, cùng lý do với `spotTiles`.
+   * Vệt chỉ trỏ có sẵn trước đó (hộp thoại đang nói tới vài ô) được cất lại
+   * và trả về lúc rời chuột, nếu nó còn hạn.
+   *
+   * @param {number[]} ids
+   * @param {string} css màu quân dạng `#RRGGBB`
+   */
+  peekTiles(ids, css) {
+    if (this.marked?.pick) return;
+    if (!this.peek) this.peek = { prev: this.marked };
+    if (!ids.length) {
+      // Người chưa có đất: không tối cả bàn chỉ để khoét ra không ô nào
+      if (this.marked && this.marked === this.peek.mine) this.clearMarks();
+      this.peek.mine = null;
+      return;
+    }
+    const color = Phaser.Display.Color.HexStringToColor(css).color;
+    /* Đậm như lúc mời chọn ô: người rê chuột đang chủ động soi, cần thấy
+       ngay đất ai nằm đâu, khác với vệt chỉ trỏ nhạt của hộp thoại. */
+    this.markTiles(ids, { pick: false, ms: 10 * 60 * 1000, color, veil: VEIL_PICK });
+    this.peek.mine = this.marked;
+  }
+
+  /** Chuột rời khỏi danh sách: gỡ vệt của `peekTiles`, trả lại vệt cũ nếu còn hạn. */
+  unpeekTiles() {
+    const pk = this.peek;
+    if (!pk) return;
+    this.peek = null;
+    // Trong lúc rê đã có vệt khác đè lên (mời chọn ô, nháy nước cờ): để yên nó
+    if (this.marked !== pk.mine) return;
+    if (pk.prev && pk.prev.until > this.time.now) this.markTiles(pk.prev.ids, pk.prev);
+    else this.clearMarks();
   }
 
   /**

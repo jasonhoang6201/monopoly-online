@@ -32,8 +32,9 @@ import { openModal, handoff, dismissTopModal } from '../ui/modal.js';
 import {
   setupModal, buyModal, manageModal, tradePickModal,
   tradeBuildModal, tradeReviewModal, redeemPromptModal, bankruptModal,
-  winnerModal, describe, playerModal, tileModal, rollOffModal, attachTimer,
+  winnerModal, describe, playerModal, tileModal, rollOffModal, attachTimer, debtPanelHtml,
 } from '../ui/modals.js';
+import { raisePlan } from '../core/raisePlan.js';
 import {
   bracePromptModal, firePromptModal, auctionBidModal, auctionResultModal, closeBidModal,
 } from '../ui/eventModals.js';
@@ -198,6 +199,7 @@ export class Game {
     this.state = new GameState(names, tokens ?? null, settings);
     this.quick.setState(this.state);
     this.hud = new Hud(this.state, (id) => this.showPlayer(id), this.quick);
+    this.hookPeek();
     /* Đáy ngăn xếp người nhận cú bấm ô: hết phiên chọn thì bấm ô là mở bảng
        xem ô. `BoardScene.popTileClick` quay về đây khi ngăn xếp rỗng. */
     this.scene.setBaseTileClick((id) => this.showTile(id));
@@ -211,6 +213,15 @@ export class Game {
        giữ ${WIN_SETS} bộ màu với ${WIN_HOTEL_SETS} bộ phủ kín khách sạn, hoặc ôm đủ ${money(WIN_CASH)} tiền mặt.`,
       { ms: 4200 });
     await this.rollOff();
+  }
+
+  /** Rê chuột lên một người ở thanh bên: soi đất của họ trên bàn cờ. */
+  hookPeek() {
+    this.hud.onPeek = (id) => {
+      if (id == null) { this.scene.unpeekTiles(); return; }
+      const p = this.state.players[id];
+      if (p) this.scene.peekTiles(this.state.propertiesOf(id), p.token.css);
+    };
   }
 
   // ---------------------------------------------------------------- online
@@ -228,6 +239,7 @@ export class Game {
     this.state = fromSnapshot(snap);
     this.quick.setState(this.state);
     this.hud = new Hud(this.state, (id) => this.showPlayer(id), this.quick);
+    this.hookPeek();
     /* Đáy ngăn xếp người nhận cú bấm ô: hết phiên chọn thì bấm ô là mở bảng
        xem ô. `BoardScene.popTileClick` quay về đây khi ngăn xếp rỗng. */
     this.scene.setBaseTileClick((id) => this.showTile(id));
@@ -2257,7 +2269,7 @@ export class Game {
         const sure = await bankruptModal(st, playerId, false);
         if (sure) return { acts, bankrupt: true };
       } else {
-        await this.openManage(playerId, remote ? acts : null);
+        await this.openManage(playerId, remote ? acts : null, amount);
       }
     }
     return { acts, bankrupt: false };
@@ -2274,10 +2286,9 @@ export class Game {
     let ticker = 0;
     const pr = openModal({
       eyebrow: 'THIẾU TIỀN',
-      title: `Còn thiếu ${money(amount - p.money)}`,
-      sub: `Bạn cần ${money(amount)} nhưng chỉ có ${money(p.money)}. Hãy bán nhà hoặc thế chấp để xoay tiền.`,
-      body: `<div class="trade-summary">Thế chấp lấy tiền mặt ngay; sau này chuộc lại chịu <b>lãi 10%</b>.
-               Bán nhà thu về <b>nửa giá xây</b>.</div>`,
+      title: `Còn thiếu <span class="debt-hot">${money(amount - p.money)}</span>`,
+      sub: 'Xoay đủ tiền mặt để trả, hoặc tuyên bố phá sản.',
+      body: debtPanelHtml(p.money, amount, raisePlan(this.state, playerId, amount)),
       buttons: [
         { label: 'Bán nhà / Thế chấp', value: 'manage', cls: 'btn-gold' },
         { label: 'Tuyên bố phá sản', value: 'bankrupt', cls: 'btn-danger' },
@@ -2536,8 +2547,9 @@ export class Game {
    *   hỏi xoay tiền: ván gốc nằm ở máy cầm lái, nên mọi thao tác chỉ ghi vào
    *   đây rồi gửi về đó làm lại. Không phát ảnh chụp, không loan tin — cả hai
    *   việc ấy là của máy cầm lái, xem `applyRaiseActs`.
+   * @param {number} [need] đang xoay tiền trả nợ: khoản phải có trong túi
    */
-  async openManage(playerId, record = null) {
+  async openManage(playerId, record = null, need = 0) {
     await manageModal(this.state, playerId, (act, id, res) => {
       this.hud.refresh();
       this.scene.refresh(this.state);
@@ -2583,7 +2595,7 @@ export class Game {
         this.bc.show('CHUỘC TÀI SẢN',
           `<b>${p.name}</b> chuộc <b>${label}</b> với <span class="down">${money(res.cost)}</span> (đã gồm lãi 10%).`);
       }
-    });
+    }, need);
     this.hud.refresh();
     this.scene.refresh(this.state);
     if (!record) this.sync();
