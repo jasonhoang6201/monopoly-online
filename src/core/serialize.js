@@ -76,6 +76,7 @@ export function snapshot(st) {
     heritage: [...st.heritage],
     passedUp: [...st.passedUp].map(([id, seats]) => [id, [...seats]]),
     turnNo: st.turnNo,
+    rolled: st.rolled,
     startedAt: st.startedAt,
     endedAt: st.endedAt,
   };
@@ -159,6 +160,7 @@ export function applySnapshot(st, snap) {
   if (snap.heritage) st.heritage = new Set(snap.heritage);
   st.passedUp = new Map((snap.passedUp ?? []).map(([id, seats]) => [id, [...seats]]));
   st.turnNo = snap.turnNo ?? st.turnNo;
+  st.rolled = snap.rolled ?? false;
   st.startedAt = snap.startedAt ?? st.startedAt;
   if ('endedAt' in snap) st.endedAt = snap.endedAt;
   if (snap.eventTally) st.eventTally = { ...snap.eventTally };

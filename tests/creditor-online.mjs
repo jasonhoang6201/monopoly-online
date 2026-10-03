@@ -158,8 +158,11 @@ ok(await until(async () => (await moneyOf(A, sa)) === 1250, 60000),
 
 /* ====== 3. CON NỢ TẮT MÁY GIỮA LÚC ĐANG NỢ → TRỌNG TÀI TỊCH THU ====== */
 console.log('\n▸ 3. Con nợ tắt máy giữa lúc hộp thoại vỡ nợ còn mở');
-// Hạ hạn ân xuống vài giây để khỏi chờ hai phút
-await A.evaluate(() => { window.__monopoly.controller.awayGraceMs = 4000; });
+/* Hạ hạn ân xuống vài giây để khỏi chờ hai phút — trên **mọi máy còn ngồi**:
+   người tịch thu là máy đang cầm lái, mà B tắt máy thì lượt có thể đã sang C. */
+for (const page of [A, C]) {
+  await page.evaluate(() => { window.__monopoly.controller.awayGraceMs = 4000; });
+}
 await B.bringToFront();
 await idleOn(B);
 /* Máy A đã tự đẩy ván đi tiếp sau khi B phá sản ở phần 1, nên `rev` bên A có

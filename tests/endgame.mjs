@@ -48,6 +48,7 @@ async function forceTurn(i) {
   await page.evaluate((n) => {
     const c = window.__monopoly.controller;
     c.state.turn = n;
+    c.state.rolled = false;   // ép sang lượt mới: chưa lắc, như sau `nextTurn`
     c.beginTurn();
   }, i);
   await page.waitForTimeout(700);

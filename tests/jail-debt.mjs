@@ -62,6 +62,7 @@ async function forceTurn(i) {
   await page.evaluate((n) => {
     const c = window.__monopoly.controller;
     c.state.turn = n;
+    c.state.rolled = false;   // ép sang lượt mới: chưa lắc, như sau `nextTurn`
     c.beginTurn();
   }, i);
   await page.waitForTimeout(600);
@@ -117,6 +118,7 @@ await idle();
 await page.evaluate(() => {
   const c = window.__monopoly.controller;
   c.state.turn = 0;
+  c.state.rolled = false;   // ép sang lượt mới: chưa lắc, như sau `nextTurn`
   c.state.players[0].pos = 37;
   c.state.players[0].money = 1000;
   c.hud.refresh();
@@ -140,6 +142,7 @@ await idle();
 await page.evaluate(() => {
   const c = window.__monopoly.controller;
   c.state.turn = 0;
+  c.state.rolled = false;   // ép sang lượt mới: chưa lắc, như sau `nextTurn`
   c.state.players[0].pos = 26;
   c.beginTurn();
 });

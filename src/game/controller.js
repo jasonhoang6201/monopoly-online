@@ -903,7 +903,7 @@ export class Game {
       `<b>${p.name}</b> chưa đi, bàn lắc hộ một lượt.`, { ms: 2000 });
     if (this.state.turn !== p.id || p.bankrupt) return;
     if (p.inJail) return this.rollInJail();
-    if (this.lastRolled) return this.endTurn();
+    if (this.state.rolled) return this.endTurn();
     return this.takeRoll();
   }
 
@@ -933,7 +933,15 @@ export class Game {
    */
   checkAbsent() {
     if (!this.net || !this.state || this.state.over) return;
-    if (!this.net.isArbiter || this.busy) return;
+    /* Người ra tay là máy **cầm lái**, không phải trọng tài: ván chỉ được có
+       một nguồn phát ảnh chụp. Trọng tài gạch tên giữa lúc người khác đang đi
+       là hai máy cùng phát một số `rev` — máy nhận bỏ ảnh tới sau, rồi ảnh kế
+       của máy cầm lái (chưa có việc gạch tên) đè lên, người vừa bị gạch sống
+       lại và bị gạch thêm lần nữa. Người tới lượt đã vắng thì trọng tài chính
+       là máy cầm lái (`isDriver`). Chưa bốc thăm xong thì chưa có lượt, trọng
+       tài lo như cũ. */
+    const judge = this.state.order ? this.isDriver() : this.net.isArbiter;
+    if (!judge || this.busy) return;
     /* Đường truyền của mình đang đứt: danh sách người có mặt đóng băng ở lúc
        trước khi đứt, nên "ai vắng mặt" tính ra từ đó là vô nghĩa. Và bàn kia đã
        cử trọng tài khác rồi — hai người cùng tịch thu là tịch thu hai lần. */
@@ -1060,14 +1068,20 @@ export class Game {
        tiền thuê. */
     if (st.debt && st.debt.from === p.id) {
       const d = st.debt;
-      this.guard(() => this.payPlayer(d.from, d.to, d.amount));
+      this.guard(async () => {
+        await this.payPlayer(d.from, d.to, d.amount);
+        // Trả xong thì bày lại thanh nút; vỡ nợ thì sang lượt người kế
+        if (this.checkGameOver()) { this.sync(); return; }
+        if (p.bankrupt) { await this.endTurn(); return; }
+        this.restoreActions();
+      });
       return;
     }
 
-    p.doubles = 0;
     this.hud.refresh();
     this.scene.highlightTile(p.pos, p.token.color);
-    this.setTurnActions();
+    // Đã lắc rồi thì chỉ còn nút kết thúc lượt, dù `beginTurn` chạy lại mấy lần
+    this.setTurnActions(st.rolled);
   }
 
   /**
@@ -1083,7 +1097,7 @@ export class Game {
   setTurnActions(rolled = false) {
     const st = this.state;
     const p = st.current;
-    this.lastRolled = rolled;
+    st.rolled = rolled;
     this.refreshSkillBtn();
 
     /* Thanh nút bày ra lại nghĩa là người này vừa làm xong một việc — cho họ
@@ -1239,6 +1253,9 @@ export class Game {
     await this.skills.settleBets(p, d);
     if (st.over || p.bankrupt) { await this.endTurn(); return; }
     if (d.isDouble) p.doubles += 1;
+    /* Chốt "đã lắc" ngay khi có kết quả, trước mọi chỗ phát ảnh chụp bên dưới:
+       máy cầm lái bấm F5 giữa nước đi thì vào lại vẫn không được lắc thêm. */
+    else st.rolled = true;
     await this.skills.rollPerks(p, d);
     if (st.over || p.bankrupt) { await this.endTurn(); return; }
 
@@ -2451,6 +2468,7 @@ export class Game {
 
     if (d.isDouble) {
       st.releaseFromJail(p);
+      st.rolled = true;
       this.hud.refresh();
       await this.bc.show('RA ĐÔI, ĐƯỢC THA',
         `<b>${p.name}</b> đổ đôi ${d.a}, rời Khám Lớn và đi ${d.sum} ô.`);
@@ -2474,6 +2492,7 @@ export class Game {
         { kind: 'bad' });
       if (!free && !(await this.payBank(p.id, JAIL_FINE))) { await this.endTurn(); return; }
       st.releaseFromJail(p);
+      st.rolled = true;
       this.hud.refresh();
       await this.advance(p, d.sum, d);
       if (st.over || p.bankrupt || p.inJail) { await this.endTurn(); return; }
@@ -2572,7 +2591,7 @@ export class Game {
 
   restoreActions() {
     if (this.state.over) return;
-    this.setTurnActions(this.lastRolled ?? false);
+    this.setTurnActions(this.state.rolled);
   }
 
   // -------------------------------------------------------------- giao dịch

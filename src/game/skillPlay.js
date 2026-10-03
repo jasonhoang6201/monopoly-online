@@ -558,6 +558,8 @@ export class SkillPlay {
     spend(p, 'dhU');
     credit(p, 'dhU');
     await this.bc(title('dhU'), `${named(p)} đi thẳng tới <b>${tileLabel(dest)}</b>.`, { ms: 2200 });
+    // Chuyến tàu thay cho lượt lắc — chốt trước khi đi, xem `GameState.rolled`
+    this.st.rolled = true;
     await this.g.advance(p, (dest - p.pos + 40) % 40, null);
     if (this.st.over || p.bankrupt || p.inJail) { await this.g.endTurn(); return; }
     this.g.setTurnActions(true);

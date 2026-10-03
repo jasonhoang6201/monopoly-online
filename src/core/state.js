@@ -227,6 +227,15 @@ export class GameState {
      */
     this.turnNo = 0;
     /**
+     * Người đang đi đã lắc xong nước chính của lượt, chỉ còn chờ kết thúc lượt.
+     *
+     * Phải nằm trong trạng thái chứ không ở controller: `beginTurn` chạy lại mỗi
+     * lần sổ ghế nhúc nhích hay ảnh chụp về, mà nó bày nút theo cờ này. Cờ chỉ
+     * nằm ở controller thì presence chập chờn một nhịp là nút "Lắc xí ngầu" hiện
+     * lại cho người đã lắc xong, và họ đi được hai nước trong một lượt.
+     */
+    this.rolled = false;
+    /**
      * Mốc giờ khai cuộc và hạ màn (ms, đồng hồ máy dựng ván). Đi theo ảnh chụp
      * nên người vào lại giữa ván vẫn thấy đúng thời gian đã chơi, không đếm
      * lại từ 0. `endedAt` còn `null` là ván đang chạy.
@@ -326,6 +335,7 @@ export class GameState {
   setOrder(seats) {
     this.order = [...seats];
     this.turn = this.order[0];
+    this.rolled = false;
   }
 
   ownerOf(tileId) {
@@ -403,12 +413,17 @@ export class GameState {
    * Dùng để biết một khoản phải trả có nằm ngoài khả năng chi trả không.
    */
   liquidValue(playerId) {
-    let total = this.players[playerId].money;
+    const p = this.players[playerId];
+    let total = p.money;
+    /* Cùng tỉ lệ với `canSellHouse`: Sổ Hồng bán lại hơn nửa giá xây. Lấy cứng
+       một nửa thì người có Sổ Hồng bị tuyên vỡ nợ ngay ở `runRaise` trong khi
+       bán nhà ra là đủ trả. */
+    const back = has(p, 'ac3') ? param(p, 'ac3').refund : 0.5;
     for (const id of this.propertiesOf(playerId)) {
       const t = BOARD[id];
       if (t.type === 'property') {
         const h = this.housesOn(id);
-        total += Math.floor(t.house_cost / 2) * (h === 5 ? 5 : h);
+        total += Math.floor(t.house_cost * back) * (h === 5 ? 5 : h);
       }
       if (!this.isMortgaged(id)) total += t.mortgage;
     }
@@ -781,11 +796,17 @@ export class GameState {
     this.turnNo += 1;
     // Lượt mới bắt đầu ở thế "chưa có đồng nào đổi chủ"
     this.dryTurn = true;
+    this.rolled = false;
     const ord = this.playOrder;
     const at = Math.max(0, ord.indexOf(this.turn));
     for (let i = 1; i <= ord.length; i++) {
       const idx = ord[(at + i) % ord.length];
-      if (!this.players[idx].bankrupt) { this.turn = idx; return this.players[idx]; }
+      if (!this.players[idx].bankrupt) {
+        this.turn = idx;
+        // Đếm đổ đôi xoá ở đây, không ở `beginTurn` — xem `rolled`
+        this.players[idx].doubles = 0;
+        return this.players[idx];
+      }
     }
     return null;
   }

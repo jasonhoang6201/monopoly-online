@@ -258,6 +258,24 @@ ok(JSON.stringify(posA) === JSON.stringify(posB), 'vị trí quân giống nhau 
 const bcSeen = await B.evaluate(() => window.__bcSeen);
 ok(bcSeen > 0, 'máy ngồi xem cũng nhận được diễn biến', `${bcSeen} dòng`);
 
+/* `beginTurn` chạy lại mỗi lần sổ ghế nhúc nhích (presence chập chờn) hay mạng
+   nối lại. Trước đây cờ "đã lắc" chỉ nằm ở controller nên lần chạy lại ấy bày
+   nút "Lắc xí ngầu" cho người vừa lắc xong — đi được hai nước trong một lượt. */
+const rolledA = await A.evaluate(() => window.__monopoly.controller.state.rolled);
+if (!rolledA) {
+  console.log('  … bỏ qua kiểm lắc hai lần: cú vừa rồi ra đôi, vẫn còn quyền lắc');
+} else {
+  await A.evaluate(() => {
+    const c = window.__monopoly.controller;
+    c.onRoomChange();
+    c.onLink('ok');
+  });
+  await A.waitForTimeout(300);
+  ok(await A.locator('#actions button[data-key="r"]').count() === 0
+    && await A.locator('#actions button[data-key="e"]').count() === 1,
+  'sổ ghế đổi sau khi lắc vẫn chỉ còn nút kết thúc lượt, không lắc thêm được');
+}
+
 /* ============================================ 7 · giao dịch giữa hai máy */
 
 /* Đường hỏi–đáp **hai chiều** duy nhất trong cả hệ thống: mọi thứ khác chỉ là
@@ -594,6 +612,7 @@ await driver.bringToFront();
 await driver.evaluate((seat) => {
   const c = window.__monopoly.controller;
   c.state.turn = seat;
+  c.state.rolled = false;   // ép sang lượt mới: chưa lắc, như sau `nextTurn`
   c.sync();
   c.beginTurn();
 }, turn0);
