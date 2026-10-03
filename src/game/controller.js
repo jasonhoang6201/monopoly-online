@@ -35,7 +35,7 @@ import {
   winnerModal, describe, playerModal, tileModal, rollOffModal, attachTimer,
 } from '../ui/modals.js';
 import {
-  bracePromptModal, firePromptModal, auctionBidModal, auctionResultModal,
+  bracePromptModal, firePromptModal, auctionBidModal, auctionResultModal, closeBidModal,
 } from '../ui/eventModals.js';
 import { pickTileOnBoard, litTiles } from '../ui/tilePicker.js';
 import { pickGroupOnBoard } from '../ui/groupPicker.js';
@@ -608,9 +608,15 @@ export class Game {
     } else if (name === 'auctionend') {
       /* Bảng giá chốt phiên: giá kín nên máy ngồi xem không tự dựng lại được,
          phải nhận nguyên danh sách từ máy cầm lái. Không `await` — hộp đứng đó
-         tới lúc người ở máy này bấm, không giữ nhịp của ai. */
+         tới lúc người ở máy này bấm, không giữ nhịp của ai.
+
+         Hộp ghi giá của máy này có thể còn mở: tab nằm nền bị bóp nhịp hẹn giờ
+         nên đồng hồ trong hộp chạy chậm, còn máy cầm lái đã hết hạn chờ và chốt
+         phiên với giá 0 cho mình. Đóng nó đi, kẻo bảng giá nằm đè lên một hộp
+         hỏi về phiên đã xong. */
+      closeBidModal();
       auctionResultModal(this.state, data.tileId, data.rows,
-        { winner: data.winner, sellerName: data.sellerName });
+        { winner: data.winner, sellerName: data.sellerName, noSale: data.noSale });
     } else if (name === 'fatedone') {
       this.fateDone();
     }
@@ -684,6 +690,11 @@ export class Game {
     }
     if (name === 'ev-bid') {
       audio.sfx('turn');
+      /* Nhớ máy nào đang hỏi — cùng công thức với `isDriver`: người tới lượt,
+         hoặc trọng tài nếu người ấy đã vắng. Máy ấy rời bàn thì phiên chết
+         theo, xem `onRoomChange`. */
+      const t = this.state.turn;
+      this.bidAsker = this.net.isSeatLive(t) ? t : this.net.arbiterSeat;
       return litTiles(this.scene, [data.tileId],
         () => auctionBidModal(this.state, this.net.mySeat, data.tileId,
           { reason: data.reason, ms, bidders: data.bidders, barred: data.barred }));
@@ -899,6 +910,13 @@ export class Game {
   /** Sổ ghế đổi (ai đó rớt mạng hay vào lại) — cập nhật danh sách bên cột trái. */
   onRoomChange() {
     if (!this.net || !this.state) return;
+    /* Máy cầm lái đóng tab giữa phiên đấu giá: không còn ai nhận câu trả lời,
+       lượt của họ sắp bị bỏ qua. Hộp ghi giá ở đây mà để đếm nốt thì nó nằm đè
+       lên thanh nút của lượt kế tiếp suốt nửa phút, hỏi về một phiên đã chết. */
+    if (this.bidAsker != null && this.net.seats[this.bidAsker]?.online === false) {
+      this.bidAsker = null;
+      closeBidModal();
+    }
     this.hud.setSeatStatus(this.net.seats.map((s, i) => (
       this.state.players[i]?.bankrupt ? 'out' : (s.online ? 'live' : 'away')
     )));

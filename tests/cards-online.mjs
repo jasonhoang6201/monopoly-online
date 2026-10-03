@@ -95,9 +95,20 @@ ok(await B.evaluate(() => !document.getElementById('fate-meter').hidden),
 
 console.log('\n▸ 2. Bóc thẻ Cơ Hội — hai máy cùng một dải, cùng một ô');
 
+/**
+ * Máy nào đang cầm lái ván — và đã **rảnh tay**. Vòng lắc giành quyền còn
+ * chạy nốt dòng thông báo trong `guard` vài chục mili giây sau khi thứ tự chốt;
+ * gọi `guard` lúc ấy thì nó lặng lẽ bỏ qua, bài kiểm chờ mãi một tấm thẻ không nổ.
+ */
 async function driverOf() {
-  for (const [p, tag] of [[A, 'A'], [B, 'B']]) {
-    if (await p.evaluate(() => window.__monopoly.controller.isDriver())) return { page: p, tag };
+  for (let i = 0; i < 40; i++) {
+    for (const [p, tag] of [[A, 'A'], [B, 'B']]) {
+      if (await p.evaluate(() => {
+        const c = window.__monopoly.controller;
+        return c.isDriver() && !c.busy;
+      })) return { page: p, tag };
+    }
+    await new Promise((r) => setTimeout(r, 250));
   }
   return null;
 }

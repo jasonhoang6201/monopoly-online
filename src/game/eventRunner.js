@@ -568,6 +568,11 @@ export class EventRunner {
       fallback: 0,
       note: 'đang có phiên đấu giá',
     })));
+    /* Chờ giá ăn gần hết hạn mà `askMany` vặn lúc mở phiên — máy ai đáp trễ
+       (hạn hỏi + 8 giây) thì vòng cung ở mọi máy đã chạm 0 từ trước khi bảng
+       giá kịp mở, cả bàn tưởng ván đã treo. Còn trả tiền và bảng giá nên vặn
+       lại một lần. */
+    this.bumpClock('đấu giá');
 
     /* Xếp theo giá, hoà thì người đi trước trong vòng lượt thắng — một luật rõ
        ràng, khỏi phải mở thêm một vòng đấu nữa giữa hai người bằng điểm.
@@ -585,10 +590,17 @@ export class EventRunner {
     const bids = rows.filter((b) => b.bid > 0);
 
     if (bids.length === 0) {
-      await this.g.bc.show('PHIÊN ĐẤU GIÁ Ế',
-        `Không ai trả giá cho <b>${tileLabel(tileId)}</b>,
-         ${o.seller === null ? 'đất nằm lại trong kho ngân hàng' : 'chủ cũ giữ nguyên đất'}.`,
-        { ms: 3600 });
+      /* Phiên ế cũng mở bảng giá ở mọi máy. Trước đây chỉ có một dòng thông
+         báo, mà lúc cả bàn để hết giờ thì ai cũng đang nhìn hộp ghi giá vừa
+         tắt — dòng chữ trôi qua góc màn hình không ai đọc, rồi bàn cờ đứng im
+         chờ một bảng kết quả không bao giờ tới. */
+      const noSale = o.seller === null || st.players[o.seller].bankrupt
+        ? 'Đất nằm lại trong kho ngân hàng.' : 'Chủ cũ giữ nguyên đất.';
+      this.g.bc.show('PHIÊN ĐẤU GIÁ Ế',
+        `Không ai trả giá cho <b>${tileLabel(tileId)}</b>. ${noSale}`, { ms: 3600 });
+      this.g.netEmit('auctionend', { tileId, rows, winner: null, noSale });
+      auctionResultModal(st, tileId, rows, { winner: null, noSale });
+      await wait(RESULT_MS);
       return;
     }
 

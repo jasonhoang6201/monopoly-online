@@ -59,6 +59,8 @@ async function boot() {
     scene: [BoardScene],
   });
 
+  stepWhileHidden(game);
+
   let sceneRef = null;
 
   /**
@@ -110,6 +112,38 @@ async function boot() {
 }
 
 boot();
+
+/**
+ * Tab nằm nền (hay cửa sổ bị che kín trên macOS) thì trình duyệt ngừng cấp
+ * `requestAnimationFrame`, và vòng lặp Phaser đứng theo: tween, `delayedCall`
+ * không chạy nữa. Mạch luật lại `await` đúng mấy hoạt cảnh ấy (`flyMoney`,
+ * `spotTiles`, lắc xí ngầu…), nên máy cầm lái mà để tab nền thì cả bàn treo —
+ * gặp nhiều nhất ở phiên đấu giá: ghi giá xong là người ta chuyển tab ngồi chờ,
+ * hết giờ thì máy ấy kẹt ở cú bay tiền, bảng giá không bao giờ mở ở máy nào.
+ *
+ * Nên khi khung hình im quá `STALE`, tự bước vòng lặp bằng `headlessStep` (chạy
+ * tween và hẹn giờ, không vẽ) cho kịp giờ thật. `setInterval` ở tab nền vẫn
+ * chạy, chỉ bị bóp thưa lại — thưa thì mỗi nhịp bước bù nhiều hơn. Ghi lại
+ * `lastTime` để lúc tab hiện lại, khung hình đầu tiên không nhảy cả quãng vắng.
+ */
+function stepWhileHidden(game) {
+  const STALE = 400;     // khung hình im bấy lâu thì coi như tab đã nằm nền
+  const CHUNK = 50;      // mỗi bước bù bấy nhiêu mili giây, tween khỏi nhảy cóc
+  setInterval(() => {
+    const loop = game.loop;
+    if (!loop?.running || game.isPaused) return;
+    const now = performance.now();
+    let t = loop.lastTime;
+    if (!(now - t > STALE)) return;
+    while (t < now) {
+      const d = Math.min(CHUNK, now - t);
+      t += d;
+      game.headlessStep(t, d);
+    }
+    loop.lastTime = t;
+    loop.now = t;
+  }, 250);
+}
 
 /**
  * Nút âm thanh mở bảng hai dòng Nhạc nền / Hiệu ứng, mỗi dòng một dấu tích.

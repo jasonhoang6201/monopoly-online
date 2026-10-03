@@ -188,6 +188,7 @@ export function auctionBidModal(state, playerId, tileId, o = {}) {
   const t = BOARD[tileId];
   const max = p.money;
   let bid = 0;
+  let bad = false;
   let ticker = 0;
 
   const pr = openModal({
@@ -241,6 +242,7 @@ export function auctionBidModal(state, playerId, tileId, o = {}) {
         err.hidden = !msg;
         err.innerHTML = msg;
         okBtn.disabled = !!msg;
+        bad = !!msg;
         if (!msg) bid = Math.max(0, n || 0);
       };
       input.addEventListener('input', read);
@@ -248,10 +250,26 @@ export function auctionBidModal(state, playerId, tileId, o = {}) {
         b.addEventListener('click', () => { input.value = b.dataset.v; read(); });
       });
       setTimeout(() => input.focus(), 60);
-      if (o.ms) ticker = attachTimer(body, o.ms, close, 'bid', 'để ghi giá. Hết giờ coi như bỏ qua.');
+      /* Hết giờ thì chốt đúng con số đang nằm trong ô — người ta gõ xong rồi
+         quên bấm là chuyện thường, nuốt mất giá ấy thì họ thua mà không hiểu
+         vì sao. Nhưng ô đang đỏ (vượt túi, chữ) thì tính là bỏ qua, chứ không
+         gửi đi "giá hợp lệ gần nhất" mà mắt họ không còn thấy nữa. */
+      if (o.ms) ticker = attachTimer(body, o.ms, close, 'timeout',
+        'để ghi giá. Hết giờ thì chốt số đang ghi trong ô.');
     },
   });
-  return pr.finally(() => clearInterval(ticker)).then(() => bid);
+  return pr.finally(() => clearInterval(ticker))
+    .then((v) => (v === 'timeout' && bad ? 0 : bid));
+}
+
+/**
+ * Đóng hộp ghi giá còn mở trên máy này (nếu có), tính như hết giờ.
+ * Câu trả lời ấy về tới máy cầm lái thì phiên đã chốt, `Room.ask` bỏ qua.
+ */
+export function closeBidModal() {
+  for (const s of document.querySelectorAll('#modal-root .scrim:not(.hide)')) {
+    if (s.querySelector('#bid-input')) s._close?.('timeout');
+  }
 }
 
 /**
@@ -270,14 +288,17 @@ export function auctionBidModal(state, playerId, tileId, o = {}) {
  * @param {number} tileId
  * @param {Array<{seat:number,bid:number}>} rows đã xếp sẵn, hoà thì người đi
  *   trước trong vòng lượt đứng trên
- * @param {{winner:number, sellerName?:string}} o
+ * @param {{winner:?number, sellerName?:string, noSale?:string}} o
+ *   `winner` null là phiên ế: không ai ghi giá (hay hết giờ cả bàn), bảng vẫn
+ *   mở để ai cũng thấy phiên đã đóng chứ không ngồi chờ một kết quả không tới.
+ *   `noSale` là dòng nói đất đi đâu lúc ế.
  */
 export function auctionResultModal(state, tileId, rows, o) {
   const t = BOARD[tileId];
   /* Xếp lại lần nữa cho chắc, và `sort` của JS giữ nguyên thứ tự hai giá bằng
      nhau — tức giữ đúng luật hoà mà bên gọi đã áp: người đi trước đứng trên. */
   const list = [...rows].sort((a, b) => b.bid - a.bid);
-  const win = state.players[o.winner];
+  const win = o.winner == null ? null : state.players[o.winner];
   /* Giá chốt lấy từ hàng của người thắng chứ không lấy hàng đầu bảng: người trả
      cao hơn mà vỡ nợ ngay trong phiên thì bên gọi đã gạt họ khỏi `rows`, nhưng
      đọc theo hàng đầu vẫn an toàn hơn là tin vào thứ tự. */
@@ -290,6 +311,7 @@ export function auctionResultModal(state, tileId, rows, o) {
     /* Hoà giá mà thua thì phải nói rõ vì sao, không thì bảng hiện "hụt 0$" —
        người ấy tưởng máy tính sai chứ không nhớ ra luật hoà. */
     const meta = won ? 'Trả cao nhất, lấy đất'
+      : !win ? 'Không ghi giá'
       : r.bid === paid ? 'Bằng giá, thua vì đi sau'
       : r.bid > 0 ? `Hụt ${money(paid - r.bid)}`
       : 'Không ghi giá';
@@ -306,23 +328,26 @@ export function auctionResultModal(state, tileId, rows, o) {
   };
 
   return openModal({
-    eyebrow: 'CHỐT PHIÊN ĐẤU GIÁ',
+    eyebrow: win ? 'CHỐT PHIÊN ĐẤU GIÁ' : 'PHIÊN ĐẤU GIÁ Ế',
     title: esc(t.name.split(' (')[0]),
-    sub: `<b style="color:${win.token.css}">${esc(win.name)}</b> trả
-          <b>${money(paid)}</b>, cao nhất bàn. Lô đất về tay họ.`,
+    sub: win
+      ? `<b style="color:${win.token.css}">${esc(win.name)}</b> trả
+         <b>${money(paid)}</b>, cao nhất bàn. Lô đất về tay họ.`
+      : `Không ai trả giá. ${o.noSale ?? 'Lô đất giữ nguyên chỗ cũ.'}`,
     scrimClose: true,
     yieldToNext: true,
     body: `
-      ${tileRow(tileId, `Giá gốc ${money(t.price)} · chốt ${money(paid)}`)}
+      ${tileRow(tileId, `Giá gốc ${money(t.price)} · ${win ? `chốt ${money(paid)}` : 'không bán được'}`)}
       <div class="bid-table">
         <div class="bid-head">
           <span>Hạng</span><span></span><span>Người trả giá</span><span>Giá đã ghi</span>
         </div>
         ${list.map(line).join('')}
       </div>
-      <div class="trade-summary">Tiền về
+      <div class="trade-summary">${win ? `Tiền về
         ${o.sellerName ? `tay <b>${esc(o.sellerName)}</b>` : '<b>kho ngân hàng</b>'}.
-        Chốt phiên rồi nên giá của mọi người được công khai.</div>`,
+        Chốt phiên rồi nên giá của mọi người được công khai.`
+        : 'Phiên đã đóng, không còn chờ ai ghi giá.'}</div>`,
     buttons: [{ label: 'Đã rõ', value: true, cls: 'btn-gold' }],
   });
 }
