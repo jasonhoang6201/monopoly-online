@@ -84,6 +84,7 @@ export class EventRunner {
     if (!card || !plan) { st.pressure = Math.floor(st.pressure / 2); this.g.sync(); return; }
 
     st.eventsFired += 1;
+    st.eventTally = { ...st.eventTally, [card.id]: (st.eventTally?.[card.id] ?? 0) + 1 };
     st.pressure = 0;
     st.dryTurn = false;   // sự kiện chính là "có chuyện xảy ra"
     this.g.sync();
@@ -142,10 +143,12 @@ export class EventRunner {
           ? `Thả ${plan.seats.map(who).join(', ')} khỏi Khám Lớn.`
           : '';
       case 'thue-dien-tho':
-        return `${plan.bills.length} người phải nộp, tổng
+        return `${nthLabel(plan.nth)}${money(plan.perHouse)} mỗi nhà, ${money(plan.perHotel)} mỗi khách sạn.
+                ${plan.bills.length} người phải nộp, tổng
                 <b>${money(plan.bills.reduce((s, b) => s + b.amount, 0))}</b> vào Quỹ Công.`;
       case 'thue-khu':
-        return `Khu <b>${GROUPS[plan.group].name}</b>: ${plan.bills.length} chủ đất nộp tổng
+        return `${nthLabel(plan.nth)}Khu <b>${GROUPS[plan.group].name}</b>, thuế suất
+                <b>${Math.round(plan.rate * 100)}%</b>: ${plan.bills.length} chủ đất nộp tổng
                 <b>${money(plan.bills.reduce((s, b) => s + b.amount, 0))}</b> vào Quỹ Công.`;
       case 'siet-tin-dung':
         return `${plan.bills.length} người đang cắm đất phải đóng lãi ngay.`;
@@ -749,6 +752,14 @@ export class EventRunner {
  */
 function hitCount(plan) {
   return plan.tiles.filter((t) => t.lose > 0).length;
+}
+
+/**
+ * "Lần thứ N, " cho hai thẻ thuế dồn — lần đầu thì bỏ trống, khỏi in thừa.
+ * Người chơi cần thấy con số đã dồn lên vì đâu, không thì tưởng tính sai.
+ */
+function nthLabel(nth) {
+  return nth > 1 ? `Lần thứ <b>${nth}</b>, ` : '';
 }
 
 /**

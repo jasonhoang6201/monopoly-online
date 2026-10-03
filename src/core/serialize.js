@@ -71,6 +71,7 @@ export function snapshot(st) {
     dryTurn: st.dryTurn,
     mods: st.mods.map((m) => ({ ...m })),
     eventPile: [...st.eventPile],
+    eventTally: { ...st.eventTally },
     /* Cây kỹ năng: biển Di Sản và bộ đếm lượt cho kỹ năng "mỗi lượt 1 lần". */
     heritage: [...st.heritage],
     passedUp: [...st.passedUp].map(([id, seats]) => [id, [...seats]]),
@@ -160,6 +161,7 @@ export function applySnapshot(st, snap) {
   st.turnNo = snap.turnNo ?? st.turnNo;
   st.startedAt = snap.startedAt ?? st.startedAt;
   if ('endedAt' in snap) st.endedAt = snap.endedAt;
+  if (snap.eventTally) st.eventTally = { ...snap.eventTally };
   if (snap.eventPile) st.eventPile = [...snap.eventPile];
   else if (snap.eventPiles) st.eventPile = [...(snap.eventPiles[1] ?? []), ...(snap.eventPiles[2] ?? [])];
   return st;

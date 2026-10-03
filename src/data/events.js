@@ -38,6 +38,9 @@
  * còn thẻ không mang cờ ấy mỗi lần bị rút lên chỉ được giữ với xác suất
  * `LATE_RARE`. Chồng bài xáo lại liên tục nên thẻ bị gạt còn được thử lại:
  * `tests/events.mjs` đo ra chúng xuất hiện chừng 1/3 số lần của thẻ tài chính.
+ * Thêm vào đó, ba thẻ trong `LATE_PRIORITY` (Đại Hạ Giá, hai thẻ thuế) được
+ * thử trước cả chồng với xác suất tăng dần theo số lần nổ, và hai thẻ thuế
+ * mỗi lần ra lại thì thu nặng hơn lần trước.
  * `late: 'off'` là không bao giờ ra nữa: Giới Nghiêm chặn đường xây nhà, mà
  * cuối ván xây nhà là cách duy nhất để ván kết thúc.
  *
@@ -88,10 +91,14 @@ export const EVENTS = [
        lần tiền thuê, không đủ bắt ai phải bán bớt. Nay mỗi nóc nhà nộp hơn nửa
        giá xây, tức xây dày thì thuế mới thành khoản phải tính trước. */
     perHouse: 60, perHotel: 250,
+    /* Mỗi lần thẻ đã ra trước đó cộng thêm nửa đơn giá gốc: lần hai 90/375,
+       lần ba 120/500. Cuối ván nhà đã dày, thuế cố định thì bàn trả được mãi;
+       thuế dồn lên thì sớm muộn có người phải bán nhà. */
+    stack: 0.5,
     effect: (c) => [
       `Mỗi căn nhà nộp ${money(c.perHouse)}, mỗi khách sạn ${money(c.perHotel)}`,
-      'Cả bàn cùng nộp, tiền dồn hết vào Quỹ Công',
-      'Thiếu tiền mặt thì ngân hàng tự thế chấp và hạ nhà để thu',
+      `Mỗi lần thẻ này ra lại, đơn giá cộng thêm ${Math.round(c.stack * 100)}% mức gốc`,
+      'Tiền dồn hết vào Quỹ Công, thiếu tiền mặt thì ngân hàng tự thế chấp và hạ nhà để thu',
     ],
   },
   {
@@ -102,10 +109,13 @@ export const EVENTS = [
     /* Tính trên giá gốc của đất cộng giá xây đã đổ vào, nên khu đắt và khu
        xây dày nộp nhiều hơn; khu mới mua đất trống chỉ nộp phần nhỏ. */
     rate: 0.15,
+    /* Mỗi lần thẻ đã ra trước đó (khu nào cũng tính) cộng thêm `rateStep` vào
+       thuế suất, chặn ở `rateCap`: 15%, 20%, 25%… tới 40%. */
+    rateStep: 0.05, rateCap: 0.4,
     effect: (c) => [
       'Bốc thăm một khu màu đã có chủ',
       `Chủ đất trong khu nộp ${Math.round(c.rate * 100)}% giá đất cộng giá nhà đã xây ở khu ấy`,
-      'Tiền dồn hết vào Quỹ Công',
+      `Mỗi lần thẻ này ra lại, thuế suất cộng thêm ${Math.round(c.rateStep * 100)}%, tối đa ${Math.round(c.rateCap * 100)}%`,
     ],
   },
   {
@@ -296,7 +306,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'dai-ha-gia', kind: 'good', sigil: '⚑', heavy: true,
+    id: 'dai-ha-gia', kind: 'good', sigil: '⚑', heavy: true, late: 'main',
     title: 'ĐẠI HẠ GIÁ',
     text: `Ngân hàng dọn kho, đem mấy lô đất còn ế ra rao bán giữa chợ.`,
     effect: () => [
@@ -366,6 +376,26 @@ export const DEFAULT_EVENT_LEVEL = 'chuan';
 export const LATE_AFTER = 4;
 /** Pha cuối ván, thẻ không mang `late: 'main'` chỉ còn tỉ lệ ra này. */
 export const LATE_RARE = 0.1;
+
+/**
+ * Pha cuối ván, mấy thẻ này được ưu tiên **ngoài chồng bài**: mỗi lần nổ, trước
+ * khi rút chồng, từng thẻ được thử với xác suất `base + step × (số lần nổ đã
+ * qua mốc LATE_AFTER)`, chặn ở `cap`. Trúng thì ra luôn, kể cả khi vừa ra lần
+ * trước, nên hai thẻ thuế ra được nhiều lần liền và mức thu dồn lên.
+ *
+ * Vì sao là ba thẻ này: đất còn ế cuối ván là đất không ai chịu đi tới để
+ * mua, đem đấu giá thì nó có chủ và bắt đầu thu thuê; thuế thì rút tiền khỏi
+ * bàn. Cả hai đường đều làm người chơi cạn tiền nhanh hơn, ván ngắn lại.
+ *
+ * Trần thấp là cố ý: ba lần thử độc lập cộng lại, ở trần thì chừng 45% lần nổ
+ * rơi vào ba thẻ này, phần còn lại vẫn rút chồng nên động đất, sang nhượng,
+ * hoán đổi địa bạ vẫn ra. Trần 0.4–0.5 thì ba thẻ này ăn gần 90% số lần nổ.
+ */
+export const LATE_PRIORITY = {
+  'dai-ha-gia':    { base: 0.08, step: 0.03, cap: 0.2 },
+  'thue-khu':      { base: 0.08, step: 0.03, cap: 0.2 },
+  'thue-dien-tho': { base: 0.06, step: 0.03, cap: 0.15 },
+};
 
 /** Đủ vòng này thì mở khoá dù đất chưa bán hết — đề phòng bàn ế đất mãi. */
 export const UNLOCK_LAPS = 6;

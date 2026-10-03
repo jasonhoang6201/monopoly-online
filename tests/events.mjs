@@ -359,6 +359,69 @@ ok('pha cuối ván không còn Giới Nghiêm', !late['gioi-nghiem'], JSON.stri
 ok('pha cuối ván thẻ tài chính ra nhiều hơn thẻ khác',
   lateMain.some((id) => (late[id] ?? 0) > (late['hoi-cho'] ?? 0)), JSON.stringify(late));
 
+console.log('\n--- cuối ván dồn dập ---');
+const surge = await page.evaluate(async () => {
+  const E = await import('/src/core/events.js');
+  const { EVENT_BY_ID } = await import('/src/data/events.js');
+  const { BOARD } = await import('/src/data/board.js');
+  const st = window.__monopoly.controller.state;
+  const saved = {
+    fired: st.eventsFired, pile: st.eventPile, tally: st.eventTally, pressure: st.pressure,
+    owner: new Map(st.owner), bankrupt: st.players.map((p) => p.bankrupt),
+  };
+  const out = {};
+
+  // Bàn vơi người: điểm áp lực nhân theo số ghế / số người còn sống
+  const full = E.shrinkBoost(st);
+  st.players.forEach((p, i) => { if (i >= 1 && i < st.players.length - 1) p.bankrupt = true; });
+  out.boost = [full, E.shrinkBoost(st), st.players.length, st.alive().length];
+  st.pressure = 0;
+  E.addPressure(st, 2);
+  out.boostApplied = full === 1 && st.pressure === 2 * E.shrinkBoost(st) && E.shrinkBoost(st) > 1;
+  st.players.forEach((p, i) => { p.bankrupt = saved.bankrupt[i]; });
+
+  // Thuế dồn: lần ra sau thu nặng hơn lần trước
+  st.eventTally = {};
+  const t1 = E.planEvent(st, EVENT_BY_ID['thue-khu']);
+  const h1 = E.houseTax(st, EVENT_BY_ID['thue-dien-tho']);
+  st.eventTally = { 'thue-khu': 2, 'thue-dien-tho': 2 };
+  const t3 = E.planEvent(st, EVENT_BY_ID['thue-khu']);
+  const h3 = E.houseTax(st, EVENT_BY_ID['thue-dien-tho']);
+  st.eventTally = { 'thue-khu': 50 };
+  out.rates = [t1?.rate, t3?.rate, E.landTaxRate(st, EVENT_BY_ID['thue-khu'])];
+  out.house = [h1, h3];
+  out.taxStacks = t1.rate === 0.15 && Math.abs(t3.rate - 0.25) < 1e-9 && out.rates[2] === 0.4
+    && h1.perHouse === 60 && h3.perHouse === 120 && h3.perHotel === 500 && t3.nth === 3;
+
+  // Pha cuối ván có đất trống: Đại Hạ Giá ra dày hơn hẳn lúc đầu ván, thuế ra lặp được
+  BOARD.filter((t) => t.ownable).slice(0, 4).forEach((t) => st.owner.delete(t.id));
+  const count = (fired) => {
+    st.eventsFired = fired; st.eventPile = [];
+    const seen = {}; let repeat = 0; let last = null;
+    for (let i = 0; i < 600; i++) {
+      const c = E.drawEvent(st);
+      if (!c) continue;
+      seen[c.id] = (seen[c.id] ?? 0) + 1;
+      if (c.id === last && c.id.startsWith('thue')) repeat++;
+      last = c.id;
+    }
+    return { seen, repeat };
+  };
+  const early = count(0);
+  const late = count(14);
+  out.auction = [early.seen['dai-ha-gia'] ?? 0, late.seen['dai-ha-gia'] ?? 0];
+  out.repeat = late.repeat;
+
+  st.eventsFired = saved.fired; st.eventPile = saved.pile; st.eventTally = saved.tally;
+  st.pressure = saved.pressure; st.owner = saved.owner;
+  return out;
+});
+ok('bàn vơi người thì điểm áp lực nhân lên', surge.boostApplied, JSON.stringify(surge.boost));
+ok('thuế ra lại thì thu nặng hơn', surge.taxStacks, JSON.stringify([surge.rates, surge.house]));
+ok('cuối ván có đất trống thì Đại Hạ Giá ra dày hơn',
+  surge.auction[1] > surge.auction[0] * 2, JSON.stringify(surge.auction));
+ok('cuối ván thẻ thuế ra liền nhau được', surge.repeat > 0, String(surge.repeat));
+
 console.log(errors.length ? `\nLỖI TRANG:\n${errors.join('\n')}` : '\nKhông có lỗi trang.');
 await browser.close();
 if (fails.length || errors.length) {

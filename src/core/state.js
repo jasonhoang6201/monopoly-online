@@ -203,6 +203,11 @@ export class GameState {
     this.mods = [];
     /** Chồng thẻ Thời Cuộc đã xáo — một chồng cho cả bộ. @type {string[]} */
     this.eventPile = [];
+    /**
+     * Mỗi thẻ Thời Cuộc đã nổ mấy lần: id → số lần. Hai thẻ thuế dồn mức thu
+     * theo con số này. @type {Record<string, number>}
+     */
+    this.eventTally = {};
 
     /**
      * Ô mang biển Di Sản (kỹ năng Phố Cổ): thuê ×1.5, không bị dỡ hay ép mua.

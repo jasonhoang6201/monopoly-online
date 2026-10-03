@@ -15,7 +15,7 @@
  */
 import { BOARD, GROUP_TILES, GROUPS } from '../data/board.js';
 import {
-  EVENTS, EVENT_LEVELS, UNLOCK_LAPS, PRESSURE, LATE_AFTER, LATE_RARE,
+  EVENTS, EVENT_LEVELS, UNLOCK_LAPS, PRESSURE, LATE_AFTER, LATE_RARE, LATE_PRIORITY,
 } from '../data/events.js';
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -52,10 +52,24 @@ export function threshold(st) {
   return Math.max(lv.floor, lv.base - lv.step * st.eventsFired);
 }
 
+/**
+ * Hệ số nhân điểm áp lực khi bàn đã vơi người.
+ *
+ * Điểm cộng theo **lượt** (lượt khô, qua Bắt Đầu), mà ít người thì một vòng
+ * ít lượt: bàn sáu người còn hai thì thanh đầy chậm gấp ba, đúng lúc cần sự
+ * kiện để ván kết thúc. Nhân với `số ghế lúc khai cuộc / số người còn sống`
+ * (làm tròn lên) thì một vòng bàn tích ngang lúc đủ người; cộng với ngưỡng
+ * hạ dần theo số lần nổ, càng về cuối thẻ càng ra dày.
+ */
+export function shrinkBoost(st) {
+  const alive = st.alive().length;
+  return alive > 0 ? Math.ceil(st.players.length / alive) : 1;
+}
+
 /** Cộng áp lực. Chưa mở khoá thì đếm vòng đi thôi, chưa tích gì cả. */
 export function addPressure(st, points) {
   if (!eventsOn(st) || !unlocked(st)) return;
-  st.pressure += points;
+  st.pressure += points * shrinkBoost(st);
 }
 
 /** Đã tới lúc nổ chưa. */
@@ -101,6 +115,38 @@ function ownedGroups(st) {
 function lateSkip(st, card) {
   if ((st.eventsFired ?? 0) < LATE_AFTER || card.late === 'main') return false;
   return card.late === 'off' || Math.random() >= LATE_RARE;
+}
+
+/**
+ * Pha cuối ván: thử từng thẻ ưu tiên (`LATE_PRIORITY`) trước khi rút chồng.
+ * Xác suất tăng theo số lần nổ đã qua mốc, nên càng về cuối đất ế càng hay bị
+ * đem đấu giá và thuế càng hay ra. Thẻ ưu tiên không lấy từ chồng, nên ra lại
+ * được ngay lần sau và thuế dồn lên được.
+ */
+function latePriority(st) {
+  const past = (st.eventsFired ?? 0) - LATE_AFTER;
+  if (past < 0) return null;
+  for (const id of shuffle(Object.keys(LATE_PRIORITY))) {
+    const w = LATE_PRIORITY[id];
+    const card = EVENTS.find((e) => e.id === id);
+    const chance = Math.min(w.cap, w.base + w.step * past);
+    if (card && usable(st, card) && Math.random() < chance) return card;
+  }
+  return null;
+}
+
+/** Thẻ này đã nổ mấy lần trong ván — hai thẻ thuế dồn mức thu theo con số này. */
+export function timesFired(st, id) { return st.eventTally?.[id] ?? 0; }
+
+/** Đơn giá của Sưu Cao Thuế Nặng lần này: mỗi lần đã ra cộng `stack` mức gốc. */
+export function houseTax(st, card) {
+  const k = 1 + card.stack * timesFired(st, card.id);
+  return { perHouse: Math.round(card.perHouse * k), perHotel: Math.round(card.perHotel * k) };
+}
+
+/** Thuế suất của Thuế Thổ Trạch lần này: mỗi lần đã ra cộng `rateStep`, chặn ở `rateCap`. */
+export function landTaxRate(st, card) {
+  return Math.min(card.rateCap, card.rate + card.rateStep * timesFired(st, card.id));
 }
 
 /**
@@ -215,13 +261,16 @@ export function usable(st, card) {
  * mấy lá đụng tới nhà đất.
  *
  * Pha cuối ván (`LATE_AFTER` lần nổ trở đi) thẻ ngoài nhóm tài chính bị gạt
- * bớt, xem `lateSkip`.
+ * bớt, xem `lateSkip`; ba thẻ đấu giá và thuế còn được thử trước cả chồng,
+ * xem `latePriority`.
  *
  * Thẻ rút lên mà không dùng được thì để riêng ra và bốc tiếp, xong mới trả cả
  * nắm ấy về chồng: bỏ hẳn thì lần sau bàn đã đổi, thẻ ấy lại dùng được mà
  * không còn trong chồng nữa.
  */
 export function drawEvent(st, fresh = false) {
+  const urgent = fresh ? null : latePriority(st);
+  if (urgent) return urgent;
   if (fresh || !st.eventPile || st.eventPile.length === 0) st.eventPile = shuffledIds(EVENTS);
   const pile = st.eventPile;
 
@@ -270,17 +319,19 @@ export function planEvent(st, card) {
 
   switch (card.id) {
     case 'thue-dien-tho': {
+      const { perHouse, perHotel } = houseTax(st, card);
       const bills = alive.map((p) => {
         const props = st.propertiesOf(p.id);
         const houses = props.reduce((n, id) => n + (st.housesOn(id) === 5 ? 0 : st.housesOn(id)), 0);
         const hotels = props.filter((id) => st.housesOn(id) === 5).length;
-        return { seat: p.id, houses, hotels, amount: houses * card.perHouse + hotels * card.perHotel };
+        return { seat: p.id, houses, hotels, amount: houses * perHouse + hotels * perHotel };
       }).filter((b) => b.amount > 0);
-      return bills.length ? { bills } : null;
+      return bills.length ? { bills, perHouse, perHotel, nth: timesFired(st, card.id) + 1 } : null;
     }
 
     case 'thue-khu': {
       const group = pick(ownedGroups(st));
+      const rate = landTaxRate(st, card);
       const bySeat = new Map();
       for (const id of GROUP_TILES[group]) {
         const seat = st.owner.get(id);
@@ -290,9 +341,9 @@ export function planEvent(st, card) {
         bySeat.set(seat, (bySeat.get(seat) ?? 0) + worth);
       }
       const bills = [...bySeat].map(([seat, worth]) => ({
-        seat, amount: Math.ceil(worth * card.rate), note: `đất và nhà khu ${GROUPS[group].name}`,
+        seat, amount: Math.ceil(worth * rate), note: `đất và nhà khu ${GROUPS[group].name}`,
       })).filter((b) => b.amount > 0);
-      return bills.length ? { group, bills } : null;
+      return bills.length ? { group, bills, rate, nth: timesFired(st, card.id) + 1 } : null;
     }
 
     case 'siet-tin-dung': {
