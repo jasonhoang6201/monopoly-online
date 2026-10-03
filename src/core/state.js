@@ -58,7 +58,7 @@ export const TOKENS = [
 export const MAX_PLAYERS = 6;
 
 /** Cửa thắng sớm — xem `GameState.winCheck`. */
-export const WIN_CASH = 11111;
+export const WIN_WORTH = 11111;
 export const WIN_SETS = 3;
 export const WIN_HOTEL_SETS = 2;
 
@@ -823,25 +823,27 @@ export class GameState {
    *  - `last`   còn đúng một người chưa phá sản
    *  - `empire` giữ đủ `WIN_SETS` bộ màu, trong đó `WIN_HOTEL_SETS` bộ đã lên
    *             khách sạn ở mọi ô
-   *  - `cash`   tiền mặt đạt `WIN_CASH`
+   *  - `worth`  tổng tài sản (`netWorth`: tiền, đất, nhà) đạt `WIN_WORTH`
    *
    * Hai cửa sau có vì ván chờ tới lúc chỉ còn một người thường kéo cả tiếng:
    * người đã nắm chắc phần thắng vẫn phải đi tiếp chục vòng. Xét ở cuối mỗi
-   * lượt; hai người cùng qua vạch trong một lượt thì ai nhiều tiền mặt hơn thắng.
-   * @returns {?{player:Player, by:'last'|'empire'|'cash'}}
+   * lượt; hai người cùng qua vạch trong một lượt thì ai nhiều tổng tài sản hơn
+   * thắng.
+   * @returns {?{player:Player, by:'last'|'empire'|'worth'}}
    */
   winCheck() {
     const alive = this.alive();
     if (alive.length === 1) return { player: alive[0], by: 'last' };
-    const richest = (list) => list.reduce((a, b) => (b.money > a.money ? b : a));
+    const worth = (p) => this.netWorth(p.id);
+    const richest = (list) => list.reduce((a, b) => (worth(b) > worth(a) ? b : a));
     const empire = alive.filter((p) => {
       const sets = Object.keys(GROUPS).filter((g) => this.hasFullGroup(p.id, g));
       const hotels = sets.filter((g) => GROUP_TILES[g].every((id) => this.housesOn(id) === 5));
       return sets.length >= WIN_SETS && hotels.length >= WIN_HOTEL_SETS;
     });
     if (empire.length) return { player: richest(empire), by: 'empire' };
-    const cash = alive.filter((p) => p.money >= WIN_CASH);
-    if (cash.length) return { player: richest(cash), by: 'cash' };
+    const rich = alive.filter((p) => worth(p) >= WIN_WORTH);
+    if (rich.length) return { player: richest(rich), by: 'worth' };
     return null;
   }
 }

@@ -8,7 +8,7 @@ import {
   START_MONEY,
   MAX_JAIL_TURNS,
 } from '../data/board.js';
-import { GameState, rollDice, orderFromRolls, WIN_CASH, WIN_SETS, WIN_HOTEL_SETS } from '../core/state.js';
+import { GameState, rollDice, orderFromRolls, WIN_WORTH, WIN_SETS, WIN_HOTEL_SETS } from '../core/state.js';
 import {
   addPressure, eventDue, eventsOn, pressureRatio, threshold, autoRaise, PRESSURE,
 } from '../core/events.js';
@@ -220,7 +220,7 @@ export class Game {
 
     await this.bc.show('KHAI CUỘC',
       `Ván cờ bắt đầu, mỗi người ${money(START_MONEY)} vốn liếng. Thắng khi còn trụ lại một mình,
-       giữ ${WIN_SETS} bộ màu với ${WIN_HOTEL_SETS} bộ phủ kín khách sạn, hoặc ôm đủ ${money(WIN_CASH)} tiền mặt.`,
+       giữ ${WIN_SETS} bộ màu với ${WIN_HOTEL_SETS} bộ phủ kín khách sạn, hoặc gom đủ ${money(WIN_WORTH)} tổng tài sản.`,
       { ms: 4200 });
     await this.rollOff();
   }
@@ -2939,7 +2939,7 @@ export class Game {
     const why = {
       last: 'là người cuối cùng trụ lại',
       empire: `giữ ${WIN_SETS} bộ màu, ${WIN_HOTEL_SETS} bộ đã phủ kín khách sạn`,
-      cash: `ôm đủ ${money(WIN_CASH)} tiền mặt`,
+      worth: `gom đủ ${money(WIN_WORTH)} tổng tài sản`,
     }[win.by];
     await this.bc.show('HẠ MÀN',
       `<b>${winner.name}</b> ${why}, <b>thắng ván này!</b>`, { ms: 6000 });
