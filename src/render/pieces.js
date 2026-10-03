@@ -4,6 +4,12 @@
  */
 import { P } from './boardArt.js';
 
+/* Vàng của quân cờ đứng riêng khỏi bảng màu bàn cờ: chủ đề Giáng Sinh đổi nét
+   vàng của bàn sang xanh băng, nhưng vành đế và cổ quân vẫn là thếp vàng —
+   như quả châu vàng treo trên cây thông. */
+const TOKEN_GOLD = '#C8A048';
+const TOKEN_GOLD_DEEP = '#8A6A22';
+
 /* --------------------------------------------------------- tiện ích màu */
 
 function hex2rgb(h) {
@@ -64,7 +70,7 @@ export function paintToken(css, s = 160) {
   ctx.ellipse(cx, baseY, s * 0.33, s * 0.105, 0, 0, Math.PI * 2);
   ctx.fill();
   // vành đế vàng
-  ctx.strokeStyle = P.gold;
+  ctx.strokeStyle = TOKEN_GOLD;
   ctx.lineWidth = s * 0.018;
   ctx.beginPath();
   ctx.ellipse(cx, baseY, s * 0.33, s * 0.105, 0, 0, Math.PI * 2);
@@ -100,7 +106,7 @@ export function paintToken(css, s = 160) {
   ctx.restore();
 
   // Cổ vàng
-  ctx.fillStyle = P.gold;
+  ctx.fillStyle = TOKEN_GOLD;
   ctx.beginPath();
   ctx.ellipse(cx, topY, s * 0.16, s * 0.048, 0, 0, Math.PI * 2);
   ctx.fill();
@@ -120,19 +126,68 @@ export function paintToken(css, s = 160) {
   ctx.arc(cx, headY, headR, 0, Math.PI * 2);
   ctx.fill();
 
+  // Giáng Sinh: quân đội mũ Noel thay cho chỏm vàng
+  if (P.theme === 'christmas') {
+    santaHat(ctx, cx, headY, headR, s);
+    return cv;
+  }
+
   // Chỏm vàng nhỏ trên đỉnh cho quân cờ có chỗ kết
   const tipY = headY - headR * 0.92;
   const tg = ctx.createRadialGradient(
     cx - s * 0.012, tipY - s * 0.012, s * 0.004, cx, tipY, s * 0.042,
   );
   tg.addColorStop(0, '#FFF0BE');
-  tg.addColorStop(1, P.goldDeep);
+  tg.addColorStop(1, TOKEN_GOLD_DEEP);
   ctx.fillStyle = tg;
   ctx.beginPath();
   ctx.arc(cx, tipY, s * 0.042, 0, Math.PI * 2);
   ctx.fill();
 
   return cv;
+}
+
+/**
+ * Mũ Noel đội lệch trên đầu quân: chóp đỏ gập sang phải, vành lông trắng ôm
+ * nửa trên đầu, quả bông trắng ở chóp. Mũ màu đỏ cố định chứ không theo màu
+ * người chơi — người ta nhận nhau bằng màu thân quân, mũ chỉ là phụ kiện.
+ */
+function santaHat(ctx, cx, headY, headR, s) {
+  const brimY = headY - headR * 0.42;
+  const tip = { x: cx + headR * 1.25, y: headY - headR * 1.55 };
+
+  ctx.save();
+  // Chóp mũ
+  let g = ctx.createLinearGradient(cx - headR, 0, cx + headR * 1.3, 0);
+  g.addColorStop(0, '#8E141B');
+  g.addColorStop(0.45, '#D8343C');
+  g.addColorStop(1, '#A11E26');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(cx - headR * 0.95, brimY);
+  ctx.bezierCurveTo(cx - headR * 0.85, headY - headR * 1.55, cx + headR * 0.2, headY - headR * 2.05, tip.x, tip.y);
+  ctx.bezierCurveTo(cx + headR * 0.75, headY - headR * 1.25, cx + headR * 0.95, headY - headR * 0.9, cx + headR * 0.95, brimY);
+  ctx.closePath();
+  ctx.fill();
+
+  // Vành lông trắng
+  g = ctx.createLinearGradient(0, brimY - headR * 0.3, 0, brimY + headR * 0.3);
+  g.addColorStop(0, '#FFFFFF');
+  g.addColorStop(1, '#D7E6F2');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(cx, brimY, headR * 1.08, headR * 0.3, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Quả bông
+  g = ctx.createRadialGradient(tip.x - s * 0.01, tip.y - s * 0.01, s * 0.004, tip.x, tip.y, s * 0.05);
+  g.addColorStop(0, '#FFFFFF');
+  g.addColorStop(1, '#CFE0EE');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(tip.x, tip.y, s * 0.048, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 /* ---------------------------------------------------------- đồng tiền xu */

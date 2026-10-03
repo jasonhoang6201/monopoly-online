@@ -13,6 +13,7 @@
  */
 import { BOARD, GROUPS, GROUP_TILES } from '../data/board.js';
 import { KEEPABLE, cardOf } from '../data/cards.js';
+import { cardInTheme } from '../data/themes.js';
 import { houseImmune } from './skills.js';
 
 /** Tiền đền khi cưỡng chế mua đất: giá gốc cộng thêm 25%. */
@@ -227,6 +228,8 @@ export function seizePrice(tileId) {
  * chờ, đúng như cách chơi của chúng.
  */
 export function usableCard(st, card, seat) {
+  // Thẻ riêng của chủ đề khác thì như không có trong bộ
+  if (!cardInTheme(card, st.settings?.theme)) return false;
   switch (cardType(card)) {
     case 'collect':
       return othersOf(st, seat).length > 0;
@@ -235,6 +238,24 @@ export function usableCard(st, card, seat) {
     default:
       return true;
   }
+}
+
+/**
+ * Quà Giáng Sinh chia cho cả bàn: ai còn sống cũng nhận `amount`, người ít
+ * tiền mặt nhất nhận gấp đôi (bằng nhau thì cùng nhận gấp đôi). Xét tiền mặt
+ * chứ không xét tổng tài sản: người đang kẹt tiền mới là người cần quà.
+ *
+ * @returns {Array<{seat:number, amount:number, poorest:boolean}>}
+ */
+export function giftShares(st, card) {
+  const alive = st.alive();
+  if (alive.length === 0) return [];
+  const low = Math.min(...alive.map((p) => p.money));
+  return alive.map((p) => ({
+    seat: p.id,
+    poorest: p.money === low,
+    amount: p.money === low ? card.amount * 2 : card.amount,
+  }));
 }
 
 /**

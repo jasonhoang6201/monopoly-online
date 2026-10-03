@@ -225,8 +225,9 @@ const r = await page.evaluate(async () => {
   out.moveCount = [...CHANCE, ...CHEST].filter((x) => x.type === 'move').length;
 
   // Mọi thẻ trong cả hai bộ đều khai báo đúng loại
+  // `gift` (quà Noel) chỉ có ở chủ đề Giáng Sinh — xem tests/theme.mjs
   const known = ['bank', 'collect', 'repair', 'jail-free', 'demolish',
-    'seize', 'resume', 'resume-random', 'move', 'skill'];
+    'seize', 'resume', 'resume-random', 'move', 'skill', 'gift'];
   out.badType = [...CHANCE, ...CHEST].filter((x) => !known.includes(cr.cardType(x))).length;
   out.hasNew = ['collect', 'repair', 'jail-free', 'demolish', 'seize',
     'resume', 'resume-random', 'move'].every((t) => !!find(CHANCE.concat(CHEST), t));

@@ -20,6 +20,9 @@
  * nên vòng sau không bao giờ giống hệt vòng trước.
  */
 
+import { SONGS, PLAYLISTS, scheduleSongBar, barSeconds } from './xmasSongs.js';
+import { XMAS_SFX } from './xmasSfx.js';
+
 const A4 = 440;
 /** Số hiệu MIDI → tần số (Hz). */
 const mtof = (m) => A4 * 2 ** ((m - 69) / 12);
@@ -112,6 +115,13 @@ export class Audio {
     this.started = false;
     /** Đang ở màn hình chờ — nơi duy nhất được phép có nhạc nền. */
     this.menuMode = false;
+    /** Chủ đề đang chơi: 'default' (ghi-ta phòng trà) hay 'christmas'. */
+    this.theme = 'default';
+    /** 'menu' = màn chờ, 'win' = màn hạ màn — bản Giáng Sinh mỗi chỗ một bài. */
+    this.mode = 'menu';
+    /** Bài Giáng Sinh đang chơi: vị trí trong danh sách phát và ô nhịp kế tiếp. */
+    this.listIdx = 0;
+    this.songBar = 0;
     this.buffers = new Map();
     this.barCount = 0;
     this.sectionIdx = 0;
@@ -157,6 +167,28 @@ export class Audio {
   }
 
   /**
+   * Đường riêng cho một bài: mọi nốt của bài ấy (ghi-ta, celesta, chuông) đi
+   * qua `musicBus` rồi mới vào `musicGain`. Đổi bài thì nhỏ dần đúng đường cũ
+   * rồi bỏ: mấy nốt đã lập lịch trước 1,2 giây của bài cũ tắt theo nó, không
+   * chen vào bài mới.
+   */
+  newMusicBus() {
+    const ctx = this.ctx;
+    const old = this.musicBus;
+    if (old) {
+      const t = ctx.currentTime;
+      old.gain.cancelScheduledValues(t);
+      old.gain.setValueAtTime(old.gain.value, t);
+      old.gain.linearRampToValueAtTime(0, t + 0.6);
+      setTimeout(() => old.disconnect(), 2500);
+    }
+    this.musicBus = ctx.createGain();
+    this.musicBus.gain.value = 1;
+    this.musicBus.connect(this.musicGain);
+    this.buildBody();
+  }
+
+  /**
    * Thùng đàn — mọi tiếng ghi-ta đều đi qua đây. Gỗ không khuếch đại đều mọi
    * tần số: hộp đàn cộng hưởng mạnh ở vài chỗ (không khí trong thùng ~100 Hz,
    * mặt gỗ ~205 Hz, thân đàn ~430 Hz), chính mấy cái bướu đó làm dây nghe ra
@@ -169,9 +201,16 @@ export class Audio {
     this.guitarIn = ctx.createGain();
     this.guitarIn.gain.value = 1.15;
 
+    // Thùng đàn nối vào đường của bài đang chơi — xem `newMusicBus`
+    if (!this.musicBus) {
+      this.musicBus = ctx.createGain();
+      this.musicBus.connect(this.musicGain);
+    }
+    const out = this.musicBus;
+
     const dry = ctx.createGain();
     dry.gain.value = 0.78;
-    this.guitarIn.connect(dry).connect(this.musicGain);
+    this.guitarIn.connect(dry).connect(out);
 
     for (const [freq, q, amp] of [[100, 7, 0.55], [205, 9, 0.34], [430, 6, 0.20]]) {
       const bp = ctx.createBiquadFilter();
@@ -180,7 +219,7 @@ export class Audio {
       bp.Q.value = q;
       const g = ctx.createGain();
       g.gain.value = amp;
-      this.guitarIn.connect(bp).connect(g).connect(this.musicGain);
+      this.guitarIn.connect(bp).connect(g).connect(out);
     }
 
     const send = ctx.createGain();
@@ -432,20 +471,56 @@ export class Audio {
 
   // ------------------------------------------------------------- nhạc nền
 
-  /** Bật nhạc màn hình chờ. Gọi lại nhiều lần cũng không sao. */
-  startMusic() {
+  /**
+   * Bật nhạc màn hình chờ. Gọi lại nhiều lần cũng không sao.
+   *
+   * @param {'menu'|'win'} [mode] màn chờ hay màn hạ màn. Chủ đề mặc định chơi
+   *   cùng một bản ghi-ta cho cả hai; Giáng Sinh mỗi chỗ một bài.
+   */
+  startMusic(mode = 'menu') {
     this.init();
     if (!this.ctx) return;
     this.menuMode = true;
-    if (this.started) return;
+    const switching = this.mode !== mode;
+    this.mode = mode;
+    if (this.started) {
+      if (switching && this.theme === 'christmas') this.restartSong();
+      return;
+    }
     if (this.ctx.state === 'suspended') this.ctx.resume();
     this.started = true;
+    this.resetSong();
+    this.applyMusicGain(1.6);
+    this.timer = setInterval(() => this.schedule(), 120);
+  }
+
+  /** Về đầu bản nhạc của chủ đề và chế độ hiện tại. */
+  resetSong() {
     this.nextBarTime = this.ctx.currentTime + 0.25;
     this.sectionIdx = 0;
     this.barInSection = 0;
     this.barCount = 0;
-    this.applyMusicGain(1.6);
-    this.timer = setInterval(() => this.schedule(), 120);
+    this.listIdx = 0;
+    this.songBar = 0;
+  }
+
+  /** Đổi bài giữa chừng (đổi chủ đề trong phòng chờ, hay sang màn hạ màn). */
+  restartSong() {
+    if (!this.ctx) return;
+    this.newMusicBus();
+    this.resetSong();
+    this.nextBarTime = this.ctx.currentTime + 0.7;   // chờ bài cũ nhỏ dần xong
+  }
+
+  /**
+   * Đổi chủ đề âm thanh: nhạc chờ đang chạy thì chuyển bài ngay, hiệu ứng
+   * thì từ tiếng kế tiếp.
+   */
+  setTheme(theme) {
+    const next = theme === 'christmas' ? 'christmas' : 'default';
+    if (next === this.theme) return;
+    this.theme = next;
+    if (this.started) this.restartSong();
   }
 
   /**
@@ -492,6 +567,7 @@ export class Audio {
       return;
     }
     const lookahead = 1.2;
+    if (this.theme === 'christmas') { this.scheduleXmas(lookahead); return; }
 
     while (this.nextBarTime < this.ctx.currentTime + lookahead) {
       this.scheduleBar(this.nextBarTime);
@@ -504,6 +580,33 @@ export class Audio {
         this.sectionIdx = (this.sectionIdx + 1) % SECTIONS.length;
       }
     }
+  }
+
+  /**
+   * Lập lịch nhạc Giáng Sinh: hết bài thì sang bài kế trong danh sách phát
+   * của chế độ hiện tại, giữa hai bài nghỉ một ô nhịp cho tai kịp đổi.
+   */
+  scheduleXmas(lookahead) {
+    const list = PLAYLISTS[this.mode] ?? PLAYLISTS.menu;
+    while (this.nextBarTime < this.ctx.currentTime + lookahead) {
+      const song = SONGS[list[this.listIdx % list.length]];
+      if (this.songBar >= song.bars.length) {
+        this.nextBarTime += barSeconds(song);
+        this.songBar = 0;
+        this.listIdx = (this.listIdx + 1) % list.length;
+        continue;
+      }
+      scheduleSongBar(this, song, this.songBar, this.nextBarTime);
+      this.nextBarTime += barSeconds(song);
+      this.songBar += 1;
+    }
+  }
+
+  /** Tên bài đang chơi — tiện cho việc kiểm thử. */
+  get songName() {
+    if (this.theme !== 'christmas') return 'Phòng trà';
+    const list = PLAYLISTS[this.mode] ?? PLAYLISTS.menu;
+    return SONGS[list[this.listIdx % list.length]].name;
   }
 
   /** Bậc gần nhất nằm trong hợp âm — dùng để nắn các nốt ngân dài. */
@@ -611,6 +714,10 @@ export class Audio {
     if (!this.ctx || !this.sfxOn) return;
     if (this.ctx.state === 'suspended') this.ctx.resume();
     const t = this.ctx.currentTime;
+    /* Chủ đề Giáng Sinh thay tiếng nào có bản riêng; tiếng nào không có (pháo
+       hoa, đất rung, lửa…) vẫn dùng bản gốc. */
+    const own = this.theme === 'christmas' ? XMAS_SFX[name] : null;
+    if (own) { own(this, t, opts); return; }
     (this.SFX[name] ?? this.SFX.click).call(this, t, opts);
   }
 
@@ -872,6 +979,13 @@ export class Audio {
         }
       },
       click(t) { this.woodBlock(t, 1200, 0.08, this.sfxGain); },
+      /* Qua ô Bắt Đầu: bản gốc đã có tiếng xu bay theo tiền lương, nên tiếng
+         riêng này chỉ có ở chủ đề Giáng Sinh (xem `xmasSfx.js`). */
+      go() {},
+      /* Bão Tuyết chỉ có ở Giáng Sinh; hai tên này để bản gốc khỏi rơi về
+         tiếng `click` nếu có lúc bị gọi tới. */
+      wind() {},
+      snowfall() {},
     };
   }
 
@@ -959,7 +1073,7 @@ export class Audio {
   toggleMusic() {
     this.init();
     this.musicOn = !this.musicOn;
-    if (this.musicOn && this.menuMode && !this.started) this.startMusic();
+    if (this.musicOn && this.menuMode && !this.started) this.startMusic(this.mode);
     else this.applyMusicGain(this.musicOn ? 0.8 : 0.5);
     return this.musicOn;
   }

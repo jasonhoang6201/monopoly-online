@@ -10,6 +10,7 @@ import {
 } from '../data/board.js';
 import { CHANCE, CHEST, Deck } from '../data/cards.js';
 import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
+import { DEFAULT_THEME, themeKey } from '../data/themes.js';
 import { has, param, roll, ownerRentMult, ownerRentFlat, houseImmune, credit } from './skills.js';
 
 /**
@@ -129,8 +130,8 @@ export class GameState {
    *   chỉ định màu ngay lúc vào phòng chờ, mà ghế có thể trống ở giữa (người ta
    *   ra vào), nên thứ tự người chơi không còn trùng với thứ tự màu. Bỏ trống
    *   thì mỗi người lấy màu theo đúng chỗ ngồi như bản một máy.
-   * @param {{events?:string}} [settings] luật tuỳ chọn của ván — hiện chỉ có
-   *   nấc thẻ Thời Cuộc, do chủ phòng chốt trước khi khai cuộc.
+   * @param {{events?:string, theme?:string}} [settings] luật tuỳ chọn của
+   *   ván: nấc thẻ Thời Cuộc và chủ đề, do chủ phòng chốt trước khi khai cuộc.
    */
   constructor(names, tokenIndexes = null, settings = null) {
     this.players = names.map((n, i) => new Player(i, n, tokenIndexes ? tokenIndexes[i] : i));
@@ -179,7 +180,10 @@ export class GameState {
     /* ------------------------------------------------------ thẻ Thời Cuộc */
 
     /** Luật tuỳ chọn — chốt lúc khai cuộc, cả ván không đổi nữa. */
-    this.settings = { events: DEFAULT_EVENT_LEVEL, ...(settings ?? {}) };
+    this.settings = { events: DEFAULT_EVENT_LEVEL, theme: DEFAULT_THEME, ...(settings ?? {}) };
+    /* Chủ đề quyết định bộ thẻ được rút (Bão Tuyết chỉ có ở Giáng Sinh), nên
+       tên lạ phải quy về mặc định ngay ở đây chứ không đợi tới lúc vẽ. */
+    this.settings.theme = themeKey(this.settings.theme);
     /** Thanh áp lực: đầy tới ngưỡng thì nổ một sự kiện. */
     this.pressure = 0;
     /** Đã nổ mấy lần — ngưỡng hạ dần theo con số này, và Kỳ 2 mở theo nó. */

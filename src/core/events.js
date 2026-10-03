@@ -17,6 +17,7 @@ import { BOARD, GROUP_TILES, GROUPS } from '../data/board.js';
 import {
   EVENTS, EVENT_LEVELS, UNLOCK_LAPS, PRESSURE, LATE_AFTER, LATE_RARE, LATE_PRIORITY,
 } from '../data/events.js';
+import { cardInTheme } from '../data/themes.js';
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
@@ -190,6 +191,9 @@ function groupLots(st, group, lossOf, rate) {
  */
 export function burnLoss(houses) { return Math.ceil(houses / 2); }
 
+/** Số cấp nhà một ô mất khi để tuyết đè: một cấp, khách sạn mái rộng mất hai. */
+export function snowLoss(houses) { return houses === 5 ? 2 : 1; }
+
 /** Người giàu nhất bàn — thẻ trưng thu nhắm vào đây, tiêu chí ai cũng kiểm được. */
 export function leaderSeat(st) {
   const alive = st.alive();
@@ -211,6 +215,8 @@ function poorestSeat(st) {
  * rút thẻ khác. Đây cũng là chỗ giữ cho sự kiện luôn *làm được một việc gì đó*.
  */
 export function usable(st, card) {
+  // Thẻ riêng của chủ đề khác (Bão Tuyết ở ván mặc định): không bao giờ ra
+  if (!cardInTheme(card, st.settings?.theme)) return false;
   const alive = st.alive();
   switch (card.id) {
     case 'thue-dien-tho':
@@ -229,11 +235,13 @@ export function usable(st, card) {
        liền bốn vòng là siết quá tay, bỏ qua để bốc lá khác. */
     case 'mat-mua':
     case 'bao-gia':
+    case 'duong-dong-bang':
       return !hasMod(st, card.id);
     /* Khu bốc thăm được là khu có ít nhất một ô đang có nhà. Cả bàn không còn
        căn nào thì thiên tai chẳng lấy được gì — bốc thẻ khác. */
     case 'dong-dat':
     case 'hoa-hoan':
+    case 'bao-tuyet':
       return builtGroups(st).length > 0;
     case 'mat-giay-to':
       return alive.filter((p) => st.propertiesOf(p.id).length > 0).length >= 2;
@@ -271,7 +279,9 @@ export function usable(st, card) {
 export function drawEvent(st, fresh = false) {
   const urgent = fresh ? null : latePriority(st);
   if (urgent) return urgent;
-  if (fresh || !st.eventPile || st.eventPile.length === 0) st.eventPile = shuffledIds(EVENTS);
+  if (fresh || !st.eventPile || st.eventPile.length === 0) {
+    st.eventPile = shuffledIds(EVENTS.filter((e) => cardInTheme(e, st.settings?.theme)));
+  }
   const pile = st.eventPile;
 
   const skipped = [];
@@ -376,6 +386,8 @@ export function planEvent(st, card) {
       return { mod: { id: card.id, type: 'build', mult: card.mult, turns: rounds(st, card.rounds) } };
     case 'gioi-nghiem':
       return { mod: { id: card.id, type: 'freeze-build', turns: rounds(st, card.rounds) } };
+    case 'duong-dong-bang':
+      return { mod: { id: card.id, type: 'ice', turns: rounds(st, card.rounds) } };
 
     case 'mo-duong': {
       // Chỉ tăng giá khu đã có chủ — tăng giá cho đất ế thì chẳng ai được gì
@@ -400,6 +412,11 @@ export function planEvent(st, card) {
       if (groups.length === 0) return null;
       const group = pick(groups);
       return { group, tiles: groupLots(st, group, burnLoss, card.saveRate) };
+    }
+
+    case 'bao-tuyet': {
+      const group = pick(builtGroups(st));
+      return { group, tiles: groupLots(st, group, snowLoss, card.clearRate) };
     }
 
     case 'mat-giay-to': {
@@ -454,6 +471,7 @@ export function modLabel(m) {
     case 'freeze-build': return `Cấm xây${left}`;
     case 'group-rent':   return `${GROUPS[m.group]?.name ?? 'Một khu'} +${Math.round((m.mult - 1) * 100)}%`;
     case 'frozen':       return `${m.tiles.length} ô mất giấy tờ${left}`;
+    case 'ice':          return `Đường đóng băng${left}`;
     default:             return '';
   }
 }

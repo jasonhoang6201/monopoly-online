@@ -1708,6 +1708,8 @@ html, body {
    Hình nhà / khách sạn dùng chung (Phosphor Icons — MIT)
    ------------------------------------------------------------ */
 .gi { width: auto; height: 1em; fill: currentColor; flex: none; display: block; }
+/* Tuyết trên mái chỉ hiện ở chủ đề Giáng Sinh — xem theme/christmas.css */
+.gi-snow { display: none; }
 .gi-row {
   display: inline-flex; align-items: flex-end; gap: 2px;
   color: var(--jade-light);
@@ -2708,6 +2710,25 @@ html, body {
   margin-top: 8px; font-size: 11px; line-height: 1.6;
   color: var(--paper-deep); opacity: .85;
 }
+
+/* Chọn chủ đề (ui/lobby.js · themePickHtml) — cùng khung với bảng luật */
+.lobby-theme {
+  margin-top: 12px; padding: 11px 12px;
+  border-radius: 9px;
+  background: rgba(16, 27, 51, .3);
+  border: 1px solid rgba(200, 160, 72, .22);
+}
+.theme-pick {
+  width: 100%; margin-top: 8px; padding: 8px 10px;
+  font-family: var(--display); font-size: 13px; letter-spacing: .02em;
+  color: var(--paper); cursor: pointer;
+  background: rgba(0, 0, 0, .3);
+  border: 1px solid rgba(200, 160, 72, .38); border-radius: 7px;
+}
+.theme-pick:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
+.theme-pick:disabled { cursor: default; opacity: .8; }
+/* Danh sách thả xuống do hệ điều hành vẽ: tô nền tối cho chữ sáng còn đọc được */
+.theme-pick option { color: #17110C; background: #F0E3C8; }
 
 /* Bảng chọn màu quân trong phòng chờ — cùng khung với bảng luật bên dưới */
 .lobby-colors {

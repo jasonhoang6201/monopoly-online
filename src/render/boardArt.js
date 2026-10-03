@@ -11,6 +11,8 @@ import {
 } from './motifs.js';
 import { icon, TILE_ICON } from './icons.js';
 import { drawArt } from './artwork.js';
+import { drawXmasIcon } from './xmasArt.js';
+import { drawXmasDeco } from './xmasDeco.js';
 
 export const P = {
   lacDeep:  '#450D09',
@@ -20,6 +22,8 @@ export const P = {
   goldLight:'#E9CE85',
   goldDeep: '#8A6A22',
   paper:    '#F0E3C8',
+  /** Màu đỉnh của nền ô (chuyển dần xuống `paperWarm`). */
+  paperTop: '#F4E8D0',
   paperWarm:'#E4D2AC',
   paperDeep:'#CCB489',
   // Sơn mài cánh gián: nền sẫm dùng cho lòng bàn cờ, khung ngoài và cả
@@ -32,6 +36,11 @@ export const P = {
   inkSoft:  '#5A4632',
   jade:     '#2E6B52',
   indigo:   '#1B2A4A',
+  /** Nét kẻ ô và nét chân cổng — mực nâu trên giấy dó. */
+  line:     'rgba(34,26,17,.62)',
+  lineSoft: 'rgba(34,26,17,.42)',
+  /** Chủ đề đang vẽ — `theme/theme.js` ghi đè cùng các màu trên. */
+  theme:    'default',
 };
 
 /**
@@ -156,8 +165,9 @@ function scDraw(ctx, parts, cx, baseY, size, weight, family) {
 /**
  * Vẽ bàn cờ, trả về canvas dùng làm texture cho Phaser.
  * @param {number} S cạnh bàn cờ (px)
+ * @param {{snowLevel?:number}} [o] chủ đề Giáng Sinh: gờ tuyết dày tới nấc nào
  */
-export function paintBoard(S = TEX) {
+export function paintBoard(S = TEX, o = {}) {
   const cv = document.createElement('canvas');
   cv.width = S; cv.height = S;
   const ctx = cv.getContext('2d');
@@ -166,6 +176,7 @@ export function paintBoard(S = TEX) {
   drawInner(ctx, S);
   for (const t of BOARD) drawTile(ctx, t, S);
   drawOuterTrim(ctx, S);
+  if (P.theme === 'christmas') drawXmasDeco(ctx, S, o.snowLevel ?? 0);
 
   return cv;
 }
@@ -229,9 +240,97 @@ function drawInner(ctx, S) {
   ctx.strokeRect(x + inset * 0.45, y + inset * 0.45, size - inset * 0.9, size - inset * 0.9);
   ctx.globalAlpha = 1;
 
+  // Giáng Sinh: Nhà thờ Đức Bà, cây thông, đồi tuyết đè lên mặt trống đồng
+  // (trống vẫn còn, nét xanh băng chìm phía sau — vẫn là bàn cờ Sài Gòn)
+  if (P.theme === 'christmas') drawWinterScene(ctx, x, y, size);
+
   // Lòng bàn cờ để trống hẳn: chỉ còn trống đồng, chim Lạc và tấm biển tên.
   // Hai lưng bài Cơ Hội / Khí Vận đã bỏ — chỗ ấy nay là bảng nút hành động.
   drawCartouche(ctx, cx, cy, size);
+  if (P.theme === 'christmas') drawCartoucheSnow(ctx, cx, cy, size);
+}
+
+/**
+ * Cảnh Giáng Sinh trong lòng bàn cờ.
+ *
+ * Giữa lòng bàn cờ lúc chơi bị bảng nút hành động và bảng thông báo che, nên
+ * cảnh dồn xuống nửa dưới — đúng chỗ xí ngầu lăn, vẫn lộ ra cả lúc bảng nút
+ * đang mở: Nhà thờ Đức Bà ở giữa, hai bên cây thông và quà, dưới chân là đồi
+ * tuyết. Bông tuyết rải ở bốn góc trên.
+ */
+function drawWinterScene(ctx, x, y, size) {
+  const cx = x + size / 2;
+  const base = y + size * 0.88;
+
+  // Đồi tuyết: hai lớp sóng, lớp sau xanh nhạt, lớp trước trắng
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x, y + size);
+  ctx.lineTo(x, base - size * 0.02);
+  ctx.bezierCurveTo(x + size * 0.25, base - size * 0.09, x + size * 0.42, base - size * 0.01, cx, base - size * 0.05);
+  ctx.bezierCurveTo(x + size * 0.62, base - size * 0.09, x + size * 0.8, base - size * 0.01, x + size, base - size * 0.06);
+  ctx.lineTo(x + size, y + size);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(201,222,238,.9)';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x, y + size);
+  ctx.lineTo(x, base + size * 0.03);
+  ctx.bezierCurveTo(x + size * 0.3, base - size * 0.02, x + size * 0.65, base + size * 0.05, x + size, base + size * 0.01);
+  ctx.lineTo(x + size, y + size);
+  ctx.closePath();
+  const g = ctx.createLinearGradient(0, base - size * 0.03, 0, y + size);
+  g.addColorStop(0, '#FFFFFF');
+  g.addColorStop(1, '#E6F0F8');
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(30,58,85,.25)';
+  ctx.shadowBlur = size * 0.012;
+  ctx.shadowOffsetY = size * 0.004;
+  const s = size * 0.27;
+  drawXmasIcon(ctx, 'cathedral', cx, base - s * 0.42, s);
+  drawXmasIcon(ctx, 'tree', cx - size * 0.29, base - size * 0.105, size * 0.22);
+  drawXmasIcon(ctx, 'tree', cx + size * 0.30, base - size * 0.095, size * 0.19);
+  drawXmasIcon(ctx, 'gift', cx - size * 0.19, base - size * 0.02, size * 0.075);
+  drawXmasIcon(ctx, 'gift', cx + size * 0.2, base - size * 0.015, size * 0.065);
+  drawXmasIcon(ctx, 'snowman', cx + size * 0.41, base - size * 0.03, size * 0.1);
+  drawXmasIcon(ctx, 'snowman', cx - size * 0.41, base - size * 0.02, size * 0.08, { flip: true });
+  ctx.restore();
+
+  // Bông tuyết ở bốn góc trên — chỗ trống còn lại của lòng bàn cờ
+  const flakes = [[0.1, 0.12, 0.07], [0.2, 0.06, 0.04], [0.88, 0.1, 0.06], [0.79, 0.2, 0.035],
+    [0.08, 0.32, 0.035], [0.93, 0.36, 0.045], [0.12, 0.55, 0.04], [0.9, 0.58, 0.035]];
+  for (const [fx, fy, fs] of flakes) {
+    drawXmasIcon(ctx, 'flake', x + size * fx, y + size * fy, size * fs, { alpha: 0.55 });
+  }
+}
+
+/** Tuyết đọng trên mép trên tấm biển giữa bàn. */
+function drawCartoucheSnow(ctx, cx, cy, size) {
+  const w = size * 0.56, h = size * 0.15;
+  const x = cx - w / 2, top = cy - h / 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x - h * 0.04, top + h * 0.06);
+  const n = 10;
+  for (let i = 0; i < n; i++) {
+    const xa = x - h * 0.04 + ((i + 1) / n) * (w + h * 0.08);
+    ctx.quadraticCurveTo(xa - (w / n) / 2, top - h * (0.16 + (i % 3) * 0.04), xa, top + h * 0.02);
+  }
+  for (let i = n; i > 0; i--) {
+    const xa = x - h * 0.04 + ((i - 1) / n) * (w + h * 0.08);
+    const drip = i % 4 === 1 ? h * 0.2 : h * 0.07;
+    ctx.quadraticCurveTo(xa + (w / n) / 2, top + drip, xa, top + h * 0.06);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#FFFFFF';
+  ctx.shadowColor = 'rgba(30,58,85,.3)';
+  ctx.shadowBlur = h * 0.08;
+  ctx.fill();
+  ctx.restore();
 }
 
 /** Tấm biển sơn mài ở chính giữa bàn cờ. */
@@ -312,7 +411,7 @@ function drawTile(ctx, t, S) {
   const x = -w / 2, y = -h / 2;
 
   const g = ctx.createLinearGradient(0, y, 0, y + h);
-  g.addColorStop(0, '#F4E8D0');
+  g.addColorStop(0, P.paperTop);
   g.addColorStop(1, P.paperWarm);
   ctx.fillStyle = g;
   ctx.fillRect(x, y, w, h);
@@ -329,7 +428,7 @@ function drawTile(ctx, t, S) {
 
   paperGrain(ctx, x, y, w, h, 0.05, t.id * 37 + 11);
 
-  ctx.strokeStyle = 'rgba(34,26,17,.62)';
+  ctx.strokeStyle = P.line;
   ctx.lineWidth = Math.max(1, S * 0.0016);
   ctx.strokeRect(x, y, w, h);
   ctx.restore();
@@ -392,7 +491,7 @@ function drawTileHeader(ctx, x, y, w, h, color, card) {
   }
 
   if (!card) {
-    ctx.strokeStyle = 'rgba(34,26,17,.42)';
+    ctx.strokeStyle = P.lineSoft;
     ctx.lineWidth = Math.max(0.8, w * 0.008);
     ctx.beginPath(); ctx.moveTo(x, y + headerH); ctx.lineTo(x + w, y + headerH); ctx.stroke();
   }
@@ -594,7 +693,7 @@ export function paintTileCard(tileId, w = 220) {
 
   // Nền giấy
   const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, '#F4E8D0');
+  g.addColorStop(0, P.paperTop);
   g.addColorStop(1, P.paperWarm);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);

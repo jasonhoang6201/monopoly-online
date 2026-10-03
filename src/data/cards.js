@@ -26,6 +26,9 @@
  *   · `resume-random` — cũng giải toả, nhưng lô đất do **bốc thăm** giữa mọi lô
  *                   trống trên bàn: bàn cờ sáng chạy qua từng ô rồi chậm dần,
  *                   dừng ở đâu là lô ấy.
+ *   · `gift`      — quà Giáng Sinh: **cả bàn** cùng nhận `amount` từ ngân
+ *                   hàng, người ít tiền mặt nhất nhận gấp đôi. Chỉ có ở ván
+ *                   chủ đề Giáng Sinh (`theme: 'christmas'`, xem `data/themes.js`).
  *   · `move`      — dắt quân đi chỗ khác rồi **xử ô mới như vừa lắc tới đó**:
  *                   mua được, phải trả tiền thuê, rút tiếp thẻ nếu đáp trúng ô
  *                   Cơ Hội / Khí Vận. Ô đến khai bằng một trong bốn cách:
@@ -210,6 +213,13 @@ export const CHEST = [
   {
     text: 'Đọc hết bộ sách Gia Định Báo cũ để trên gác, mở mang đầu óc.',
     type: 'skill', points: 1,
+  },
+  /* Thẻ riêng chủ đề Giáng Sinh — để cuối bộ cho chỉ số các lá cũ khỏi xê dịch:
+     thẻ trong túi người chơi và chồng bài trong ảnh chụp đều ghi bằng chỉ số. */
+  {
+    text: `Đêm Giáng Sinh, ông già Noel ghé từng nhà trong xóm, để lại quà dưới
+           gốc cây thông.`,
+    type: 'gift', amount: 50, theme: 'christmas',
   },
 ];
 

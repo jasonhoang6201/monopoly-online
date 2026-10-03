@@ -1,0 +1,1416 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chủ đề Giáng Sinh · bản mẫu</title>
+<!-- Font tự lưu trữ của game; mở qua dev server (/demo/christmas.html) thì có,
+     mở thẳng bằng file:// thì rơi về Georgia. -->
+<link rel="stylesheet" href="/fonts/fonts.css" />
+<style>
+/* ============================================================
+   Hai bộ màu: mặc định (sơn mài) và Giáng Sinh (tuyết).
+   Mọi component chỉ đọc biến, nên đổi lớp trên <body> là đổi chủ đề.
+   ============================================================ */
+:root {
+  --display: "Playfair Display", Georgia, serif;
+  --serif: "Noto Serif", Georgia, serif;
+  --sans: "Be Vietnam Pro", -apple-system, "Segoe UI", sans-serif;
+
+  --xmas-red: #B3262E;
+  --xmas-red-light: #D8434A;
+  --xmas-green: #2E6B45;
+  --xmas-green-deep: #1F4D31;
+  --xmas-brown: #7A4B2A;
+  --xmas-gold: #D6A738;
+  --snow: #FBFDFF;
+  --frost: #DCEBF6;
+  --ice: #A9CBE2;
+  --winter-ink: #1E3A55;
+}
+
+body.theme-default {
+  --bg: radial-gradient(ellipse at 50% 0%, #4A241A 0%, #30150F 45%, #150A06 100%);
+  --panel: rgba(42, 20, 14, .92);
+  --panel-line: #8A6A22;
+  --panel-head: #C8A048;
+  --text: #F0E3C8;
+  --muted: #BFA97F;
+  --accent: #C8A048;
+  --btn: #7C1E14;
+  --btn-text: #F2DFAE;
+  --btn-line: #C8A048;
+  --tile-paper: linear-gradient(#F4E8D0, #E4D2AC);
+  --tile-line: #8A6A22;
+  --tile-ink: #221A11;
+  --field: #1B0B07;
+  --house-roof: #1F5B3B; --house-body: #2E7D50;
+  --hotel-roof: #7C1E14; --hotel-body: #B22F26;
+}
+
+body.theme-christmas {
+  --bg: linear-gradient(180deg, #F4F9FD 0%, #E3EFF8 40%, #CFE2F0 100%);
+  --panel: rgba(255, 255, 255, .86);
+  --panel-line: #A9CBE2;
+  --panel-head: #B3262E;
+  --text: #1E3A55;
+  --muted: #5C7A93;
+  --accent: #B3262E;
+  --btn: #B3262E;
+  --btn-text: #FFFFFF;
+  --btn-line: #7E1A20;
+  --tile-paper: linear-gradient(#FFFFFF, #EEF5FB);
+  --tile-line: #8FB4D0;
+  --tile-ink: #1E3A55;
+  --field: #F3F8FC;
+  --house-roof: #1F4D31; --house-body: #2E6B45;
+  --hotel-roof: #7E1A20; --hotel-body: #B3262E;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  min-height: 100vh;
+  background: var(--bg);
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  transition: color .4s;
+}
+
+/* Tuyết rơi phủ cả trang, chỉ chủ đề Giáng Sinh mới vẽ. */
+#page-snow { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+
+.wrap { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 24px 16px 80px; }
+
+/* ---------------------------------------------------------------- đầu trang */
+.top {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px;
+  justify-content: space-between; margin-bottom: 26px;
+}
+.top h1 { font-family: var(--display); font-size: 26px; font-weight: 700; letter-spacing: .5px; }
+.top p { color: var(--muted); font-size: 13px; margin-top: 4px; max-width: 560px; line-height: 1.5; }
+.top-ctl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+label.chk { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; }
+
+/* ---------------------------------------------------------------- khung mục */
+section.card {
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 14px;
+  padding: 20px 20px 22px;
+  margin-bottom: 22px;
+  box-shadow: 0 10px 30px rgba(10, 30, 50, .10);
+  backdrop-filter: blur(4px);
+}
+section.card > h2 {
+  font-family: var(--display); font-size: 19px; color: var(--panel-head);
+  display: flex; align-items: baseline; gap: 10px;
+}
+section.card > h2 small { font-family: var(--sans); font-size: 12px; color: var(--muted); font-weight: 400; }
+section.card > .lead { color: var(--muted); font-size: 13px; line-height: 1.55; margin: 6px 0 16px; max-width: 760px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+
+/* ---------------------------------------------------------------- nút, ô nhập */
+button.btn {
+  font: 600 13px var(--sans);
+  background: var(--btn); color: var(--btn-text);
+  border: 1px solid var(--btn-line); border-radius: 8px;
+  padding: 8px 14px; cursor: pointer;
+  transition: transform .12s, filter .12s;
+}
+button.btn:hover { filter: brightness(1.1); }
+button.btn:active { transform: translateY(1px); }
+button.btn.ghost { background: transparent; color: var(--text); border-color: var(--panel-line); }
+
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.field > span { font-size: 12px; color: var(--muted); letter-spacing: .3px; }
+.field input, .field select {
+  font: 500 14px var(--sans);
+  background: var(--field); color: var(--text);
+  border: 1px solid var(--panel-line); border-radius: 8px;
+  padding: 9px 10px;
+}
+
+/* ---------------------------------------------------------------- 1. mở phòng */
+.lobby { max-width: 380px; position: relative; }
+.theme-peek {
+  display: flex; gap: 10px; align-items: center; padding: 10px; border-radius: 10px;
+  border: 1px dashed var(--panel-line); font-size: 12px; color: var(--muted); line-height: 1.45;
+}
+.theme-peek .sw { display: flex; gap: 3px; flex: none; }
+.theme-peek .sw i { width: 14px; height: 28px; border-radius: 3px; display: block; border: 1px solid rgba(0,0,0,.12); }
+.note { font-size: 12px; color: var(--muted); line-height: 1.55; }
+.note b { color: var(--text); }
+
+/* ---------------------------------------------------------------- 2. bảng màu */
+.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+.swatch { border-radius: 10px; overflow: hidden; border: 1px solid var(--panel-line); font-size: 11px; }
+.swatch .c { height: 54px; }
+.swatch .t { padding: 6px 8px; line-height: 1.35; }
+.swatch .t b { display: block; font-size: 12px; }
+.swatch .t code { color: var(--muted); }
+
+/* ---------------------------------------------------------------- 3. biểu tượng */
+.icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px; }
+.icon-cell {
+  text-align: center; padding: 12px 6px 10px; border-radius: 10px;
+  border: 1px solid var(--panel-line); background: rgba(255,255,255,.35);
+}
+body.theme-default .icon-cell { background: rgba(0,0,0,.18); }
+.icon-cell svg { width: 64px; height: 64px; display: block; margin: 0 auto 6px; }
+.icon-cell span { font-size: 12px; display: block; }
+.icon-cell em { font-style: normal; font-size: 10.5px; color: var(--muted); display: block; margin-top: 2px; }
+
+/* ---------------------------------------------------------------- 4. ô đất */
+.tiles { display: flex; gap: 0; overflow-x: auto; padding: 34px 6px 10px; }
+.tile {
+  --w: 104px;
+  position: relative; flex: none;
+  width: var(--w); height: 168px;
+  background: var(--tile-paper);
+  border: 1.5px solid var(--tile-line);
+  margin-left: -1.5px;
+  color: var(--tile-ink);
+  font-family: var(--serif);
+}
+.tile .head {
+  height: 34px; background: var(--grp);
+  border-bottom: 1.5px solid var(--tile-line);
+  position: relative;
+}
+/* Nhà đặt ngay trên dải màu nhóm, như trong game. */
+.tile .houses {
+  position: absolute; left: 0; right: 0; top: 4px; height: 26px;
+  display: flex; justify-content: center; align-items: flex-end; gap: 1px;
+  z-index: 3;
+}
+.tile .houses svg { width: 20px; height: 22px; }
+.tile .houses svg.hotel { width: 34px; height: 26px; }
+.tile .name {
+  text-align: center; font-weight: 700; font-size: 11.5px; line-height: 1.25;
+  padding: 9px 4px 0; white-space: pre-line; min-height: 44px;
+}
+.tile .art { height: 58px; display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; }
+.tile .art .plain { width: 38px; height: 38px; opacity: .55; }
+.tile .art .acc { width: 50px; height: 50px; display: none; }
+.tile .price { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; font: 700 12px var(--serif); z-index: 2; }
+
+/* Phụ kiện Giáng Sinh trên ô: chỉ hiện ở chủ đề tuyết. */
+.tile .snowcap, .tile .leds, .tile .drift { display: none; }
+/* Chừa chỗ cho dây đèn ngay dưới dải màu, để bóng đèn không đè lên tên đường. */
+body.theme-christmas .tile:not(.corner) .name { padding-top: 17px; }
+body.theme-christmas .tile:not(.corner) .art { height: 50px; }
+body.theme-christmas .tile .art .plain { display: none; }
+body.theme-christmas .tile .art .acc { display: block; }
+body.theme-christmas .tile .snowcap,
+body.theme-christmas .tile .leds,
+body.theme-christmas .tile .drift { display: block; }
+
+/* Lớp tuyết đọng trên mép dải màu: lồi lên trên mép ô một chút, rủ giọt xuống. */
+.tile .snowcap { position: absolute; left: -3px; right: -3px; top: -9px; height: 22px; z-index: 2; pointer-events: none; }
+.tile .drift { position: absolute; left: -2px; right: -2px; bottom: -2px; height: 26px; z-index: 1; pointer-events: none; }
+
+/* Dây đèn trên ô: sáng dịu, chu kỳ dài, biên độ thấp; không chớp tắt hẳn. */
+.tile .leds { position: absolute; left: 0; right: 0; top: 34px; height: 14px; z-index: 2; pointer-events: none; }
+.tile .leds svg { width: 100%; height: 100%; overflow: visible; }
+.tile .leds .bulb { animation: breathe 4.8s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { opacity: .62; } 50% { opacity: 1; } }
+
+.tile.corner { --w: 168px; }
+.tile.corner .head { display: none; }
+.tile.corner .name { padding-top: 16px; font-size: 13px; }
+.tile.corner .art { height: 92px; }
+.tile.corner .art .acc { width: 96px; height: 80px; }
+.tile.corner .art .plain { width: 60px; height: 60px; }
+.tile.corner .leds { top: 0; }
+
+.tiles-note { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.55; }
+
+/* ---------------------------------------------------------------- 5. nhà */
+.houses-cmp { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-end; }
+.houses-cmp figure { text-align: center; }
+.houses-cmp figure svg { width: 92px; height: 92px; display: block; margin: 0 auto; }
+.houses-cmp figure svg.hotel { width: 140px; }
+.houses-cmp figcaption { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+/* ---------------------------------------------------------------- 6. hộp thoại */
+.modal-stage { display: flex; justify-content: center; padding: 30px 10px; }
+.dlg {
+  position: relative;
+  width: min(440px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 16px;
+  padding: 26px 26px 22px;
+  color: var(--text);
+  box-shadow: 0 20px 50px rgba(10, 30, 50, .22);
+}
+body.theme-christmas .dlg { background: linear-gradient(180deg, #FFFFFF 0%, #F1F7FC 100%); }
+.dlg .kicker { font-size: 11px; letter-spacing: 3px; color: var(--muted); text-align: center; }
+.dlg h3 { font-family: var(--display); font-size: 26px; text-align: center; margin: 4px 0 10px; color: var(--panel-head); }
+.dlg .ill { display: flex; justify-content: center; margin: 6px 0 10px; }
+.dlg .ill svg { width: 120px; height: 90px; }
+.dlg p { font-family: var(--serif); font-size: 14px; line-height: 1.6; text-align: center; }
+.dlg .row { display: flex; gap: 10px; justify-content: center; margin-top: 18px; }
+
+/* Viền đèn LED: dây điện + bóng đèn do JS rải theo chu vi hộp thoại. */
+.led-frame { position: absolute; inset: -14px; pointer-events: none; display: none; }
+body.theme-christmas .led-frame { display: block; }
+.led-frame svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.led-frame .bulb { transform-box: fill-box; transform-origin: center; }
+/* Ba nhịp nhấp nháy lệch pha: bóng thứ i chạy theo nhóm i % 3, tạo vệt đèn đuổi. */
+.led-frame .bulb.g0 { animation: chase 1.8s steps(1) infinite 0s; }
+.led-frame .bulb.g1 { animation: chase 1.8s steps(1) infinite .6s; }
+.led-frame .bulb.g2 { animation: chase 1.8s steps(1) infinite 1.2s; }
+@keyframes chase {
+  0%   { opacity: 1;   filter: drop-shadow(0 0 5px var(--glow)); }
+  33%  { opacity: .45; filter: none; }
+  100% { opacity: .45; filter: none; }
+}
+/* Chế độ dịu: đèn đứng yên, không nhấp nháy, không tuyết rơi. */
+body.calm .led-frame .bulb, body.calm .tile .leds .bulb { animation: none !important; opacity: .9; }
+
+/* Hộp thoại nổi (bấm "Mở hộp thoại") */
+.overlay {
+  position: fixed; inset: 0; z-index: 50; display: none;
+  align-items: center; justify-content: center; padding: 30px 16px;
+  background: rgba(20, 35, 55, .45);
+}
+body.theme-default .overlay { background: rgba(10, 5, 3, .6); }
+.overlay.on { display: flex; }
+.overlay .dlg { animation: pop .38s cubic-bezier(.18,.89,.32,1.28); }
+@keyframes pop { from { transform: scale(.86); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ---------------------------------------------------------------- 7. bão tuyết */
+.storm { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 18px; align-items: start; }
+@media (max-width: 760px) { .storm { grid-template-columns: 1fr; } }
+#storm-cv { width: 100%; aspect-ratio: 16 / 9; border-radius: 12px; border: 1px solid var(--panel-line); display: block; background: #DCEBF6; }
+.storm-ctl { display: flex; flex-direction: column; gap: 10px; }
+.timeline { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.timeline li { margin-left: 16px; }
+.timeline li.now { color: var(--accent); font-weight: 600; }
+
+/* ---------------------------------------------------------------- 8. âm thanh */
+.sfx { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.sfx-row {
+  display: flex; gap: 10px; align-items: center; padding: 10px 12px;
+  border: 1px solid var(--panel-line); border-radius: 10px;
+}
+.sfx-row button { flex: none; width: 38px; height: 38px; border-radius: 50%; padding: 0; font-size: 14px; }
+.sfx-row div { font-size: 12.5px; line-height: 1.4; }
+.sfx-row div b { display: block; font-size: 13px; }
+.sfx-row div span { color: var(--muted); }
+.music-bar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.music-bar .now { font-size: 13px; color: var(--muted); }
+.music-bar input[type=range] { width: 140px; }
+
+/* ---------------------------------------------------------------- 9. gợi ý */
+.ideas { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.idea { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; }
+.idea b { font-size: 14px; display: block; margin-bottom: 3px; }
+.idea p { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+.idea .tag { display: inline-block; font-size: 10.5px; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--panel-line); color: var(--muted); margin-left: 6px; vertical-align: 1px; }
+
+/* Ẩn/hiện theo chủ đề */
+body.theme-default .only-xmas { display: none !important; }
+body.theme-christmas .only-default { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .led-frame .bulb, .tile .leds .bulb { animation: none !important; opacity: .9; }
+}
+</style>
+</head>
+
+<body class="theme-christmas">
+<canvas id="page-snow"></canvas>
+
+<!-- ============================================================
+     Bộ biểu tượng SVG — vẽ tay, không tải file ngoài.
+     viewBox 64×64 cho mọi biểu tượng để dùng chung cỡ.
+     ============================================================ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="g-snow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#DCEBF6"/>
+    </linearGradient>
+    <radialGradient id="g-bauble" cx=".35" cy=".35" r=".7">
+      <stop offset="0" stop-color="#FF8A8F"/><stop offset=".5" stop-color="#C8262F"/><stop offset="1" stop-color="#7E1A20"/>
+    </radialGradient>
+    <radialGradient id="g-window" cx=".5" cy=".5" r=".6">
+      <stop offset="0" stop-color="#FFF4C2"/><stop offset="1" stop-color="#F2B53A"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Cây thông -->
+  <symbol id="i-tree" viewBox="0 0 64 64">
+    <rect x="28" y="51" width="8" height="10" rx="1.5" fill="#7A4B2A"/>
+    <path d="M32 26 L54 52 H10 Z" fill="#2E6B45"/>
+    <path d="M32 26 L54 52 H32 Z" fill="#245A39"/>
+    <path d="M32 15 L48 38 H16 Z" fill="#33774D"/>
+    <path d="M32 15 L48 38 H32 Z" fill="#285F3D"/>
+    <path d="M32 6 L43 24 H21 Z" fill="#3A8456"/>
+    <path d="M32 6 L43 24 H32 Z" fill="#2E6B45"/>
+    <path d="M10 52 Q14 48 18 51 Q22 47 27 51 Q32 47 37 51 Q42 47 47 51 Q51 48 54 52 Z" fill="url(#g-snow)"/>
+    <path d="M16 38 Q20 35 24 37.5 Q28 34.5 32 37.5 Q36 34.5 40 37.5 Q44 35 48 38 Z" fill="url(#g-snow)"/>
+    <path d="M21 24 Q25 21 28 23.5 Q32 21 36 23.5 Q39 21 43 24 Z" fill="url(#g-snow)"/>
+    <circle cx="24" cy="45" r="2.4" fill="#C8262F"/><circle cx="40" cy="46" r="2.4" fill="#D6A738"/>
+    <circle cx="33" cy="31" r="2.2" fill="#D6A738"/><circle cx="27" cy="32" r="1.8" fill="#C8262F"/>
+    <circle cx="38" cy="19" r="1.8" fill="#C8262F"/>
+    <path d="M32 1.5 L33.6 5 L37.3 5.3 L34.5 7.6 L35.4 11.2 L32 9.3 L28.6 11.2 L29.5 7.6 L26.7 5.3 L30.4 5 Z" fill="#F2C24A" stroke="#B8862A" stroke-width=".6"/>
+  </symbol>
+
+  <!-- Ông già Noel -->
+  <symbol id="i-santa" viewBox="0 0 64 64">
+    <path d="M14 28 Q18 6 40 8 Q52 10 55 24 L50 29 Z" fill="#C8262F"/>
+    <path d="M40 8 Q52 10 55 24 L50 29 L40 26 Z" fill="#A11E26"/>
+    <circle cx="55" cy="24" r="5" fill="#FFFFFF" stroke="#DCEBF6" stroke-width="1"/>
+    <ellipse cx="32" cy="38" rx="13" ry="12" fill="#F2C9A5"/>
+    <path d="M17 37 Q16 58 32 61 Q48 58 47 37 Q44 47 32 47 Q20 47 17 37 Z" fill="#FFFFFF" stroke="#DCEBF6" stroke-width="1"/>
+    <path d="M22 44 Q27 40 32 43 Q37 40 42 44 Q37 47 32 45 Q27 47 22 44 Z" fill="#F4F8FB" stroke="#C9DCEB" stroke-width=".8"/>
+    <circle cx="32" cy="41" r="2.6" fill="#E28B76"/>
+    <circle cx="26.5" cy="35" r="1.6" fill="#2A1A12"/><circle cx="37.5" cy="35" r="1.6" fill="#2A1A12"/>
+    <circle cx="23" cy="40" r="2.2" fill="#F0A0A0" opacity=".6"/><circle cx="41" cy="40" r="2.2" fill="#F0A0A0" opacity=".6"/>
+    <rect x="12" y="25" width="40" height="8" rx="4" fill="#FFFFFF" stroke="#DCEBF6" stroke-width="1"/>
+  </symbol>
+
+  <!-- Hộp quà -->
+  <symbol id="i-gift" viewBox="0 0 64 64">
+    <rect x="12" y="29" width="40" height="29" rx="2" fill="#C8262F"/>
+    <rect x="32" y="29" width="20" height="29" rx="2" fill="#A11E26"/>
+    <rect x="9" y="22" width="46" height="9" rx="2" fill="#D8434A"/>
+    <rect x="29" y="22" width="6" height="36" fill="#D6A738"/>
+    <rect x="9" y="22" width="46" height="3" rx="1.5" fill="#FFFFFF" opacity=".85"/>
+    <path d="M32 21 Q20 8 15 15 Q13 21 32 21 Z" fill="#E7BC4B" stroke="#B8862A" stroke-width="1"/>
+    <path d="M32 21 Q44 8 49 15 Q51 21 32 21 Z" fill="#E7BC4B" stroke="#B8862A" stroke-width="1"/>
+    <circle cx="32" cy="20.5" r="3.4" fill="#D6A738" stroke="#B8862A" stroke-width="1"/>
+    <path d="M12 58 Q20 54 28 57 Q36 54 44 57 Q50 55 52 58 Z" fill="url(#g-snow)"/>
+  </symbol>
+
+  <!-- Bông tuyết -->
+  <symbol id="i-flake" viewBox="0 0 64 64">
+    <g stroke="#5E9CCB" stroke-width="3" stroke-linecap="round" fill="none">
+      <g id="flake-arm"><path d="M32 32 V6 M32 14 L25 8.5 M32 14 L39 8.5 M32 22 L26.5 17.5 M32 22 L37.5 17.5"/></g>
+      <use href="#flake-arm" transform="rotate(60 32 32)"/>
+      <use href="#flake-arm" transform="rotate(120 32 32)"/>
+      <use href="#flake-arm" transform="rotate(180 32 32)"/>
+      <use href="#flake-arm" transform="rotate(240 32 32)"/>
+      <use href="#flake-arm" transform="rotate(300 32 32)"/>
+    </g>
+    <circle cx="32" cy="32" r="4" fill="#FFFFFF" stroke="#5E9CCB" stroke-width="2"/>
+  </symbol>
+
+  <!-- Người tuyết -->
+  <symbol id="i-snowman" viewBox="0 0 64 64">
+    <ellipse cx="32" cy="60" rx="20" ry="3" fill="#BCD6EA" opacity=".7"/>
+    <circle cx="32" cy="45" r="15" fill="url(#g-snow)" stroke="#A9CBE2" stroke-width="1.2"/>
+    <circle cx="32" cy="23" r="10.5" fill="url(#g-snow)" stroke="#A9CBE2" stroke-width="1.2"/>
+    <rect x="22" y="12" width="20" height="3" rx="1.5" fill="#2A2A33"/>
+    <rect x="25" y="2" width="14" height="11" rx="1.5" fill="#2A2A33"/>
+    <rect x="25" y="9.5" width="14" height="2.4" fill="#C8262F"/>
+    <path d="M21 31 Q32 36 43 31 L43 35 Q32 40 21 35 Z" fill="#C8262F"/>
+    <path d="M38 34 L44 45 L39.5 45.5 L36 35.5 Z" fill="#A11E26"/>
+    <circle cx="28" cy="21" r="1.4" fill="#2A2A33"/><circle cx="36" cy="21" r="1.4" fill="#2A2A33"/>
+    <path d="M32 24 L41 26.5 L32 26.8 Z" fill="#E8812E"/>
+    <circle cx="32" cy="42" r="1.6" fill="#2A2A33"/><circle cx="32" cy="49" r="1.6" fill="#2A2A33"/>
+    <path d="M18 40 L7 33 M10 35 L7 31.5" stroke="#7A4B2A" stroke-width="2" stroke-linecap="round"/>
+    <path d="M46 40 L57 33 M54 35 L57 31.5" stroke="#7A4B2A" stroke-width="2" stroke-linecap="round"/>
+  </symbol>
+
+  <!-- Đống tuyết phủ lại trên đường -->
+  <symbol id="i-pile" viewBox="0 0 64 64">
+    <path d="M3 56 Q10 40 22 43 Q30 30 42 39 Q55 36 61 56 Z" fill="url(#g-snow)" stroke="#A9CBE2" stroke-width="1.2"/>
+    <path d="M8 56 Q20 49 32 52 Q46 48 58 56 Z" fill="#CFE2F0"/>
+    <path d="M24 44 Q28 41 31 43" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <g fill="#FFFFFF" stroke="#8FB4D0" stroke-width=".6">
+      <path d="M48 26 l1.2 3 3 1.2 -3 1.2 -1.2 3 -1.2 -3 -3 -1.2 3 -1.2 Z"/>
+      <path d="M15 31 l.8 2 2 .8 -2 .8 -.8 2 -.8 -2 -2 -.8 2 -.8 Z"/>
+    </g>
+    <rect x="36" y="27" width="2.6" height="17" rx="1" fill="#7A4B2A" transform="rotate(14 37 35)"/>
+  </symbol>
+
+  <!-- Chuông Giáng Sinh -->
+  <symbol id="i-bells" viewBox="0 0 64 64">
+    <path d="M14 22 Q14 13 22 13 Q30 13 30 22 L31 36 Q33 39 30 40 H14 Q11 39 13 36 Z" fill="#E7BC4B" stroke="#A9782A" stroke-width="1.2" transform="rotate(-14 22 26)"/>
+    <path d="M34 22 Q34 13 42 13 Q50 13 50 22 L51 36 Q53 39 50 40 H34 Q31 39 33 36 Z" fill="#D6A738" stroke="#A9782A" stroke-width="1.2" transform="rotate(14 42 26)"/>
+    <circle cx="19" cy="44" r="3" fill="#A9782A"/><circle cx="45" cy="44" r="3" fill="#A9782A"/>
+    <path d="M24 10 Q32 18 40 10 Q32 4 24 10 Z" fill="#C8262F"/>
+    <path d="M30 12 L22 22 M34 12 L42 22" stroke="#C8262F" stroke-width="3" stroke-linecap="round"/>
+    <path d="M20 8 Q26 2 32 9 Q26 12 20 8 Z" fill="#2E6B45"/><path d="M44 8 Q38 2 32 9 Q38 12 44 8 Z" fill="#2E6B45"/>
+    <circle cx="32" cy="10" r="2.2" fill="#D8434A"/>
+  </symbol>
+
+  <!-- Xe trượt tuyết -->
+  <symbol id="i-sleigh" viewBox="0 0 64 64">
+    <path d="M6 50 H52 Q60 50 60 43" stroke="#D6A738" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M14 50 V44 M44 50 V44" stroke="#D6A738" stroke-width="2.5"/>
+    <path d="M8 26 Q6 44 18 45 H48 Q56 45 56 34 Q56 28 50 28 Q46 28 46 33 V36 H22 Q20 26 8 26 Z" fill="#C8262F" stroke="#7E1A20" stroke-width="1.2"/>
+    <path d="M12 38 Q24 40 46 38" stroke="#D6A738" stroke-width="1.6" fill="none"/>
+    <path d="M22 36 Q22 20 34 20 Q46 22 44 36 Z" fill="#7A4B2A"/>
+    <rect x="26" y="14" width="10" height="9" rx="1" fill="#2E6B45"/><rect x="30" y="14" width="2" height="9" fill="#D6A738"/>
+    <rect x="36" y="18" width="8" height="7" rx="1" fill="#D8434A" transform="rotate(10 40 21)"/>
+    <path d="M8 26 Q14 24 20 30" stroke="#FFFFFF" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+  </symbol>
+
+  <!-- Kẹo gậy -->
+  <symbol id="i-cane" viewBox="0 0 64 64">
+    <path d="M38 60 V22 A10 10 0 0 0 18 22" stroke="#FFFFFF" stroke-width="9" fill="none" stroke-linecap="round"/>
+    <path d="M38 60 V22 A10 10 0 0 0 18 22" stroke="#C8262F" stroke-width="9" fill="none" stroke-linecap="butt" stroke-dasharray="5 6"/>
+    <path d="M38 60 V22 A10 10 0 0 0 18 22" stroke="#A9CBE2" stroke-width="9.6" fill="none" stroke-linecap="round" opacity=".25"/>
+  </symbol>
+
+  <!-- Vòng hoa -->
+  <symbol id="i-wreath" viewBox="0 0 64 64">
+    <circle cx="32" cy="30" r="19" fill="none" stroke="#2E6B45" stroke-width="11"/>
+    <circle cx="32" cy="30" r="19" fill="none" stroke="#3A8456" stroke-width="5" stroke-dasharray="4 5"/>
+    <circle cx="32" cy="30" r="22.5" fill="none" stroke="#1F4D31" stroke-width="2" stroke-dasharray="2 6"/>
+    <g fill="#D8434A"><circle cx="17" cy="20" r="2.2"/><circle cx="46" cy="18" r="2.2"/><circle cx="50" cy="35" r="2.2"/><circle cx="16" cy="38" r="2.2"/><circle cx="31" cy="11" r="2.2"/></g>
+    <path d="M32 48 L22 60 L26 50 Z M32 48 L42 60 L38 50 Z" fill="#A11E26"/>
+    <path d="M32 48 Q20 38 19 46 Q20 52 32 48 Z M32 48 Q44 38 45 46 Q44 52 32 48 Z" fill="#C8262F"/>
+    <circle cx="32" cy="48" r="3" fill="#A11E26"/>
+  </symbol>
+
+  <!-- Nhà thờ Đức Bà phủ tuyết -->
+  <symbol id="i-cathedral" viewBox="0 0 64 64">
+    <rect x="9" y="22" width="13" height="38" fill="#B5543A"/>
+    <rect x="42" y="22" width="13" height="38" fill="#A44A32"/>
+    <path d="M9 22 L15.5 6 L22 22 Z" fill="#6E7F8C"/><path d="M42 22 L48.5 6 L55 22 Z" fill="#617280"/>
+    <path d="M15.5 6 V1 M13.5 3 H17.5 M48.5 6 V1 M46.5 3 H50.5" stroke="#5A4632" stroke-width="1.4"/>
+    <rect x="22" y="30" width="20" height="30" fill="#C2603F"/>
+    <path d="M20 30 L32 20 L44 30 Z" fill="#9B4630"/>
+    <circle cx="32" cy="38" r="5" fill="#F2D27A" stroke="#7E3A26" stroke-width="1.2"/>
+    <path d="M27 60 V51 Q32 45 37 51 V60 Z" fill="#5A2A1C"/>
+    <rect x="13" y="30" width="5" height="8" rx="2.5" fill="#F2D27A"/><rect x="46" y="30" width="5" height="8" rx="2.5" fill="#F2D27A"/>
+    <rect x="13" y="43" width="5" height="8" rx="2.5" fill="#5A2A1C"/><rect x="46" y="43" width="5" height="8" rx="2.5" fill="#5A2A1C"/>
+    <path d="M10.5 18 L15.5 8 L20.5 18 Q18 16 15.5 17.5 Q13 16 10.5 18 Z" fill="#FFFFFF"/>
+    <path d="M43.5 18 L48.5 8 L53.5 18 Q51 16 48.5 17.5 Q46 16 43.5 18 Z" fill="#FFFFFF"/>
+    <path d="M21 30 L32 21 L43 30 Q38 28 32 29.5 Q26 28 21 30 Z" fill="#FFFFFF"/>
+    <path d="M8 22 H23 V24 Q15 25.5 8 24 Z M41 22 H56 V24 Q48 25.5 41 24 Z" fill="#FFFFFF"/>
+    <path d="M2 61 Q16 56 32 59 Q48 56 62 61 V64 H2 Z" fill="url(#g-snow)"/>
+  </symbol>
+
+  <!-- Mũ Noel cho quân cờ -->
+  <symbol id="i-hat" viewBox="0 0 64 64">
+    <path d="M12 44 Q14 18 34 12 Q50 10 56 30 L48 34 Q44 22 36 24 Q30 30 30 44 Z" fill="#C8262F"/>
+    <path d="M34 12 Q50 10 56 30 L48 34 Q44 22 36 24 Z" fill="#A11E26"/>
+    <circle cx="54" cy="33" r="6" fill="#FFFFFF" stroke="#DCEBF6"/>
+    <rect x="8" y="40" width="40" height="11" rx="5.5" fill="#FFFFFF" stroke="#DCEBF6"/>
+  </symbol>
+
+  <!-- Tất Noel -->
+  <symbol id="i-sock" viewBox="0 0 64 64">
+    <path d="M22 14 H42 V38 L48 44 Q54 52 46 58 Q40 61 32 55 L20 44 Q18 41 20 38 Z" fill="#C8262F" stroke="#7E1A20" stroke-width="1"/>
+    <path d="M24 30 H42 M24 36 H42" stroke="#FFFFFF" stroke-width="2" stroke-dasharray="3 3"/>
+    <path d="M38 52 Q44 54 48 48" stroke="#2E6B45" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <rect x="19" y="6" width="26" height="11" rx="3" fill="#FFFFFF" stroke="#DCEBF6"/>
+    <path d="M44 8 Q50 2 52 6" stroke="#7A4B2A" stroke-width="1.4" fill="none"/>
+  </symbol>
+
+  <!-- Cành nhựa ruồi -->
+  <symbol id="i-holly" viewBox="0 0 64 64">
+    <path d="M32 34 Q20 18 6 22 Q10 26 8 30 Q14 30 14 35 Q20 32 22 37 Q26 33 32 34 Z" fill="#2E6B45" stroke="#1F4D31" stroke-width="1"/>
+    <path d="M32 34 Q44 18 58 22 Q54 26 56 30 Q50 30 50 35 Q44 32 42 37 Q38 33 32 34 Z" fill="#3A8456" stroke="#1F4D31" stroke-width="1"/>
+    <path d="M32 34 Q20 26 8 26 M32 34 Q44 26 56 26" stroke="#1F4D31" stroke-width=".8" fill="none"/>
+    <circle cx="28" cy="38" r="4.5" fill="url(#g-bauble)"/><circle cx="37" cy="38.5" r="4.5" fill="url(#g-bauble)"/><circle cx="32.5" cy="31" r="4.5" fill="url(#g-bauble)"/>
+  </symbol>
+
+  <!-- Nhà: bản thường -->
+  <symbol id="i-house" viewBox="0 0 40 44">
+    <path d="M4 22 L20 6 L36 22 Z" fill="var(--house-roof)" stroke="rgba(0,0,0,.35)" stroke-width="1"/>
+    <rect x="8" y="21" width="24" height="20" fill="var(--house-body)" stroke="rgba(0,0,0,.35)" stroke-width="1"/>
+    <rect x="17" y="29" width="7" height="12" fill="rgba(0,0,0,.35)"/>
+    <rect x="11" y="25" width="5" height="5" fill="#F2D27A"/>
+  </symbol>
+
+  <!-- Nhà: bản tuyết (tuyết dày trên mái, cột băng dưới mái, vòng hoa trên cửa, ống khói) -->
+  <symbol id="i-house-snow" viewBox="0 0 40 44">
+    <rect x="26" y="7" width="5" height="10" fill="#7A4B2A"/>
+    <path d="M25 6 Q28.5 3 32 6 V8 H25 Z" fill="#FFFFFF"/>
+    <path d="M4 22 L20 6 L36 22 Z" fill="var(--house-roof)" stroke="rgba(0,0,0,.3)" stroke-width="1"/>
+    <rect x="8" y="21" width="24" height="20" fill="var(--house-body)" stroke="rgba(0,0,0,.3)" stroke-width="1"/>
+    <path d="M1.5 23 L20 3.5 L38.5 23 Q35 25.5 32 23.5 Q29 26.5 25 23.8 Q21 26 17 23.8 Q13 26.5 9 23.6 Q5 25.5 1.5 23 Z" fill="url(#g-snow)" stroke="#A9CBE2" stroke-width=".7"/>
+    <path d="M10 24.5 L11 28 L12 24.6 M22 24.8 L22.9 27.4 L23.8 24.8 M29 24.6 L30 29 L31 24.6" fill="#DCF0FF" stroke="#A9CBE2" stroke-width=".5"/>
+    <rect x="17" y="29" width="7" height="12" fill="#5A2A1C"/>
+    <circle cx="20.5" cy="32" r="2" fill="none" stroke="#2E6B45" stroke-width="1.3"/>
+    <rect x="11" y="27" width="5" height="5" fill="url(#g-window)"/>
+    <path d="M2 43 Q10 40 20 42 Q30 40 38 43 V44 H2 Z" fill="#FFFFFF"/>
+  </symbol>
+
+  <!-- Khách sạn: bản thường -->
+  <symbol id="i-hotel" viewBox="0 0 64 44">
+    <path d="M4 18 L32 4 L60 18 Z" fill="var(--hotel-roof)" stroke="rgba(0,0,0,.35)" stroke-width="1"/>
+    <rect x="7" y="17" width="50" height="24" fill="var(--hotel-body)" stroke="rgba(0,0,0,.35)" stroke-width="1"/>
+    <g fill="#F2D27A"><rect x="12" y="22" width="6" height="6"/><rect x="22" y="22" width="6" height="6"/><rect x="36" y="22" width="6" height="6"/><rect x="46" y="22" width="6" height="6"/></g>
+    <rect x="28" y="30" width="8" height="11" fill="rgba(0,0,0,.35)"/>
+  </symbol>
+
+  <!-- Khách sạn: bản tuyết, thêm dây đèn dưới mái -->
+  <symbol id="i-hotel-snow" viewBox="0 0 64 44">
+    <path d="M4 18 L32 4 L60 18 Z" fill="var(--hotel-roof)" stroke="rgba(0,0,0,.3)" stroke-width="1"/>
+    <rect x="7" y="17" width="50" height="24" fill="var(--hotel-body)" stroke="rgba(0,0,0,.3)" stroke-width="1"/>
+    <path d="M1 19 L32 1.5 L63 19 Q58 21.5 54 19.5 Q50 22.5 45 19.8 Q40 22 35 19.8 Q30 22.5 25 19.8 Q20 22 15 19.8 Q10 22.5 6 19.6 Q3 21 1 19 Z" fill="url(#g-snow)" stroke="#A9CBE2" stroke-width=".7"/>
+    <path d="M8 22 Q14 25 20 22 Q26 25 32 22 Q38 25 44 22 Q50 25 56 22" stroke="#1F4D31" stroke-width=".7" fill="none"/>
+    <g><circle cx="11" cy="23.6" r="1.4" fill="#FF5A5F"/><circle cx="17" cy="23.6" r="1.4" fill="#5CD18A"/><circle cx="23" cy="23.6" r="1.4" fill="#FFD25A"/><circle cx="29" cy="23.6" r="1.4" fill="#6CC3FF"/><circle cx="35" cy="23.6" r="1.4" fill="#FF5A5F"/><circle cx="41" cy="23.6" r="1.4" fill="#5CD18A"/><circle cx="47" cy="23.6" r="1.4" fill="#FFD25A"/><circle cx="53" cy="23.6" r="1.4" fill="#6CC3FF"/></g>
+    <g fill="url(#g-window)"><rect x="12" y="27" width="6" height="5"/><rect x="22" y="27" width="6" height="5"/><rect x="36" y="27" width="6" height="5"/><rect x="46" y="27" width="6" height="5"/></g>
+    <rect x="28" y="32" width="8" height="9" fill="#5A2A1C"/>
+    <path d="M2 43 Q16 40 32 42 Q48 40 62 43 V44 H2 Z" fill="#FFFFFF"/>
+  </symbol>
+
+  <!-- Biểu tượng ô thường (chủ đề mặc định): con dấu sơn mài đơn giản -->
+  <symbol id="i-plain" viewBox="0 0 64 64">
+    <circle cx="32" cy="32" r="24" fill="none" stroke="#8A6A22" stroke-width="3"/>
+    <circle cx="32" cy="32" r="15" fill="none" stroke="#8A6A22" stroke-width="2" stroke-dasharray="4 3"/>
+    <circle cx="32" cy="32" r="5" fill="#8A6A22"/>
+  </symbol>
+</svg>
+
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Chủ đề Giáng Sinh · Sài Gòn tuyết</h1>
+      <p>Bản mẫu từng component, chưa nối vào game. Đổi chủ đề ở ô bên phải (hoặc ở mục "Mở phòng") để so với bản mặc định. Âm thanh tổng hợp bằng Web Audio, hình vẽ bằng SVG và canvas, không tải tài nguyên ngoài.</p>
+    </div>
+    <div class="top-ctl">
+      <div class="field" style="margin:0">
+        <select id="top-theme" aria-label="Chủ đề">
+          <option value="default">Mặc định · Sơn mài</option>
+          <option value="christmas" selected>Giáng Sinh · Tuyết</option>
+        </select>
+      </div>
+      <label class="chk"><input type="checkbox" id="calm" /> Giảm nhấp nháy</label>
+    </div>
+  </header>
+
+  <!-- ===================================================== 1. MỞ PHÒNG -->
+  <section class="card">
+    <h2>1 · Chọn chủ đề khi mở phòng <small>sảnh chờ</small></h2>
+    <p class="lead">Ô chọn nằm cùng hàng với các thiết lập phòng khác. Chỉ chủ phòng đổi được, và chỉ trong lúc chờ.</p>
+    <div class="grid2">
+      <div class="lobby">
+        <div class="dlg" style="width:100%">
+          <div class="led-frame" data-led></div>
+          <div class="kicker">PHÒNG MỚI</div>
+          <h3 style="font-size:22px">Mở phòng</h3>
+          <label class="field"><span>Tên bạn</span><input value="Ba Tư" /></label>
+          <label class="field"><span>Số ghế</span>
+            <select><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option></select>
+          </label>
+          <label class="field"><span>Chủ đề</span>
+            <select id="lobby-theme">
+              <option value="default">Mặc định · Sài Gòn Gia Định</option>
+              <option value="christmas" selected>Giáng Sinh · Sài Gòn tuyết</option>
+            </select>
+          </label>
+          <div class="theme-peek">
+            <div class="sw" id="peek-sw"></div>
+            <div id="peek-txt"></div>
+          </div>
+          <div class="row"><button class="btn">Mở phòng</button></div>
+        </div>
+      </div>
+      <div class="note">
+        <p><b>Cách nối vào game (đề xuất):</b></p>
+        <p style="margin-top:6px">· Chủ đề là một trường trong thiết lập phòng, phát cho mọi máy qua cùng đường với số ghế. Lúc bấm "Bắt đầu" thì chép vào <code>state.theme</code>, nên người vào lại giữa ván nhận đúng chủ đề qua ảnh chụp trạng thái.</p>
+        <p style="margin-top:6px">· Phía vẽ đọc một bảng màu theo chủ đề: <code>P</code> trong <code>boardArt.js</code> và biến CSS trong <code>style.css</code> đổi theo <code>body.theme-christmas</code>. Bàn cờ vẽ lại một lần khi đổi chủ đề, không tốn thêm khung hình nào lúc chơi.</p>
+        <p style="margin-top:6px">· Phụ kiện (tuyết, đèn, người tuyết...) vẽ trên một lớp canvas riêng đè lên bàn cờ, nên chủ đề mặc định không phải đổi dòng vẽ nào.</p>
+        <p style="margin-top:6px">· Luật chơi không đổi theo chủ đề, trừ bộ thẻ Thời Cuộc có thêm Bão Tuyết (mục 7).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================== 2. BẢNG MÀU -->
+  <section class="card">
+    <h2>2 · Bảng màu <small>Giáng Sinh</small></h2>
+    <p class="lead">Nền trắng và xanh nước biển nhạt cho tuyết. Đỏ, xanh lá, nâu, vàng chỉ dùng cho đồ vật (quà, cây thông, ông già Noel, gỗ), không dùng làm nền. Tám màu nhóm đất giữ nguyên để người quen bàn cờ không phải học lại.</p>
+    <div class="swatches" id="swatches"></div>
+  </section>
+
+  <!-- ===================================================== 3. BIỂU TƯỢNG -->
+  <section class="card">
+    <h2>3 · Bộ biểu tượng <small>SVG, 64×64</small></h2>
+    <p class="lead">Vẽ tay bằng SVG để không phụ thuộc tài nguyên ngoài và không bị vỡ khi phóng. Cột chú thích nhỏ là chỗ đề xuất đặt trong game.</p>
+    <div class="icons" id="icons"></div>
+  </section>
+
+  <!-- ===================================================== 4. Ô ĐẤT -->
+  <section class="card">
+    <h2>4 · Ô đất <small>tuyết đọng, dây đèn, phụ kiện</small></h2>
+    <p class="lead">Mỗi ô có: lớp tuyết đọng trên dải màu nhóm, dây đèn LED nhỏ ngay dưới dải màu (sáng dịu theo chu kỳ 4,8 giây, không tắt hẳn), một phụ kiện ở giữa ô, và một gờ tuyết ở mép ngoài như tuyết dồn bên lề đường. Phụ kiện chọn cố định theo số ô để mọi máy thấy giống nhau.</p>
+    <div class="tiles" id="tiles"></div>
+    <p class="tiles-note">Ô góc dùng phụ kiện lớn: Bắt Đầu là xe trượt tuyết chở quà, Khám Lớn là người tuyết, Bến Đậu là cây thông, Vào Tù là ông già Noel. Giữa bàn cờ đề xuất vẽ Nhà thờ Đức Bà phủ tuyết thay trống đồng.</p>
+  </section>
+
+  <!-- ===================================================== 5. NHÀ -->
+  <section class="card">
+    <h2>5 · Nhà và khách sạn <small>tuyết trên mái</small></h2>
+    <p class="lead">Bản tuyết thêm: lớp tuyết dày trên mái có mép rủ, cột băng dưới mái, ống khói, cửa sổ sáng ấm, vòng hoa trên cửa nhà, dây đèn dưới mái khách sạn.</p>
+    <div class="houses-cmp">
+      <figure><svg><use href="#i-house"/></svg><figcaption>Nhà · mặc định</figcaption></figure>
+      <figure><svg><use href="#i-house-snow"/></svg><figcaption>Nhà · Giáng Sinh</figcaption></figure>
+      <figure><svg class="hotel" viewBox="0 0 64 44"><use href="#i-hotel"/></svg><figcaption>Khách sạn · mặc định</figcaption></figure>
+      <figure><svg class="hotel" viewBox="0 0 64 44"><use href="#i-hotel-snow"/></svg><figcaption>Khách sạn · Giáng Sinh</figcaption></figure>
+    </div>
+  </section>
+
+  <!-- ===================================================== 6. HỘP THOẠI -->
+  <section class="card">
+    <h2>6 · Hộp thoại có viền đèn LED <small>mọi modal dùng chung</small></h2>
+    <p class="lead">Bóng đèn rải đều theo chu vi, dây điện võng giữa hai bóng. Bóng chia ba nhóm lệch pha 0,6 giây nên ánh sáng chạy vòng quanh khung. Bật "Giảm nhấp nháy" thì đèn đứng yên.</p>
+    <div class="modal-stage">
+      <div class="dlg">
+        <div class="led-frame" data-led></div>
+        <div class="kicker">THỜI CUỘC</div>
+        <h3>Bão Tuyết</h3>
+        <div class="ill"><svg viewBox="0 0 120 90"><use href="#i-house-snow" x="6" y="22" width="44" height="48"/><use href="#i-pile" x="54" y="26" width="60" height="60"/><use href="#i-flake" x="70" y="2" width="26" height="26"/></svg></div>
+        <p>Bão tuyết quét qua Rue Taberd. Một căn nhà sập dưới sức nặng của tuyết; đường còn phủ tuyết hai lượt.</p>
+        <div class="row"><button class="btn ghost" data-sfx="tick">Xem ô</button><button class="btn" data-sfx="handbell">Đã hiểu</button></div>
+      </div>
+    </div>
+    <div style="text-align:center"><button class="btn" id="open-modal">Mở hộp thoại nổi</button></div>
+  </section>
+
+  <!-- ===================================================== 7. BÃO TUYẾT -->
+  <section class="card">
+    <h2>7 · Sự kiện Bão Tuyết <small>hoạt cảnh trên ô, cùng họ với hoả hoạn và động đất</small></h2>
+    <p class="lead">Chỉ diễn bằng hình (gió, tuyết, mái sập, đống tuyết), không chữ nổi, giống hoạt cảnh ô đất hiện có. Đống tuyết ở lại trên ô sau khi diễn xong.</p>
+    <div class="storm">
+      <canvas id="storm-cv"></canvas>
+      <div class="storm-ctl">
+        <label class="field"><span>Số nhà trên ô</span>
+          <select id="storm-houses"><option>1</option><option>2</option><option selected>3</option><option>4</option><option value="5">Khách sạn</option></select>
+        </label>
+        <button class="btn" id="storm-go">Nổi bão</button>
+        <button class="btn ghost" id="storm-reset">Đặt lại</button>
+        <ol class="timeline" id="storm-tl">
+          <li data-at="0">0,0s · trời tối, gió nổi</li>
+          <li data-at="0.6">0,6s · tuyết quất ngang, đọng dần trên mái</li>
+          <li data-at="2.3">2,3s · nhà rung, mái sập, ván gỗ văng</li>
+          <li data-at="3.0">3,0s · gió lặng, đống tuyết phủ lên ô</li>
+        </ol>
+        <p class="note">Đề xuất luật: mất 1 cấp nhà (khách sạn về 4 nhà), cùng tỉ lệ với động đất. Đống tuyết làm ô "đóng băng" 2 lượt: ai dừng ở đó trả nửa tiền thuê. Mục này cần chỉnh lại theo cân bằng hiện tại của <code>data/events.js</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================== 8. ÂM THANH -->
+  <section class="card">
+    <h2>8 · Nhạc nền và tiếng động <small>Web Audio</small></h2>
+    <p class="lead">Jingle Bells (James Lord Pierpont, 1857) đã hết bản quyền nên chép giai điệu vào mã được. Tiếng chuông dùng tỉ lệ bồi âm của chuông thật: chuông nhà thờ có bồi âm thứ ba thứ (tierce) làm tiếng nghe "buồn", chuông xe tuần lộc là chùm chuông nhỏ cao tần rung lệch nhịp.</p>
+    <div class="music-bar">
+      <button class="btn" id="music-btn">▶ Jingle Bells</button>
+      <label class="chk">Âm lượng <input type="range" id="music-vol" min="0" max="100" value="55" /></label>
+      <span class="now" id="music-now"></span>
+    </div>
+    <div class="sfx" id="sfx"></div>
+  </section>
+
+  <!-- ===================================================== 9. GỢI Ý -->
+  <section class="card">
+    <h2>9 · Gợi ý thêm</h2>
+    <p class="lead">Những thứ chưa có trong danh sách của bạn. Nhãn cho biết ảnh hưởng tới đâu.</p>
+    <div class="ideas" id="ideas"></div>
+  </section>
+</div>
+
+<!-- Hộp thoại nổi -->
+<div class="overlay" id="overlay">
+  <div class="dlg">
+    <div class="led-frame" data-led></div>
+    <div class="kicker">KHÍ VẬN</div>
+    <h3>Ông Già Noel ghé thăm</h3>
+    <div class="ill"><svg viewBox="0 0 120 90"><use href="#i-santa" x="4" y="6" width="70" height="70"/><use href="#i-gift" x="66" y="34" width="50" height="50"/></svg></div>
+    <p>Mọi người chơi nhận 50$. Người ít tiền mặt nhất nhận gấp đôi.</p>
+    <div class="row"><button class="btn" id="close-modal">Nhận quà</button></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ================================================================ chủ đề */
+const THEME_INFO = {
+  default: {
+    sw: ['#7C1E14', '#C8A048', '#F0E3C8', '#2E6B52', '#30150F'],
+    txt: 'Sơn mài đỏ, vàng hoàng cung, giấy dó. Bàn cờ và nhạc như hiện tại.',
+  },
+  christmas: {
+    sw: ['#FBFDFF', '#DCEBF6', '#A9CBE2', '#B3262E', '#2E6B45', '#7A4B2A'],
+    txt: 'Nền tuyết trắng, xanh nhạt. Đèn LED trên ô và hộp thoại, Jingle Bells, sự kiện Bão Tuyết.',
+  },
+};
+
+function setTheme(name) {
+  document.body.classList.toggle('theme-christmas', name === 'christmas');
+  document.body.classList.toggle('theme-default', name !== 'christmas');
+  $('#top-theme').value = name;
+  $('#lobby-theme').value = name;
+  const info = THEME_INFO[name];
+  $('#peek-sw').innerHTML = info.sw.map((c) => `<i style="background:${c}"></i>`).join('');
+  $('#peek-txt').textContent = info.txt;
+  syncHouseGlyphs();
+  // Khung đèn cần đo lại sau khi hiện ra (lúc ẩn thì kích thước bằng 0).
+  requestAnimationFrame(layoutLeds);
+  drawStorm();
+}
+$('#top-theme').addEventListener('change', (e) => setTheme(e.target.value));
+$('#lobby-theme').addEventListener('change', (e) => setTheme(e.target.value));
+$('#calm').addEventListener('change', (e) => document.body.classList.toggle('calm', e.target.checked));
+
+/* ================================================================ bảng màu */
+const PALETTE = [
+  ['Tuyết', '#FBFDFF', 'nền ô, nền hộp thoại'],
+  ['Sương giá', '#DCEBF6', 'nền trang, bóng tuyết'],
+  ['Băng', '#A9CBE2', 'viền, đường kẻ'],
+  ['Mực đông', '#1E3A55', 'chữ chính'],
+  ['Đỏ Noel', '#B3262E', 'nút chính, tiêu đề, quà'],
+  ['Xanh thông', '#2E6B45', 'cây thông, vòng hoa'],
+  ['Nâu gỗ', '#7A4B2A', 'thân cây, xe trượt'],
+  ['Vàng chuông', '#D6A738', 'chuông, ngôi sao, ruy băng'],
+];
+$('#swatches').innerHTML = PALETTE.map(([n, c, u]) => `
+  <div class="swatch"><div class="c" style="background:${c}"></div>
+  <div class="t"><b>${n}</b><code>${c}</code><br>${u}</div></div>`).join('');
+
+/* ================================================================ biểu tượng */
+const ICONS = [
+  ['tree', 'Cây thông', 'Bến Đậu, ô đất'],
+  ['santa', 'Ông già Noel', 'Vào Tù, thẻ Khí Vận'],
+  ['gift', 'Hộp quà', 'ô đất, mở thẻ'],
+  ['flake', 'Bông tuyết', 'ô đất, Bão Tuyết'],
+  ['snowman', 'Người tuyết', 'Khám Lớn, ô đất'],
+  ['pile', 'Đống tuyết', 'sau Bão Tuyết'],
+  ['bells', 'Chuông', 'ô Cơ Hội'],
+  ['sleigh', 'Xe trượt tuyết', 'Bắt Đầu'],
+  ['cane', 'Kẹo gậy', 'ô Thuế'],
+  ['wreath', 'Vòng hoa', 'ô Khí Vận, nhà ga'],
+  ['cathedral', 'Nhà thờ Đức Bà', 'giữa bàn cờ'],
+  ['hat', 'Mũ Noel', 'đội lên quân cờ'],
+  ['sock', 'Tất Noel', 'ô Thuế xa xỉ'],
+  ['holly', 'Nhựa ruồi', 'góc hộp thoại'],
+];
+$('#icons').innerHTML = ICONS.map(([id, n, u]) => `
+  <div class="icon-cell"><svg><use href="#i-${id}"/></svg><span>${n}</span><em>${u}</em></div>`).join('');
+
+/* ================================================================ ô đất */
+const LED_COLORS = ['#FF5A5F', '#5CD18A', '#FFD25A', '#6CC3FF', '#FF9BD2'];
+const TILES = [
+  { corner: true, name: 'BẮT ĐẦU', acc: 'sleigh', price: 'nhận 200$' },
+  { name: "Quai de\nl'Arroyo", grp: '#6B4A2F', price: 60, acc: 'snowman', houses: 1 },
+  { name: 'Rue\nMac-Mahon', grp: '#79B2C6', price: 100, acc: 'tree', houses: 2 },
+  { name: 'Rue\nPellerin', grp: '#C77BA0', price: 140, acc: 'gift', houses: 0 },
+  { name: 'Bd\nGallieni', grp: '#D98634', price: 180, acc: 'santa', houses: 3 },
+  { name: 'Rue\nTaberd', grp: '#B22F26', price: 220, acc: 'flake', houses: 4 },
+  { name: 'Bd\nNorodom', grp: '#E0B93E', price: 280, acc: 'pile', houses: 5 },
+  { name: 'Rue\nCatinat', grp: '#27418C', price: 350, acc: 'cathedral', houses: 0 },
+  { corner: true, name: 'KHÁM LỚN', acc: 'snowman', price: '' },
+];
+
+/** Lớp tuyết đọng: mép trên phồng, mép dưới rủ thành giọt ở vị trí lệch nhau. */
+function snowcapSVG(seed) {
+  const r = mulberry(seed);
+  let d = 'M0 12 Q4 2 14 4 ';
+  for (let x = 14; x < 100; x += 14) d += `Q${x + 7} ${1 + r() * 3} ${x + 14} ${4 + r() * 2} `;
+  d += 'L100 14 ';
+  // Mép dưới đi ngược từ phải sang trái, thỉnh thoảng rủ một giọt dài.
+  for (let x = 100; x > 0; x -= 10) {
+    const drip = r() < 0.35 ? 6 + r() * 6 : 0;
+    d += drip ? `Q${x - 3} ${14 + drip} ${x - 5} ${14 + drip * 0.4} Q${x - 7} 14 ${x - 10} 14 ` : `Q${x - 5} ${15 + r() * 2} ${x - 10} 14 `;
+  }
+  d += 'Z';
+  return `<svg class="snowcap" viewBox="0 0 100 26" preserveAspectRatio="none">
+    <path d="${d}" fill="#A9CBE2" transform="translate(0 1.4)" opacity=".55"/>
+    <path d="${d}" fill="url(#g-snow)"/></svg>`;
+}
+
+/** Dây đèn trên ô: dây võng giữa các bóng, mỗi bóng lệch pha một chút. */
+function ledsSVG(seed, n = 6) {
+  const pts = Array.from({ length: n }, (_, i) => ((i + 0.5) / n) * 100);
+  let wire = 'M0 2 ';
+  for (const x of pts) wire += `Q${x - 100 / n / 2} 9 ${x} 5 `;
+  wire += 'Q100 9 100 2';
+  const bulbs = pts.map((x, i) => {
+    const c = LED_COLORS[(i + seed) % LED_COLORS.length];
+    return `<g class="bulb" style="animation-delay:${-((i * 0.83 + seed) % 4.8).toFixed(2)}s">
+      <circle cx="${x}" cy="9" r="5" fill="${c}" opacity=".28"/>
+      <ellipse cx="${x}" cy="8.6" rx="2.1" ry="2.8" fill="${c}"/>
+      <rect x="${x - 1.2}" y="4.4" width="2.4" height="1.8" fill="#1F4D31"/></g>`;
+  }).join('');
+  return `<div class="leds"><svg viewBox="0 0 100 14" preserveAspectRatio="none">
+    <path d="${wire}" stroke="#1F4D31" stroke-width=".8" fill="none" vector-effect="non-scaling-stroke"/>${bulbs}</svg></div>`;
+}
+
+function driftSVG(seed) {
+  const r = mulberry(seed * 7 + 3);
+  let d = 'M0 26 L0 18 ';
+  for (let x = 0; x < 100; x += 20) d += `Q${x + 10} ${10 + r() * 6} ${x + 20} ${16 + r() * 4} `;
+  d += 'L100 26 Z';
+  return `<svg class="drift" viewBox="0 0 100 26" preserveAspectRatio="none"><path d="${d}" fill="url(#g-snow)" opacity=".95"/>
+    <path d="M0 26 Q50 19 100 26 Z" fill="#DCEBF6"/></svg>`;
+}
+
+function housesHTML(n) {
+  if (!n) return '';
+  if (n === 5) return `<svg class="hotel" viewBox="0 0 64 44"><use class="h-plain" href="#i-hotel"/></svg>`;
+  return Array.from({ length: n }, () => `<svg viewBox="0 0 40 44"><use class="h-plain" href="#i-house"/></svg>`).join('');
+}
+
+$('#tiles').innerHTML = TILES.map((t, i) => `
+  <div class="tile ${t.corner ? 'corner' : ''}" style="--grp:${t.grp || 'transparent'}">
+    ${t.corner ? '' : `<div class="head">${snowcapSVG(i + 11)}<div class="houses">${housesHTML(t.houses)}</div></div>`}
+    ${ledsSVG(i, t.corner ? 9 : 6)}
+    <div class="name">${t.name}</div>
+    <div class="art"><svg class="plain"><use href="#i-plain"/></svg><svg class="acc"><use href="#i-${t.acc}"/></svg></div>
+    ${driftSVG(i + 1)}
+    <div class="price">${typeof t.price === 'number' ? t.price + '$' : t.price}</div>
+  </div>`).join('');
+
+/** Nhà trên ô đổi giữa bản thường và bản tuyết theo chủ đề. */
+function syncHouseGlyphs() {
+  const x = document.body.classList.contains('theme-christmas');
+  for (const u of $$('.tile use.h-plain')) {
+    const hotel = u.getAttribute('href').includes('hotel');
+    u.setAttribute('href', hotel ? (x ? '#i-hotel-snow' : '#i-hotel') : (x ? '#i-house-snow' : '#i-house'));
+  }
+}
+
+/* ================================================================ viền đèn hộp thoại */
+/** Rải bóng theo chu vi hình chữ nhật bo góc; dây võng ra ngoài giữa hai bóng. */
+function layoutLeds() {
+  for (const host of $$('[data-led]')) {
+    const w = host.clientWidth, h = host.clientHeight;
+    if (!w || !h) continue;
+    const r = 22, step = 30;
+    const per = 2 * (w + h) - 8 * r + 2 * Math.PI * r;
+    const n = Math.max(12, Math.round(per / step));
+    const pts = [];
+    for (let i = 0; i < n; i++) pts.push(pointOnRoundRect(w, h, r, (i / n) * per));
+    let wire = `M${pts[0].x} ${pts[0].y} `;
+    for (let i = 0; i < n; i++) {
+      const a = pts[i], b = pts[(i + 1) % n];
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      // Võng về phía tâm khung chứ không ra ngoài: dây nằm đè lên mép hộp thoại.
+      const cx = w / 2, cy = h / 2;
+      const dx = cx - mx, dy = cy - my, L = Math.hypot(dx, dy) || 1;
+      wire += `Q${mx + (dx / L) * 7} ${my + (dy / L) * 7} ${b.x} ${b.y} `;
+    }
+    const colors = ['#FF4D55', '#4FD27F', '#FFCF4A', '#57B8FF', '#FF8AD0'];
+    const bulbs = pts.map((p, i) => {
+      const c = colors[i % colors.length];
+      // Bóng xoay theo pháp tuyến để đuôi bóng cắm vào dây.
+      const rot = (Math.atan2(p.ny, p.nx) * 180) / Math.PI - 90;
+      return `<g class="bulb g${i % 3}" style="--glow:${c}" transform="translate(${p.x} ${p.y}) rotate(${rot})">
+        <rect x="-2.4" y="-5" width="4.8" height="4" rx="1" fill="#1F4D31"/>
+        <ellipse cx="0" cy="3.4" rx="4.2" ry="6" fill="${c}"/>
+        <ellipse cx="-1.3" cy="1.6" rx="1.2" ry="2" fill="#FFFFFF" opacity=".7"/></g>`;
+    }).join('');
+    host.innerHTML = `<svg viewBox="0 0 ${w} ${h}"><path d="${wire}Z" fill="none" stroke="#1F4D31" stroke-width="1.6"/>${bulbs}</svg>`;
+  }
+}
+
+/** Điểm trên chu vi hình chữ nhật bo góc, kèm pháp tuyến hướng ra ngoài. */
+function pointOnRoundRect(w, h, r, s) {
+  const segs = [
+    { len: w - 2 * r, at: (t) => ({ x: r + t, y: 0, nx: 0, ny: -1 }) },
+    { len: (Math.PI * r) / 2, at: (t) => arc(w - r, r, -Math.PI / 2 + t / r) },
+    { len: h - 2 * r, at: (t) => ({ x: w, y: r + t, nx: 1, ny: 0 }) },
+    { len: (Math.PI * r) / 2, at: (t) => arc(w - r, h - r, t / r) },
+    { len: w - 2 * r, at: (t) => ({ x: w - r - t, y: h, nx: 0, ny: 1 }) },
+    { len: (Math.PI * r) / 2, at: (t) => arc(r, h - r, Math.PI / 2 + t / r) },
+    { len: h - 2 * r, at: (t) => ({ x: 0, y: h - r - t, nx: -1, ny: 0 }) },
+    { len: (Math.PI * r) / 2, at: (t) => arc(r, r, Math.PI + t / r) },
+  ];
+  function arc(cx, cy, a) { return { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r, nx: Math.cos(a), ny: Math.sin(a) }; }
+  for (const g of segs) { if (s <= g.len) return g.at(s); s -= g.len; }
+  return segs[0].at(0);
+}
+
+new ResizeObserver(() => layoutLeds()).observe(document.body);
+
+$('#open-modal').addEventListener('click', () => {
+  $('#overlay').classList.add('on');
+  requestAnimationFrame(layoutLeds);
+  sfx.sparkle();
+});
+$('#close-modal').addEventListener('click', () => { $('#overlay').classList.remove('on'); sfx.coins(); });
+$('#overlay').addEventListener('click', (e) => { if (e.target.id === 'overlay') $('#overlay').classList.remove('on'); });
+
+/* ================================================================ tiện ích */
+function mulberry(a) {
+  return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const eOut = (x) => 1 - Math.pow(1 - x, 3);
+
+/* ================================================================ tuyết rơi cả trang */
+const pageCv = $('#page-snow'), pg = pageCv.getContext('2d');
+let flakes = [], gust = 0;
+function sizePage() {
+  const d = Math.min(devicePixelRatio || 1, 2);
+  pageCv.width = innerWidth * d; pageCv.height = innerHeight * d;
+  pg.setTransform(d, 0, 0, d, 0, 0);
+  const n = Math.round((innerWidth * innerHeight) / 16000);
+  flakes = Array.from({ length: n }, () => newFlake(true));
+}
+function newFlake(anywhere) {
+  return { x: Math.random() * innerWidth, y: anywhere ? Math.random() * innerHeight : -8, r: 1 + Math.random() * 2.6, v: 18 + Math.random() * 30, ph: Math.random() * 6.28 };
+}
+addEventListener('resize', sizePage); sizePage();
+
+let lastT = performance.now();
+function pageLoop(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  pg.clearRect(0, 0, innerWidth, innerHeight);
+  const on = document.body.classList.contains('theme-christmas') && !document.body.classList.contains('calm') && !reduceMotion;
+  if (on) {
+    gust *= 0.985;
+    pg.fillStyle = 'rgba(255,255,255,.9)';
+    for (const f of flakes) {
+      f.ph += dt;
+      f.y += f.v * dt * (1 + gust * 1.5);
+      f.x += (Math.sin(f.ph) * 12 + gust * 260) * dt;
+      if (f.y > innerHeight + 6 || f.x > innerWidth + 20) Object.assign(f, newFlake(false), { x: Math.random() * innerWidth - gust * 200 });
+      pg.globalAlpha = 0.45 + f.r / 6;
+      pg.beginPath(); pg.arc(f.x, f.y, f.r, 0, 6.283); pg.fill();
+    }
+    pg.globalAlpha = 1;
+  }
+  stormTick(now);
+  requestAnimationFrame(pageLoop);
+}
+requestAnimationFrame(pageLoop);
+
+/* ================================================================ hoạt cảnh bão tuyết */
+const scv = $('#storm-cv'), sg = scv.getContext('2d');
+let SW = 640, SH = 360;
+const storm = { running: false, t0: 0, t: 0, houses: 3, lostOne: false, drift: 0, parts: [], streaks: [], flakes: [] };
+
+function sizeStorm() {
+  const d = Math.min(devicePixelRatio || 1, 2);
+  const r = scv.getBoundingClientRect();
+  SW = r.width || 640; SH = r.height || 360;
+  scv.width = SW * d; scv.height = SH * d;
+  sg.setTransform(d, 0, 0, d, 0, 0);
+  drawStorm();
+}
+new ResizeObserver(sizeStorm).observe(scv);
+
+$('#storm-houses').addEventListener('change', (e) => { if (!storm.running) { storm.houses = +e.target.value; storm.lostOne = false; storm.drift = 0; drawStorm(); } });
+$('#storm-reset').addEventListener('click', () => { storm.running = false; storm.houses = +$('#storm-houses').value; storm.lostOne = false; storm.drift = 0; storm.parts = []; drawStorm(); markTimeline(-1); });
+$('#storm-go').addEventListener('click', () => {
+  if (storm.running) return;
+  storm.houses = +$('#storm-houses').value; storm.lostOne = false; storm.drift = 0;
+  storm.running = true; storm.t0 = performance.now(); storm.parts = [];
+  storm.flakes = Array.from({ length: 260 }, () => ({ x: Math.random() * 640, y: Math.random() * 360, r: 0.8 + Math.random() * 2.4, v: 0.6 + Math.random() }));
+  storm.streaks = Array.from({ length: 40 }, () => ({ x: Math.random() * 640, y: Math.random() * 360, len: 30 + Math.random() * 80, v: 0.7 + Math.random() * 0.6 }));
+  sfx.blizzard();
+  gust = 1;
+});
+
+const STORM_LEN = 4.6;
+
+function stormTick(now) {
+  if (!storm.running) return;
+  const t = (now - storm.t0) / 1000;
+  storm.t = t;
+  markTimeline(t);
+  if (t > STORM_LEN) { storm.running = false; drawStorm(); return; }
+  drawStorm();
+}
+
+function markTimeline(t) {
+  const items = $$('#storm-tl li');
+  let cur = -1;
+  items.forEach((li, i) => { if (t >= +li.dataset.at) cur = i; });
+  items.forEach((li, i) => li.classList.toggle('now', i === cur));
+}
+
+/** Vẽ một khung hình của hoạt cảnh; gọi cả khi đứng yên để hiện trạng thái cuối. */
+function drawStorm() {
+  // Vẽ trong hệ 640×360 cố định rồi co theo khung, để số đo không phụ thuộc cỡ màn hình.
+  const g = sg, W = 640, H = 360, t = storm.running ? storm.t : (storm.lostOne ? STORM_LEN : 0);
+  const xmas = document.body.classList.contains('theme-christmas');
+  const wind = storm.running ? Math.sin(Math.PI * seg(t, 0, 3.4)) : 0;   // 0 → 1 → 0
+  const dark = storm.running ? Math.sin(Math.PI * seg(t, 0, 3.8)) * 0.55 : 0;
+  const quake = storm.running ? Math.max(0, Math.sin(Math.PI * seg(t, 1.6, 2.9))) : 0;
+  const shake = quake * 3 * Math.sin(t * 70);
+
+  g.save();
+  g.clearRect(0, 0, SW, SH);
+  g.scale(SW / W, SH / H);
+  g.translate(shake, 0);
+
+  // Trời và nền tuyết
+  const sky = g.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, xmas ? '#CFE2F0' : '#4A241A'); sky.addColorStop(1, xmas ? '#F3F8FC' : '#30150F');
+  g.fillStyle = sky; g.fillRect(-10, 0, W + 20, H);
+  g.fillStyle = xmas ? '#FFFFFF' : '#E4D2AC';
+  g.beginPath(); g.moveTo(-10, H * 0.74); g.quadraticCurveTo(W * 0.5, H * 0.70, W + 10, H * 0.74); g.lineTo(W + 10, H); g.lineTo(-10, H); g.fill();
+
+  // Ô đất nằm phẳng dưới chân nhà
+  const tx = W * 0.1, tw = W * 0.8, ty = H * 0.66, th = H * 0.2;
+  g.fillStyle = xmas ? '#F8FBFE' : '#F0E3C8'; g.strokeStyle = xmas ? '#8FB4D0' : '#8A6A22'; g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(tx + 20, ty); g.lineTo(tx + tw - 20, ty); g.lineTo(tx + tw, ty + th); g.lineTo(tx, ty + th); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = '#B22F26';
+  g.beginPath(); g.moveTo(tx + 20, ty); g.lineTo(tx + tw - 20, ty); g.lineTo(tx + tw - 16, ty + th * 0.22); g.lineTo(tx + 16, ty + th * 0.22); g.closePath(); g.fill();
+
+  // Nhà: tuyết trên mái dày dần, căn giữa sập lúc 2,3s
+  const n = storm.houses === 5 ? 1 : storm.houses;
+  const hotel = storm.houses === 5;
+  const collapseIdx = hotel ? 0 : Math.floor((n - 1) / 2);
+  const roofSnow = storm.running ? seg(t, 0.6, 2.2) : (storm.lostOne ? 1 : 0.15);
+  const fall = storm.running ? seg(t, 2.3, 2.9) : (storm.lostOne ? 1 : 0);
+  const gap = hotel ? 0 : Math.min(118, tw / (n + 0.5));
+  for (let i = 0; i < n; i++) {
+    const hx = W / 2 + (i - (n - 1) / 2) * gap;
+    const hy = ty + th * 0.15;
+    const tremble = quake * Math.sin(t * 50 + i) * 1.5;
+    const isDoomed = i === collapseIdx;
+    if (isDoomed && fall >= 1) {
+      // Còn lại đống gạch phủ tuyết
+      drawRubble(g, hx, hy, hotel ? 2.4 : 1.7, xmas);
+      continue;
+    }
+    g.save();
+    g.translate(hx + tremble, hy);
+    if (isDoomed && fall > 0) {
+      const f = eOut(fall);
+      g.scale(1 + f * 0.25, 1 - f * 0.85);
+      g.rotate(f * 0.12);
+    }
+    drawHouseCv(g, hotel ? 2.6 : 1.8, hotel, xmas, (xmas ? 0.25 : 0) + roofSnow * (isDoomed ? 1.4 : 1));
+    g.restore();
+  }
+
+  // Lúc mái sập: văng ván gỗ và bụi tuyết, một lần
+  if (storm.running && fall > 0 && !storm.lostOne) {
+    storm.lostOne = true;
+    const hx = W / 2 + (collapseIdx - (n - 1) / 2) * gap;
+    for (let k = 0; k < 26; k++) storm.parts.push({ kind: k < 10 ? 'plank' : 'puff', x: hx + (Math.random() - 0.5) * 30, y: ty - 40, vx: (Math.random() - 0.3) * 220, vy: -80 - Math.random() * 200, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 12, life: 1 });
+    sfx.collapse();
+  }
+
+  // Đống tuyết dồn lên ô, ở lại sau hoạt cảnh
+  const drift = storm.running ? seg(t, 2.6, 4.2) : (storm.lostOne ? 1 : 0);
+  if (drift > 0) drawDrift(g, tx, ty, tw, th, eOut(drift));
+
+  // Mảnh văng
+  const dt = 1 / 60;
+  for (const p of storm.parts) {
+    p.vy += 420 * dt; p.x += (p.vx + wind * 160) * dt; p.y += p.vy * dt; p.rot += p.vr * dt; p.life -= dt * 0.7;
+    if (p.y > ty + th * 0.6) { p.y = ty + th * 0.6; p.vy *= -0.25; p.vx *= 0.6; }
+    g.save(); g.globalAlpha = clamp(p.life); g.translate(p.x, p.y); g.rotate(p.rot);
+    if (p.kind === 'plank') { g.fillStyle = '#7A4B2A'; g.fillRect(-8, -2, 16, 4); }
+    else { g.fillStyle = '#FFFFFF'; g.beginPath(); g.arc(0, 0, 6 + (1 - p.life) * 10, 0, 6.283); g.fill(); }
+    g.restore();
+  }
+  storm.parts = storm.parts.filter((p) => p.life > 0);
+
+  // Màn tối và gió
+  if (dark > 0) { g.fillStyle = `rgba(60, 85, 115, ${dark})`; g.fillRect(-10, 0, W + 20, H); }
+  if (wind > 0.02) {
+    g.strokeStyle = `rgba(255,255,255,${0.5 * wind})`; g.lineWidth = 1.6; g.lineCap = 'round';
+    for (const s of storm.streaks) {
+      s.x += (900 * s.v * wind) * dt; s.y += 60 * dt;
+      if (s.x - s.len > W) { s.x = -Math.random() * 100; s.y = Math.random() * H; }
+      g.beginPath(); g.moveTo(s.x - s.len * wind, s.y + Math.sin(s.x * 0.02) * 4); g.lineTo(s.x, s.y); g.stroke();
+    }
+    g.fillStyle = '#FFFFFF';
+    for (const f of storm.flakes) {
+      f.x += (700 * wind * f.v + 20) * dt; f.y += (60 + 120 * f.v) * dt + Math.sin(f.x * 0.03) * 0.6;
+      if (f.x > W + 5) f.x = -5; if (f.y > H) f.y = -5;
+      g.globalAlpha = 0.5 + 0.5 * wind;
+      g.beginPath(); g.ellipse(f.x, f.y, f.r * (1 + wind * 2), f.r, 0.2, 0, 6.283); g.fill();
+    }
+    g.globalAlpha = 1;
+  }
+  g.restore();
+}
+
+function drawHouseCv(g, s, hotel, xmas, snow) {
+  const w = (hotel ? 70 : 40) * s / (hotel ? 1.5 : 1), h = 34 * s;
+  g.save();
+  g.scale(1, 1);
+  // Thân
+  g.fillStyle = hotel ? (xmas ? '#B3262E' : '#B22F26') : (xmas ? '#2E6B45' : '#2E7D50');
+  g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 1;
+  g.fillRect(-w / 2, -h, w, h); g.strokeRect(-w / 2, -h, w, h);
+  // Cửa sổ, cửa
+  g.fillStyle = '#F2D27A';
+  if (hotel) for (let k = 0; k < 4; k++) g.fillRect(-w / 2 + 6 * s / 1.5 + k * (w - 8 * s / 1.5) / 4, -h + 6 * s, 5 * s, 5 * s);
+  else g.fillRect(-w / 2 + 6 * s, -h + 9 * s, 8 * s, 8 * s);
+  g.fillStyle = 'rgba(0,0,0,.4)'; g.fillRect(-5 * s, -16 * s, 10 * s, 16 * s);
+  // Mái
+  const rh = (hotel ? 22 : 24) * s / (hotel ? 1.2 : 1);
+  g.fillStyle = hotel ? '#7E1A20' : '#1F4D31';
+  g.beginPath(); g.moveTo(-w / 2 - 5, -h); g.lineTo(0, -h - rh); g.lineTo(w / 2 + 5, -h); g.closePath(); g.fill(); g.stroke();
+  // Tuyết trên mái: dày theo `snow`
+  if (snow > 0.01) {
+    const k = Math.min(snow, 1.6);
+    g.fillStyle = '#FFFFFF'; g.strokeStyle = '#A9CBE2';
+    g.beginPath();
+    g.moveTo(-w / 2 - 8, -h + 1);
+    g.lineTo(0, -h - rh - 3 - 7 * k);
+    g.lineTo(w / 2 + 8, -h + 1);
+    for (let x = w / 2 + 8; x > -w / 2 - 8; x -= 8) g.quadraticCurveTo(x - 4, -h + 2 + 5 * k * ((x * 7) % 3 === 0 ? 1.6 : 0.8), x - 8, -h + 1);
+    g.closePath(); g.fill(); g.stroke();
+  }
+  g.restore();
+}
+
+function drawRubble(g, x, y, s, xmas) {
+  g.save(); g.translate(x, y);
+  g.fillStyle = '#7A4B2A';
+  g.save(); g.rotate(-0.3); g.fillRect(-20 * s, -6, 26 * s, 4); g.restore();
+  g.save(); g.rotate(0.4); g.fillRect(-4 * s, -10, 24 * s, 4); g.restore();
+  g.fillStyle = xmas ? '#2E6B45' : '#2E7D50'; g.fillRect(-14 * s, -8, 12 * s, 8);
+  g.fillStyle = '#FFFFFF'; g.strokeStyle = '#A9CBE2';
+  g.beginPath(); g.moveTo(-26 * s, 2); g.quadraticCurveTo(-14 * s, -16, 0, -10); g.quadraticCurveTo(14 * s, -18, 26 * s, 2); g.closePath(); g.fill(); g.stroke();
+  g.restore();
+}
+
+function drawDrift(g, tx, ty, tw, th, k) {
+  g.save();
+  g.fillStyle = '#FFFFFF'; g.strokeStyle = '#A9CBE2'; g.lineWidth = 1.2;
+  const base = ty + th + 2, x0 = tx - 10, x1 = tx + tw * 0.8;
+  g.beginPath(); g.moveTo(x0, base);
+  g.quadraticCurveTo(x0 + 70, base - 50 * k, x0 + 190, base - 34 * k);
+  g.quadraticCurveTo(x0 + 320, base - 62 * k, x1, base - 14 * k);
+  g.lineTo(x1 + 30, base); g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = '#DCEBF6';
+  g.beginPath(); g.moveTo(x0 + 20, base); g.quadraticCurveTo(x0 + 140, base - 10 * k, x1 + 10, base); g.closePath(); g.fill();
+  g.restore();
+}
+
+/* ================================================================ âm thanh */
+let AC = null, master = null, musicBus = null;
+function ac() {
+  if (!AC) {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = 0.8;
+    // Hồi âm ngắn kiểu phòng đá: chuông nghe có không gian, không cần file impulse.
+    const conv = AC.createConvolver(); conv.buffer = makeReverb(2.4);
+    const wet = AC.createGain(); wet.gain.value = 0.22;
+    master.connect(AC.destination); master.connect(conv); conv.connect(wet); wet.connect(AC.destination);
+  }
+  if (AC.state === 'suspended') AC.resume();
+  return AC;
+}
+function makeReverb(sec) {
+  const len = Math.floor(AC.sampleRate * sec), b = AC.createBuffer(2, len, AC.sampleRate);
+  for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
+  return b;
+}
+let noiseBuf = null;
+function noise() {
+  if (!noiseBuf) { noiseBuf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate); const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }
+  const s = AC.createBufferSource(); s.buffer = noiseBuf; s.loop = true; return s;
+}
+
+/** Chuông cộng bồi âm: mỗi bồi âm là một sóng sin tắt dần riêng, bồi âm cao tắt nhanh hơn. */
+function bell(freq, t, { dur = 1.5, gain = 0.2, partials = [[1, 1]], out = master, attack = 0.002 } = {}) {
+  for (const [ratio, amp, decayK = 1] of partials) {
+    const f = freq * ratio; if (f > 16000) continue;
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'sine'; o.frequency.value = f;
+    const d = dur / (1 + (ratio - 1) * 0.35) * decayK;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain * amp, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g); g.connect(out); o.start(t); o.stop(t + d + 0.05);
+  }
+}
+const GLOCK = [[1, 1], [2.76, 0.32], [5.4, 0.12], [8.93, 0.05]];
+const HANDBELL = [[1, 1], [2.0, 0.5], [3.0, 0.25], [4.2, 0.18], [5.4, 0.1]];
+// Bồi âm chuông nhà thờ (đo trên chuông đồng): hum, prime, tierce (thứ ba thứ), quint, nominal...
+const CHURCH = [[0.5, 0.7, 1.6], [1, 1], [1.183, 0.6], [1.506, 0.35], [2, 0.55], [2.514, 0.22], [2.662, 0.18], [3.011, 0.12], [4.166, 0.08]];
+
+/** Chùm chuông xe tuần lộc: nhiều chuông nhỏ cao tần gõ lệch nhau trong `len` giây. */
+function sleigh(t, len = 0.5, gain = 0.07, out = master) {
+  const n = Math.round(len * 40);
+  for (let i = 0; i < n; i++) {
+    const at = t + Math.random() * len;
+    bell(2600 + Math.random() * 2600, at, { dur: 0.12 + Math.random() * 0.12, gain: gain * (0.5 + Math.random() * 0.5), partials: [[1, 1], [1.47, 0.5], [2.09, 0.3]], out });
+  }
+  const s = noise(), hp = AC.createBiquadFilter(), g = AC.createGain();
+  hp.type = 'highpass'; hp.frequency.value = 7000;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain * 0.5, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + len + 0.1);
+  s.connect(hp); hp.connect(g); g.connect(out); s.start(t); s.stop(t + len + 0.15);
+}
+
+const NOTE = { C: 0, 'C#': 1, D: 2, 'D#': 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, A: 9, 'A#': 10, B: 11 };
+function hz(n) { const m = n.match(/^([A-G]#?)(\d)$/); return 440 * Math.pow(2, (NOTE[m[1]] + (+m[2] + 1) * 12 - 69) / 12); }
+
+const sfx = {
+  dice() { const t = ac().currentTime; sleigh(t, 0.55, 0.08); sleigh(t + 0.62, 0.18, 0.06); },
+  step() { const t = ac().currentTime; for (let i = 0; i < 4; i++) crunch(t + i * 0.22); },
+  handbell() { const t = ac().currentTime; [0, 0.28, 0.56].forEach((d, i) => bell(i === 1 ? 1175 : 1319, t + d, { dur: 1.4, gain: 0.16, partials: HANDBELL })); },
+  build() { const t = ac().currentTime; ['G5', 'B5', 'D6', 'G6'].forEach((n, i) => bell(hz(n), t + i * 0.12, { dur: 1.2, gain: 0.12, partials: GLOCK })); },
+  coins() { const t = ac().currentTime; ['C6', 'E6', 'G6', 'C7', 'E7'].forEach((n, i) => bell(hz(n), t + i * 0.06, { dur: 0.9, gain: 0.1, partials: GLOCK })); sleigh(t + 0.05, 0.3, 0.05); },
+  pay() { const t = ac().currentTime; ['E6', 'C6', 'A5', 'E5'].forEach((n, i) => bell(hz(n), t + i * 0.11, { dur: 0.8, gain: 0.11, partials: GLOCK })); },
+  church() { const t = ac().currentTime; [0, 1.3, 2.6].forEach((d) => bell(196, t + d, { dur: 5.5, gain: 0.2, partials: CHURCH, attack: 0.004 })); },
+  sparkle() { const t = ac().currentTime; for (let i = 0; i < 9; i++) bell(hz(['E6', 'G6', 'B6', 'D7', 'E7', 'G7', 'B7', 'D7', 'B6'][i]), t + i * 0.045, { dur: 0.6, gain: 0.07, partials: GLOCK }); },
+  go() { const t = ac().currentTime; sleigh(t, 0.9, 0.07); ['G5', 'A5', 'B5', 'D6', 'G6'].forEach((n, i) => bell(hz(n), t + 0.1 + i * 0.09, { dur: 1.2, gain: 0.11, partials: GLOCK })); },
+  tick() { const t = ac().currentTime; bell(2093, t, { dur: 0.25, gain: 0.08, partials: GLOCK }); },
+  blizzard() {
+    const t = ac().currentTime, L = 3.6;
+    // Gió: nhiễu trắng qua lọc thông dải, quét tần số lên rồi xuống
+    for (const [f0, f1, q, gmax] of [[300, 900, 0.9, 0.35], [700, 1500, 7, 0.12]]) {
+      const s = noise(), bp = AC.createBiquadFilter(), g = AC.createGain();
+      bp.type = 'bandpass'; bp.Q.value = q;
+      bp.frequency.setValueAtTime(f0, t); bp.frequency.linearRampToValueAtTime(f1, t + L * 0.45); bp.frequency.linearRampToValueAtTime(f0 * 0.8, t + L);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gmax, t + 0.8); g.gain.setValueAtTime(gmax, t + L * 0.6); g.gain.linearRampToValueAtTime(0, t + L + 0.4);
+      s.connect(bp); bp.connect(g); g.connect(master); s.start(t); s.stop(t + L + 0.5);
+    }
+  },
+  collapse() {
+    const t = ac().currentTime;
+    // Gỗ kêu cót két rồi sụp: răng cưa trượt xuống qua lọc dải, tiếp theo là tiếng uỵch trầm
+    const o = AC.createOscillator(), bp = AC.createBiquadFilter(), g = AC.createGain();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(60, t + 0.35);
+    bp.type = 'bandpass'; bp.frequency.value = 600; bp.Q.value = 4;
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.12, t + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+    o.connect(bp); bp.connect(g); g.connect(master); o.start(t); o.stop(t + 0.45);
+    const th = AC.createOscillator(), tg = AC.createGain();
+    th.frequency.setValueAtTime(90, t + 0.25); th.frequency.exponentialRampToValueAtTime(40, t + 0.7);
+    tg.gain.setValueAtTime(0.0001, t + 0.25); tg.gain.linearRampToValueAtTime(0.5, t + 0.27); tg.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    th.connect(tg); tg.connect(master); th.start(t + 0.25); th.stop(t + 1);
+    const s = noise(), lp = AC.createBiquadFilter(), ng = AC.createGain();
+    lp.type = 'lowpass'; lp.frequency.value = 1200;
+    ng.gain.setValueAtTime(0.0001, t + 0.25); ng.gain.linearRampToValueAtTime(0.35, t + 0.28); ng.gain.exponentialRampToValueAtTime(0.0001, t + 1.1);
+    s.connect(lp); lp.connect(ng); ng.connect(master); s.start(t + 0.25); s.stop(t + 1.2);
+  },
+};
+/** Bước chân trên tuyết: nhiễu lọc thông thấp, hai lớp lệch nhau vài chục ms. */
+function crunch(t) {
+  for (const [d, f, gmax] of [[0, 1800, 0.22], [0.035, 900, 0.16]]) {
+    const s = noise(), lp = AC.createBiquadFilter(), g = AC.createGain();
+    lp.type = 'bandpass'; lp.frequency.value = f; lp.Q.value = 0.7;
+    g.gain.setValueAtTime(0.0001, t + d);
+    for (let k = 0; k < 6; k++) g.gain.linearRampToValueAtTime(gmax * Math.random(), t + d + k * 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.12);
+    s.connect(lp); lp.connect(g); g.connect(master); s.start(t + d); s.stop(t + d + 0.15);
+  }
+}
+
+const SFX_LIST = [
+  ['dice', 'Lắc xí ngầu', 'chùm chuông xe tuần lộc'],
+  ['step', 'Quân bước qua ô', 'bước chân lạo xạo trên tuyết'],
+  ['handbell', 'Mua đất', 'chuông tay ông già Noel'],
+  ['build', 'Xây nhà', 'hộp nhạc bốn nốt'],
+  ['coins', 'Nhận tiền', 'celesta rải lên + chuông nhỏ'],
+  ['pay', 'Trả tiền thuê', 'celesta rải xuống'],
+  ['go', 'Qua Bắt Đầu', 'xe tuần lộc lướt qua'],
+  ['church', 'Vào tù', 'chuông nhà thờ đổ ba hồi'],
+  ['sparkle', 'Bốc thẻ / mở hộp thoại', 'tiếng lấp lánh'],
+  ['blizzard', 'Bão Tuyết', 'gió hú'],
+  ['collapse', 'Sập nhà', 'gỗ gãy + tuyết đổ'],
+];
+$('#sfx').innerHTML = SFX_LIST.map(([k, n, d]) => `
+  <div class="sfx-row"><button class="btn" data-sfx="${k}" aria-label="Nghe ${n}">▶</button><div><b>${n}</b><span>${d}</span></div></div>`).join('');
+document.addEventListener('click', (e) => { const b = e.target.closest('[data-sfx]'); if (b) sfx[b.dataset.sfx](); });
+
+/* ---------------------------------------------------------------- Jingle Bells */
+// Giọng Sol trưởng. Mỗi nốt là "tên:phách"; "-" là lặng.
+const VERSE = `D4:1 B4:1 A4:1 G4:1 D4:3 D4:.5 D4:.5 D4:1 B4:1 A4:1 G4:1 E4:4
+E4:1 C5:1 B4:1 A4:1 F#4:4 D5:1 D5:1 C5:1 A4:1 B4:4
+D4:1 B4:1 A4:1 G4:1 D4:4 D4:1 B4:1 A4:1 G4:1 E4:3 E4:1
+E4:1 C5:1 B4:1 A4:1 D5:1 D5:1 D5:1 D5:1 E5:1 D5:1 C5:1 A4:1 G4:2 D5:2`;
+const CHORUS = `B4:1 B4:1 B4:2 B4:1 B4:1 B4:2 B4:1 D5:1 G4:1.5 A4:.5 B4:4
+C5:1 C5:1 C5:1.5 C5:.5 C5:1 B4:1 B4:1 B4:.5 B4:.5 B4:1 A4:1 A4:1 B4:1 A4:2 D5:2
+B4:1 B4:1 B4:2 B4:1 B4:1 B4:2 B4:1 D5:1 G4:1.5 A4:.5 B4:4
+C5:1 C5:1 C5:1.5 C5:.5 C5:1 B4:1 B4:1 B4:.5 B4:.5 D5:1 D5:1 C5:1 A4:1 G4:4`;
+// Hợp âm theo ô nhịp (16 ô đoạn đầu, 16 ô điệp khúc)
+const CHORDS = 'G G G C C D D G G G G C C D D G G G G G C G A D G G G G C G D G'.split(' ');
+const TRIAD = { G: ['G3', 'B3', 'D4'], C: ['C3', 'E3', 'G3'], D: ['D3', 'F#3', 'A3'], A: ['A2', 'C#3', 'E3'] };
+const ROOT = { G: ['G2', 'D3'], C: ['C3', 'G2'], D: ['D3', 'A2'], A: ['A2', 'E3'] };
+
+const parse = (s) => s.trim().split(/\s+/).map((x) => { const [n, b] = x.split(':'); return { n, b: +b }; });
+const SONG = [...parse(VERSE), ...parse(CHORUS)];
+const BEAT = 0.4;   // 150 phách/phút
+const SONG_BEATS = SONG.reduce((a, x) => a + x.b, 0);   // 128 phách
+
+let musicOn = false, musicTimer = null, loopStart = 0;
+$('#music-vol').addEventListener('input', (e) => { if (musicBus) musicBus.gain.value = e.target.value / 100 * 0.6; });
+
+function startMusic() {
+  ac();
+  musicBus = AC.createGain(); musicBus.gain.value = $('#music-vol').value / 100 * 0.6; musicBus.connect(master);
+  musicOn = true; loopStart = AC.currentTime + 0.1;
+  scheduleLoop(loopStart, musicBus);
+  $('#music-btn').textContent = '■ Dừng nhạc';
+  const tick = () => {
+    if (!musicOn) return;
+    const pos = ((AC.currentTime - loopStart) / BEAT) % SONG_BEATS;
+    $('#music-now').textContent = pos < 64 ? 'Đoạn đầu · Dashing through the snow' : 'Điệp khúc · Jingle bells, jingle bells';
+    // Còn chưa tới 4 giây là hết vòng thì xếp lịch vòng sau
+    if (AC.currentTime > loopStart + SONG_BEATS * BEAT - 4) { loopStart += SONG_BEATS * BEAT; scheduleLoop(loopStart, musicBus); }
+    musicTimer = setTimeout(tick, 500);
+  };
+  tick();
+}
+function stopMusic() {
+  musicOn = false; clearTimeout(musicTimer);
+  if (musicBus) { const b = musicBus; b.gain.setTargetAtTime(0, AC.currentTime, 0.08); setTimeout(() => b.disconnect(), 400); musicBus = null; }
+  $('#music-btn').textContent = '▶ Jingle Bells'; $('#music-now').textContent = '';
+}
+$('#music-btn').addEventListener('click', () => (musicOn ? stopMusic() : startMusic()));
+
+function scheduleLoop(t0, out) {
+  // Giai điệu: celesta (tiếng chuông thanh) chồng một lớp sáo mềm cho dày tiếng
+  let t = t0;
+  for (const { n, b } of SONG) {
+    if (n !== '-') {
+      bell(hz(n) * 2, t, { dur: Math.max(0.7, b * BEAT * 1.6), gain: 0.11, partials: GLOCK, out });
+      flute(hz(n), t, b * BEAT * 0.92, 0.05, out);
+    }
+    t += b * BEAT;
+  }
+  // Đệm: bass "um" phách 1 và 3, hợp âm "pah" phách 2 và 4, chuông tuần lộc mỗi phách
+  CHORDS.forEach((c, bar) => {
+    const tb = t0 + bar * 4 * BEAT;
+    ROOT[c].forEach((r, i) => pluck(hz(r), tb + i * 2 * BEAT, 0.16, out));
+    [1, 3].forEach((beat) => TRIAD[c].forEach((r) => pluck(hz(r) * 2, tb + beat * BEAT, 0.035, out, 0.25)));
+    for (let k = 0; k < 4; k++) sleigh(tb + k * BEAT, 0.07, k % 2 ? 0.035 : 0.02, out);
+  });
+}
+function flute(f, t, d, gain, out) {
+  const o = AC.createOscillator(), g = AC.createGain(), lp = AC.createBiquadFilter();
+  o.type = 'triangle'; o.frequency.value = f;
+  lp.type = 'lowpass'; lp.frequency.value = 2200;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + 0.03); g.gain.setValueAtTime(gain, t + d * 0.7); g.gain.linearRampToValueAtTime(0, t + d);
+  o.connect(lp); lp.connect(g); g.connect(out); o.start(t); o.stop(t + d + 0.02);
+}
+function pluck(f, t, gain, out, d = 0.45) {
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = 'triangle'; o.frequency.value = f;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+  o.connect(g); g.connect(out); o.start(t); o.stop(t + d + 0.02);
+}
+
+/* ================================================================ gợi ý */
+const IDEAS = [
+  ['Mũ Noel trên quân cờ', 'Quân cờ đội mũ đỏ có quả bông trắng. Vẽ đè lên quân hiện có trong pieces.js, không phải vẽ lại quân.', 'chỉ hình'],
+  ['Xí ngầu thành khối băng', 'Mặt xí ngầu trắng xanh trong mờ, chấm đỏ. Khi dừng thì toé vài hạt tuyết. dice3d.js chỉ cần đổi màu vật liệu và màu chấm.', 'chỉ hình'],
+  ['Bóc thẻ thành mở hộp quà', 'Băng chuyền bóc thẻ (caseOpen.js) đổi vỏ thẻ thành hộp quà; lúc dừng thì nắp bật, ruy băng tung.', 'chỉ hình'],
+  ['Nhà thờ Đức Bà giữa bàn cờ', 'Thay trống đồng ở lòng bàn cờ bằng Nhà thờ Đức Bà phủ tuyết và cây thông lớn. Gắn với hình ảnh Giáng Sinh ở Sài Gòn mà người chơi nhận ra ngay.', 'chỉ hình'],
+  ['Đèn trên nhà theo màu người chơi', 'Dây đèn dưới mái khách sạn đổi sang màu của chủ đất, nhìn bàn cờ là biết ai nắm dãy nào.', 'chỉ hình'],
+  ['Thẻ Thời Cuộc "Đêm Thánh Vô Cùng"', 'Một vòng không ai phải trả tiền thuê. Giảm áp lực khi một người đang dẫn quá xa.', 'luật'],
+  ['Thẻ Thời Cuộc "Đường đóng băng"', 'Hai lượt tới, mọi quân trượt thêm 1–2 ô sau khi đi. Làm xáo trộn đường đi, hợp với mục tiêu phá thế bí khi ít người.', 'luật'],
+  ['Khí Vận "Ông Già Noel ghé thăm"', 'Mọi người nhận 50$, người ít tiền mặt nhất nhận gấp đôi (xem hộp thoại nổi ở mục 6).', 'luật'],
+  ['Tuyết dày theo số vòng', 'Gờ tuyết ở mép ngoài bàn cờ cao dần theo số vòng đã chơi, cho người chơi thấy ván đã kéo dài bao lâu.', 'chỉ hình'],
+  ['Meme và biểu cảm Giáng Sinh', 'Thêm vài meme có mũ Noel, ném cầu tuyết vào người khác thay ném dép.', 'chỉ hình'],
+  ['Nhạc phụ cho sảnh chờ và lúc thắng', 'Sảnh chờ: Silent Night (1818). Màn thắng: We Wish You a Merry Christmas. Cả hai đã hết bản quyền.', 'âm thanh'],
+  ['Tôn trọng "giảm chuyển động"', 'Đèn LED nhấp nháy có thể gây khó chịu. Khi hệ điều hành bật prefers-reduced-motion hoặc người chơi bật "Giảm nhấp nháy", đèn đứng yên và tắt tuyết rơi.', 'trợ năng'],
+];
+$('#ideas').innerHTML = IDEAS.map(([t, p, tag]) => `<div class="idea"><b>${t}<span class="tag">${tag}</span></b><p>${p}</p></div>`).join('');
+
+setTheme('christmas');
+</script>
+</body>
+</html>

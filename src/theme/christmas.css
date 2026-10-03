@@ -1,0 +1,347 @@
+/* ============================================================
+   CHỦ ĐỀ GIÁNG SINH — Sài Gòn tuyết
+   Mọi quy tắc nằm dưới :root[data-theme="christmas"] (theme/theme.js đặt
+   thuộc tính này), nên chủ đề mặc định không đổi một điểm ảnh nào.
+
+   Bàn cờ và nền quanh bàn là tuyết trắng, xanh nước biển nhạt (vẽ trong
+   canvas). Các bảng HTML phủ lên (cột trái, bảng nút, hộp thoại) dùng xanh
+   đêm đông với nét viền xanh băng: chữ trong các bảng này vốn viết sáng trên
+   nền tối, giữ nền tối thì chữ vẫn đọc rõ, và đèn LED quanh hộp thoại mới nổi
+   lên được.
+
+   Các bảng chỉ dùng một dải màu lạnh, từ trắng băng tới xanh đêm. Nút phân
+   cấp bằng độ sáng chứ không bằng sắc: nút chính trắng băng chữ xanh đậm,
+   nút cần chú ý xanh sapphire, nút thường kính mờ. Đỏ, xanh lá, nâu chỉ
+   còn trên đồ vật Giáng Sinh (hộp quà, cây thông, đèn LED); màu riêng của
+   người chơi chỉ hiện ở vạch cạnh thẻ và quân cờ.
+   ============================================================ */
+
+:root[data-theme="christmas"] {
+  /* "Sơn mài" là màu nhấn của bản gốc: đổi sang xanh sapphire */
+  --lac-deep:   #24507F;
+  --lac:        #3D6FA3;
+  --lac-light:  #6E9CC6;
+
+  /* "Vàng" của bản gốc là màu nét viền và chữ nhấn: đổi sang xanh băng */
+  --gold-deep:  #5B88B3;
+  --gold:       #9CC7E6;
+  --gold-light: #E3F1FC;
+  --gold-pale:  #F4FAFF;
+
+  --jade-deep:  #1F4D31;
+  --jade:       #2E6B45;
+  --jade-light: #5DAA7A;
+
+  --paper:      #EAF3FA;
+  --paper-warm: #D6E6F3;
+  --paper-deep: #A9C3DA;
+
+  --indigo-deep:#0F2238;
+  --indigo:     #1A3556;
+  --indigo-mid: #2A4C78;
+
+  --ground-night:#C7DDEE;
+  --ground-deep: #0F2238;
+  --ground:      #16304E;
+  --ground-light:#22446A;
+
+  --ink:        #1E3A55;
+  --ink-soft:   #4A6884;
+
+  --shadow-lg: 0 24px 60px rgba(15, 34, 56, .45), 0 4px 14px rgba(15, 34, 56, .3);
+  --shadow-md: 0 10px 26px rgba(15, 34, 56, .3);
+
+  /* Hai sắc nền dùng chung cho mọi bảng HTML */
+  --x-panel: linear-gradient(180deg, rgba(26, 53, 86, .96) 0%, rgba(15, 34, 56, .98) 100%);
+  --x-card:  linear-gradient(155deg, rgba(34, 68, 106, .94), rgba(16, 36, 60, .96));
+  --x-line:  rgba(156, 199, 230, .32);
+  --x-line-strong: rgba(156, 199, 230, .55);
+
+  /* Dải màu băng cho nút và thẻ người chơi */
+  --x-ice:      linear-gradient(180deg, #FFFFFF 0%, #E6F1FA 55%, #C9DFF1 100%);
+  --x-ice-ink:  #12304F;
+  --x-sapphire: linear-gradient(180deg, #5A92C8 0%, #3A6DA2 55%, #2A5888 100%);
+  --x-frost:    linear-gradient(180deg, rgba(169, 204, 232, .26), rgba(169, 204, 232, .12));
+  --x-glass:    linear-gradient(180deg, rgba(48, 84, 128, .95), rgba(28, 56, 90, .97));
+  --x-rose:     #E8A3B0;
+}
+
+:root[data-theme="christmas"] body { background: #C7DDEE; }
+
+/* ------------------------------------------------------- cột điều khiển */
+:root[data-theme="christmas"] #sidebar {
+  background: var(--x-panel);
+  border-right: 1px solid var(--x-line-strong);
+  box-shadow: 7px 0 26px rgba(15, 34, 56, .35);
+}
+:root[data-theme="christmas"] .brand,
+:root[data-theme="christmas"] .side-foot,
+:root[data-theme="christmas"] #quickview { border-color: var(--x-line); }
+:root[data-theme="christmas"] .brand-mark {
+  color: #FFFFFF;
+  text-shadow: 0 0 14px rgba(156, 199, 230, .9);
+}
+:root[data-theme="christmas"] .icon-btn {
+  background: linear-gradient(180deg, rgba(42, 76, 120, .95), rgba(22, 48, 78, .98));
+}
+:root[data-theme="christmas"] #sound-pop {
+  background: var(--x-panel);
+}
+:root[data-theme="christmas"] .snd-row:hover { background: rgba(156, 199, 230, .16); }
+:root[data-theme="christmas"] .snd-check { color: #0F2238; }
+
+:root[data-theme="christmas"] .pcard,
+:root[data-theme="christmas"] .rchip {
+  background: var(--x-card);
+  border-color: var(--x-line);
+}
+:root[data-theme="christmas"] .rchip { border-bottom-color: var(--pc, var(--gold)); }
+:root[data-theme="christmas"] .pcard.is-active,
+:root[data-theme="christmas"] .rchip.is-active {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, .14), transparent 55%),
+    linear-gradient(155deg, #3F6E9F, #22456F);
+  border-color: rgba(227, 241, 252, .85);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(227, 241, 252, .25), 0 0 22px rgba(169, 204, 232, .3);
+}
+:root[data-theme="christmas"] .rchip.is-active { border-bottom-color: var(--pc, var(--gold)); }
+:root[data-theme="christmas"] .pcard-turn { background: #E3F1FC; color: var(--x-ice-ink); }
+:root[data-theme="christmas"] .pcard-meta { color: rgba(227, 241, 252, .66); }
+:root[data-theme="christmas"] #pop-card,
+:root[data-theme="christmas"] #pop-card::before {
+  background: rgba(22, 48, 78, .98);
+  border-color: var(--x-line-strong);
+}
+:root[data-theme="christmas"] .qv-row.now { background: rgba(156, 199, 230, .16); }
+:root[data-theme="christmas"] #fate-meter {
+  background: rgba(15, 34, 56, .45);
+  border-color: var(--x-line);
+}
+
+/* ------------------------------------------ bảng giữa bàn cờ (nút, tin) */
+:root[data-theme="christmas"] #actions,
+:root[data-theme="christmas"] .tile-pick {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, .06), transparent 46%),
+    var(--x-panel);
+  border-color: var(--x-line-strong);
+}
+:root[data-theme="christmas"] #actions::after,
+:root[data-theme="christmas"] .tile-pick::after { border-color: var(--x-line); }
+:root[data-theme="christmas"] #actions .btn-danger::before {
+  background: linear-gradient(90deg, transparent, rgba(156, 199, 230, .55), transparent);
+}
+:root[data-theme="christmas"] .bcast {
+  background: linear-gradient(160deg, rgba(22, 46, 76, .95), rgba(14, 30, 52, .97));
+  border-color: var(--x-line-strong);
+}
+
+/* ------------------------------------------------------------ nút
+   Viết cho cả `.btn-x` lẫn `#actions .btn-x`: bảng nút giữa bàn cờ có quy tắc
+   riêng với độ ưu tiên cao hơn, thiếu dòng thứ hai thì nút ở đó giữ màu cũ. */
+:root[data-theme="christmas"] .btn {
+  background: linear-gradient(180deg, #2A4C78, #1A3556);
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, .18);
+}
+:root[data-theme="christmas"] .btn-primary,
+:root[data-theme="christmas"] #actions .btn-primary {
+  background: var(--x-ice);
+  border-color: #FFFFFF;
+  color: var(--x-ice-ink);
+  box-shadow: var(--shadow-md), 0 0 18px rgba(169, 204, 232, .35), inset 0 -2px 0 rgba(90, 146, 200, .25);
+}
+:root[data-theme="christmas"] #actions .btn-primary::before {
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, .75) 50%, transparent 62%);
+  background-size: 260% 100%;
+}
+:root[data-theme="christmas"] #actions .btn-primary .ai-dice { filter: drop-shadow(0 3px 4px rgba(18, 48, 79, .35)); }
+:root[data-theme="christmas"] .btn-gold,
+:root[data-theme="christmas"] #actions .btn-gold {
+  background: var(--x-sapphire);
+  border-color: #A9CCE8;
+  color: #FFFFFF;
+  box-shadow: var(--shadow-md), 0 0 14px rgba(90, 146, 200, .35), inset 0 1px 0 rgba(255, 255, 255, .3);
+}
+:root[data-theme="christmas"] .btn-jade,
+:root[data-theme="christmas"] #actions .btn-jade {
+  background: var(--x-frost);
+  border-color: rgba(169, 204, 232, .62);
+  color: #F4FAFF;
+}
+:root[data-theme="christmas"] .btn-ghost {
+  background: rgba(156, 199, 230, .1);
+  border-color: var(--x-line-strong);
+}
+:root[data-theme="christmas"] #actions .btn-ghost {
+  background: var(--x-glass);
+  border-color: var(--x-line-strong);
+  color: #F4FAFF;
+}
+:root[data-theme="christmas"] #actions .btn-ghost .btn-icon,
+:root[data-theme="christmas"] #actions .btn-jade .btn-icon { color: #A9CCE8; }
+/* Phá sản: không tô nền, chỉ viền và chữ hồng nhạt — đọc ra là nút nguy hiểm
+   mà không thêm một mảng đỏ vào bảng xanh */
+:root[data-theme="christmas"] .btn-danger,
+:root[data-theme="christmas"] #actions .btn-danger {
+  background: rgba(255, 255, 255, .03);
+  border-color: rgba(232, 163, 176, .45);
+  color: #F3D5DB;
+  box-shadow: none;
+}
+:root[data-theme="christmas"] #actions .btn-danger .btn-icon { color: var(--x-rose); }
+:root[data-theme="christmas"] .btn-danger:hover:not(:disabled),
+:root[data-theme="christmas"] #actions .btn-danger:hover:not(:disabled) {
+  background: rgba(232, 163, 176, .12);
+  border-color: rgba(232, 163, 176, .75);
+}
+
+/* ------------------------------------------------------------ hộp thoại */
+:root[data-theme="christmas"] .scrim.show { background: rgba(15, 34, 56, .55); }
+:root[data-theme="christmas"] .modal {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, .06), transparent 42%),
+    linear-gradient(180deg, #1C3A5E 0%, #10243D 100%);
+  border-color: var(--x-line-strong);
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, .14);
+}
+:root[data-theme="christmas"] .modal::after { border-color: var(--x-line); }
+:root[data-theme="christmas"] .modal-head,
+:root[data-theme="christmas"] .modal-foot { border-color: var(--x-line); }
+/* Tuyết đọng trên mép trên hộp thoại */
+:root[data-theme="christmas"] .modal-head { position: relative; }
+:root[data-theme="christmas"] .modal-head::before {
+  content: ""; position: absolute; left: 10px; right: 10px; top: -4px; height: 12px;
+  background:
+    radial-gradient(10px 7px at 8% 0, #fff 96%, transparent),
+    radial-gradient(14px 8px at 22% 0, #fff 96%, transparent),
+    radial-gradient(9px 6px at 37% 0, #fff 96%, transparent),
+    radial-gradient(16px 9px at 55% 0, #fff 96%, transparent),
+    radial-gradient(11px 7px at 71% 0, #fff 96%, transparent),
+    radial-gradient(15px 8px at 88% 0, #fff 96%, transparent),
+    linear-gradient(#fff, #fff) top / 100% 4px no-repeat;
+  border-radius: 6px 6px 0 0;
+  filter: drop-shadow(0 2px 2px rgba(15, 34, 56, .35));
+  pointer-events: none;
+}
+:root[data-theme="christmas"] .modal-peek {
+  background: rgba(156, 199, 230, .12);
+  border-color: var(--x-line-strong);
+}
+:root[data-theme="christmas"] .peek-pill { background: var(--x-panel); }
+
+/* Viền đèn LED — ui/ledFrame.js rải bóng, ở đây chỉ lo nhấp nháy.
+   Ba nhóm lệch pha 0,6 s nên ánh sáng chạy vòng quanh khung. Chỉ đổi độ
+   trong suốt (trình duyệt dựng trên GPU, không vẽ lại khung), và không bao
+   giờ tắt hẳn — đèn chớp tắt liên tục gây khó chịu. */
+.led-frame { display: none; }
+:root[data-theme="christmas"] .led-frame {
+  display: block;
+  position: absolute; inset: -7px;
+  pointer-events: none;
+  z-index: 3;
+}
+:root[data-theme="christmas"] .led-frame svg { position: absolute; inset: 0; overflow: visible; }
+:root[data-theme="christmas"] .led-frame .led { opacity: .55; animation: led-chase 1.8s steps(1) infinite; }
+:root[data-theme="christmas"] .led-frame .led.g1 { animation-delay: .6s; }
+:root[data-theme="christmas"] .led-frame .led.g2 { animation-delay: 1.2s; }
+:root[data-theme="christmas"] .led-frame .led-halo { opacity: .38; }
+@keyframes led-chase {
+  0%   { opacity: 1; }
+  33%  { opacity: .55; }
+  100% { opacity: .55; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="christmas"] .led-frame .led { animation: none; opacity: .85; }
+}
+
+/* ------------------------------------------- băng chuyền: hộp quà */
+:root[data-theme="christmas"] .co-reel {
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(156, 199, 230, .16), transparent 70%),
+    linear-gradient(180deg, rgba(10, 24, 40, .55), rgba(10, 24, 40, .25));
+  border-color: var(--x-line);
+}
+/* Mỗi ô là một hộp quà: giấy gói bốn kiểu xoay vòng, dải ruy băng chữ thập,
+   nơ trên nắp. Chữ in trên một tấm thiệp trắng ở giữa hộp cho dễ đọc. */
+:root[data-theme="christmas"] .co-cell {
+  position: relative;
+  overflow: visible;
+  color: #1E3A55;
+  border: 1px solid rgba(15, 34, 56, .35);
+  --wrap: #C8262F; --ribbon: #E7BC4B;
+  background:
+    linear-gradient(90deg, transparent calc(50% - 6px), var(--ribbon) calc(50% - 6px), var(--ribbon) calc(50% + 6px), transparent calc(50% + 6px)),
+    linear-gradient(0deg, transparent calc(50% - 6px), var(--ribbon) calc(50% - 6px), var(--ribbon) calc(50% + 6px), transparent calc(50% + 6px)),
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, .1) 0 6px, transparent 6px 14px),
+    var(--wrap);
+}
+:root[data-theme="christmas"] .co-cell.gift-1 { --wrap: #2E6B45; --ribbon: #F4F8FB; }
+:root[data-theme="christmas"] .co-cell.gift-2 { --wrap: #2A4C78; --ribbon: #D8434A; }
+:root[data-theme="christmas"] .co-cell.gift-3 { --wrap: #F4F8FB; --ribbon: #C8262F; }
+:root[data-theme="christmas"] .co-cell > :not(.co-lid) {
+  position: relative; z-index: 1;
+  background: rgba(255, 255, 255, .93);
+  border-radius: 6px;
+  padding: 1px 5px;
+}
+:root[data-theme="christmas"] .co-cell-top { color: var(--lac); }
+/* Nắp hộp và nơ */
+.co-lid { display: none; }
+:root[data-theme="christmas"] .co-lid {
+  display: block;
+  position: absolute; left: -4px; right: -4px; top: -6px; height: 22px;
+  border-radius: 6px;
+  background:
+    linear-gradient(90deg, transparent calc(50% - 6px), var(--ribbon) calc(50% - 6px), var(--ribbon) calc(50% + 6px), transparent calc(50% + 6px)),
+    var(--wrap);
+  box-shadow: 0 3px 6px rgba(15, 34, 56, .35), inset 0 -2px 0 rgba(0, 0, 0, .15);
+  z-index: 2;
+}
+:root[data-theme="christmas"] .co-lid::before,
+:root[data-theme="christmas"] .co-lid::after {
+  content: ""; position: absolute; top: -11px;
+  width: 18px; height: 13px;
+  border: 4px solid var(--ribbon);
+  border-radius: 50% 50% 40% 40%;
+}
+:root[data-theme="christmas"] .co-lid::before { left: calc(50% - 19px); transform: rotate(-18deg); }
+:root[data-theme="christmas"] .co-lid::after  { left: calc(50% + 1px);  transform: rotate(18deg); }
+/* Dải dừng: hộp trúng bật nắp */
+:root[data-theme="christmas"] .co-cell.gift-open .co-lid {
+  animation: gift-lid .42s cubic-bezier(.2, .7, .3, 1) forwards;
+}
+@keyframes gift-lid {
+  0%   { transform: translateY(0) rotate(0); opacity: 1; }
+  100% { transform: translate(18px, -64px) rotate(28deg); opacity: 0; }
+}
+:root[data-theme="christmas"] .co-mark {
+  background: linear-gradient(180deg, #FFFFFF, #A9CCE8, #FFFFFF);
+  box-shadow: 0 0 10px rgba(255, 255, 255, .8);
+}
+
+/* ------------------------------------------------- phòng chờ, chọn chủ đề */
+:root[data-theme="christmas"] .count-btn {
+  background: rgba(42, 76, 120, .75);
+  border-color: var(--x-line-strong);
+}
+:root[data-theme="christmas"] .count-btn.on {
+  background: var(--x-ice);
+  border-color: #FFFFFF; color: var(--x-ice-ink);
+}
+:root[data-theme="christmas"] .name-row,
+:root[data-theme="christmas"] .lobby-rule,
+:root[data-theme="christmas"] .lobby-theme,
+:root[data-theme="christmas"] .lobby-colors { border-color: var(--x-line); }
+:root[data-theme="christmas"] .lobby-seat.is-ready { border-color: var(--x-line-strong); }
+:root[data-theme="christmas"] .theme-pick { border-color: var(--x-line-strong); background: rgba(5, 15, 28, .4); }
+:root[data-theme="christmas"] .theme-pick option { color: #1E3A55; background: #F4FAFF; }
+:root[data-theme="christmas"] .lobby-link-row input { border-color: var(--x-line); background: rgba(5, 15, 28, .35); }
+:root[data-theme="christmas"] .lobby-count { border-color: var(--x-line); }
+
+/* ------------------------------------------------- tuyết trên mái nhà */
+:root[data-theme="christmas"] .gi-snow {
+  display: inline;
+  fill: #FFFFFF;
+  stroke: #8FB4D0;
+  stroke-width: 6;
+}

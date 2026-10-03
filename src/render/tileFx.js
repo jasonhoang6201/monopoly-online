@@ -1,5 +1,6 @@
 /**
- * Hoạt cảnh trên một ô đất: xây nhà, động đất, hoả hoạn, thế chấp, chuộc lại.
+ * Hoạt cảnh trên một ô đất: xây nhà, động đất, hoả hoạn, bão tuyết, thế chấp,
+ * chuộc lại.
  *
  * Module này chỉ vẽ canvas 2D, không đụng Phaser. `BoardScene` cấp cho mỗi
  * hoạt cảnh hai tấm canvas — `under` nằm dưới quân cờ (vết nứt, vết sém, bản
@@ -126,6 +127,30 @@ function drawTileCopy(g, src, wash) {
   }
 }
 
+/**
+ * Lớp tuyết trên mái căn nhà của `drawHouse` (vẽ ở cùng gốc toạ độ), dày lên
+ * theo `k` 0…1.
+ */
+function roofSnow(g, k, amount, alpha = 1) {
+  if (amount <= 0) return;
+  const t = 2 + 7 * amount;
+  g.save();
+  g.globalAlpha *= alpha;
+  g.fillStyle = '#FFFFFF';
+  g.strokeStyle = 'rgba(140,180,212,.9)';
+  g.lineWidth = 1.2;
+  g.beginPath();
+  g.moveTo(-k * 0.62, -k * 0.08);
+  g.lineTo(0, -k * 0.62 - t);
+  g.lineTo(k * 0.62, -k * 0.08);
+  g.quadraticCurveTo(k * 0.45, -k * 0.02 + t * 0.5, k * 0.3, -k * 0.1);
+  g.quadraticCurveTo(0, -k * 0.45, -k * 0.3, -k * 0.1);
+  g.quadraticCurveTo(-k * 0.45, -k * 0.02 + t * 0.5, -k * 0.62, -k * 0.08);
+  g.closePath();
+  g.fill(); g.stroke();
+  g.restore();
+}
+
 // ------------------------------------------------------------------ hạt
 
 function stepParticles(list, dt) {
@@ -171,6 +196,13 @@ function drawParticles(g, list) {
     } else if (p.kind === 'ember') {
       g.globalAlpha = (1 - k) * (0.6 + 0.4 * Math.sin(p.age * 40));
       g.fillStyle = '#FFC45C'; g.beginPath(); g.arc(p.x, p.y, 1.4, 0, TAU); g.fill();
+    } else if (p.kind === 'snow') {
+      // Viền xanh mỏng: bàn cờ Giáng Sinh nền trắng, hạt tuyết trắng trơn sẽ chìm mất
+      g.globalAlpha = (k < 0.15 ? k / 0.15 : 1 - Math.max(0, k - 0.7) / 0.3) * 0.95;
+      g.fillStyle = '#FFFFFF';
+      g.strokeStyle = 'rgba(80,120,165,.55)';
+      g.lineWidth = 0.8;
+      g.beginPath(); g.ellipse(p.x, p.y, p.size * 1.6, p.size, 0.25, 0, TAU); g.fill(); g.stroke();
     } else if (p.kind === 'glint') {
       g.globalAlpha = Math.sin(k * Math.PI);
       g.fillStyle = '#FFF1C2';
@@ -412,6 +444,119 @@ const FX = {
         if (env.house) {
           const hp = seg(t, 0.4, 1.3);
           if (hp > 0 && hp < 1) drawHouse(over, 0, -hh - 18 * PROP - hp * 6, 22 * PROP, false, 1 - seg(hp, 0.7, 1), seg(hp, 0, 0.6));
+        }
+        stepParticles(parts, dt); drawParticles(over, parts);
+      },
+      finish() {},
+    };
+  },
+
+  /**
+   * Gió tuyết quất ngang ô, mặt ô phủ sương, tuyết đọng dày dần trên mái căn
+   * nhà; nhà rung rồi sụp xuống thành đống ván phủ tuyết. Cuối cảnh một đống
+   * tuyết dồn ở chân ô rồi lắng xuống — gờ tuyết vẽ sẵn trên bàn cờ nối tiếp
+   * đúng chỗ ấy.
+   */
+  blizzard(env) {
+    const parts = [];
+    const { hh } = env;
+    const streaks = Array.from({ length: 16 }, () => ({
+      x: rnd(-HW - 80, HW + 80), y: rnd(-hh - 50, hh + 30), len: rnd(24, 60), v: rnd(0.7, 1.3),
+    }));
+    let acc = 0;
+    let fell = false;
+    env.sfx('wind');
+    return {
+      dur: 2.7,
+      draw(t, dt, under, over) {
+        const wind = Math.sin(Math.PI * seg(t, 0, 2.4));          // 0 → 1 → 0
+
+        // Trời sầm lại quanh ô lúc gió mạnh nhất — nền tối cho tuyết trắng nổi lên
+        if (wind > 0.02) {
+          const grd = under.createRadialGradient(0, 0, 10, 0, 0, hh * 1.6);
+          grd.addColorStop(0, `rgba(52,82,118,${0.5 * wind})`);
+          grd.addColorStop(1, 'rgba(52,82,118,0)');
+          under.fillStyle = grd;
+          under.fillRect(-HW - 70, -hh - 70, FX_TILE_W + 140, hh * 2 + 140);
+        }
+
+        // Mặt ô phủ sương trắng xanh, dày lên từ chân ô rồi tan
+        const frost = seg(t, 0.15, 1.1) * (1 - seg(t, 2.0, 2.7));
+        if (frost > 0) {
+          const top = hh - hh * 2 * frost;
+          const grd = under.createLinearGradient(0, hh, 0, top);
+          grd.addColorStop(0, `rgba(235,245,255,${0.85 * frost})`);
+          grd.addColorStop(1, 'rgba(235,245,255,0)');
+          under.fillStyle = grd; under.fillRect(-HW, top, FX_TILE_W, hh - top);
+        }
+
+        // Hạt tuyết bay chếch theo gió
+        acc += dt * 120 * wind;
+        while (acc > 1) {
+          acc--;
+          parts.push({
+            kind: 'snow', x: rnd(-HW - 70, HW - 20), y: rnd(-hh - 60, hh),
+            vx: rnd(160, 260), vy: rnd(30, 80), life: rnd(0.5, 0.9), age: 0, size: rnd(1.6, 3.4),
+          });
+        }
+
+        // Vệt gió
+        if (wind > 0.05) {
+          over.save();
+          over.lineCap = 'round';
+          for (const s of streaks) {
+            s.x += 520 * s.v * wind * dt;
+            if (s.x - s.len > HW + 90) { s.x = -HW - 90; s.y = rnd(-hh - 50, hh + 30); }
+            const y0 = s.y + Math.sin(s.x * 0.05) * 3;
+            // Vệt xanh xám bên dưới, lõi trắng bên trên: đọc được trên cả nền trắng lẫn nền tối
+            over.strokeStyle = `rgba(80,120,165,${0.45 * wind})`;
+            over.lineWidth = 3;
+            over.beginPath(); over.moveTo(s.x - s.len * wind, y0); over.lineTo(s.x, s.y); over.stroke();
+            over.strokeStyle = `rgba(255,255,255,${0.9 * wind})`;
+            over.lineWidth = 1.4;
+            over.beginPath(); over.moveTo(s.x - s.len * wind, y0); over.lineTo(s.x, s.y); over.stroke();
+          }
+          over.restore();
+        }
+
+        // Căn nhà: tuyết đọng dày dần, rung, rồi sập lúc 1,5 s
+        if (env.house) {
+          const hy = -hh - 18 * PROP;
+          const fall = seg(t, 1.5, 2.0);
+          if (fall > 0 && !fell) {
+            fell = true;
+            env.sfx('snowfall');
+            puff(parts, 0, hy + 10, 16, 40, '#FFFFFF');
+            for (let j = 0; j < 8; j++) parts.push({
+              kind: 'chunk', x: rnd(-12, 12), y: hy, vx: rnd(-90, 90), vy: rnd(-160, -60), grav: 600,
+              spin: rnd(-12, 12), life: 0.8, age: 0, size: rnd(4, 8), color: Math.random() < 0.5 ? '#7A4B2A' : '#2E6B52',
+            });
+          }
+          if (fall < 1) {
+            const quiver = seg(t, 0.9, 1.5) * (1 - fall);
+            over.save();
+            over.translate(Math.sin(t * 60) * 2.2 * quiver, hy);
+            over.scale(1 + fall * 0.3, 1 - eOutCubic(fall) * 0.85);
+            drawHouse(over, 0, 0, 22 * PROP, env.hotel, 1 - seg(fall, 0.6, 1));
+            roofSnow(over, 22 * PROP * (env.hotel ? 1.25 : 1), seg(t, 0.3, 1.4), 1 - seg(fall, 0.6, 1));
+            over.restore();
+          }
+        }
+
+        // Đống tuyết dồn ở chân ô
+        const pile = eOutCubic(seg(t, 1.6, 2.3)) * (1 - seg(t, 2.35, 2.7));
+        if (pile > 0) {
+          over.save();
+          over.fillStyle = '#FFFFFF';
+          over.strokeStyle = 'rgba(140,180,212,.8)';
+          over.lineWidth = 1.2;
+          over.beginPath();
+          over.moveTo(-HW - 6, hh);
+          over.quadraticCurveTo(-HW * 0.4, hh - 22 * pile, 0, hh - 14 * pile);
+          over.quadraticCurveTo(HW * 0.5, hh - 26 * pile, HW + 6, hh);
+          over.closePath();
+          over.fill(); over.stroke();
+          over.restore();
         }
         stepParticles(parts, dt); drawParticles(over, parts);
       },

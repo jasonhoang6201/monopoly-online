@@ -11,6 +11,9 @@ import {
 import { TOKENS, MAX_PLAYERS } from '../core/state.js';
 import { DECK_META } from '../data/cards.js';
 import { EVENT_LEVELS, DEFAULT_EVENT_LEVEL } from '../data/events.js';
+import { themePickHtml } from './lobby.js';
+import { currentTheme, setTheme } from '../theme/theme.js';
+import { audio } from '../audio/audio.js';
 import { deedCard, deedGrid, rentLevels, priceItems, tileCardUrl } from './deed.js';
 import { PEEK_HINT, pickTilesOnBoard } from './tilePicker.js';
 import { tokenImage, elapsedLabel, gameElapsed } from './hud.js';
@@ -41,6 +44,8 @@ function hexA(hex, a) {
 export function setupModal() {
   let count = 2;
   let events = DEFAULT_EVENT_LEVEL;
+  /* Ván mới sau màn hạ màn giữ chủ đề vừa chơi — người ta vừa chọn nó xong. */
+  let theme = currentTheme();
   const names = Array.from({ length: MAX_PLAYERS }, (_, i) => `Người chơi ${i + 1}`);
   const counts = Array.from({ length: MAX_PLAYERS - 1 }, (_, i) => i + 2);   // 2…6
   /** Màu quân từng chỗ ngồi. Mặc định là sáu sắc đầu bảng, bấm chấm màu để đổi. */
@@ -101,6 +106,7 @@ export function setupModal() {
             </div>
             <p class="rule-note">${esc(EVENT_LEVELS[events].desc)}</p>
           </div>
+          <div class="lobby-theme" style="margin-top:16px">${themePickHtml(theme)}</div>
           <div class="trade-summary" style="margin-top:16px;text-align:left">
             <b style="color:var(--gold-light)">Luật rút gọn</b>
             <ul class="rules" style="margin-top:6px">
@@ -142,6 +148,13 @@ export function setupModal() {
         inner.querySelectorAll('.rule-btn').forEach((b) => {
           b.addEventListener('click', () => { events = b.dataset.lv; render(); });
         });
+        // Đổi chủ đề là thấy ngay: bàn cờ phía sau và nhạc chờ đổi theo
+        inner.querySelector('[data-theme-pick]').addEventListener('change', (e) => {
+          theme = e.target.value;
+          setTheme(theme);
+          audio.setTheme(theme);
+          render();
+        });
       };
       render();
 
@@ -149,13 +162,13 @@ export function setupModal() {
         close({
           names: names.slice(0, count).map((n, i) => (n.trim() || `Người chơi ${i + 1}`)),
           tokens: picks.slice(0, count),
-          settings: { events },
+          settings: { events, theme },
         });
       }, { once: true, capture: true });
     },
   }).then((v) => (v?.names
     ? v
-    : { names: names.slice(0, count), tokens: picks.slice(0, count), settings: { events } }));
+    : { names: names.slice(0, count), tokens: picks.slice(0, count), settings: { events, theme } }));
 }
 
 /* ==================================================================

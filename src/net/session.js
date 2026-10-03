@@ -13,6 +13,7 @@ import { transportKind } from './transport.js';
 import { me, reclaimSeat, holdSeat, dropSeat, lastSeat } from './identity.js';
 import { openModal } from '../ui/modal.js';
 import { lobbyModal, kickedModal, fullModal } from '../ui/lobby.js';
+import { audio } from '../audio/audio.js';
 
 const homeUrl = () => `${window.location.origin}${window.location.pathname}`;
 
@@ -79,6 +80,12 @@ function errorModal(message, rejoin = false) {
  */
 export async function startSession(controller) {
   let urlCode = roomFromUrl();
+
+  /* Nhạc chờ có mặt từ màn hình đầu tiên cho tới lúc khai cuộc: chọn kiểu
+     chơi, gõ tên, ngồi phòng chờ. Trình duyệt chưa cho phát thì `startMusic`
+     chỉ bật cờ `menuMode`; cú chạm đầu tiên (`kick` trong main.js) nối tiếng.
+     Vào ván thì `startOnline` / `start` tắt nhạc, chỉ còn hiệu ứng. */
+  audio.startMusic();
 
   // Bấm vào đường mời thì vào thẳng phòng ấy, khỏi hỏi chơi kiểu gì.
   if (!urlCode) {

@@ -9,6 +9,24 @@
  * Toàn bộ hướng của con xí ngầu giữ bằng quaternion — nhờ vậy vừa quay tự do
  * ba trục lúc lăn, vừa nội suy mượt (slerp) về đúng mặt số cuối cùng.
  */
+import { P } from './boardArt.js';
+
+/**
+ * Chất liệu xí ngầu theo chủ đề. Bản gốc là xương ngà, chấm nâu sẫm; Giáng
+ * Sinh là khối băng: thân xanh băng, mặt trắng ánh xanh, chấm xanh đêm, mỗi mặt
+ * một vệt sáng chéo như mặt băng phản chiếu. Chấm đỏ ở mặt 1 và 4 giữ nguyên.
+ */
+const DIE_LOOK = {
+  default: {
+    body: '#C4AC84', edge: 'rgba(78,58,36,.55)', shadow: 'rgba(20,12,4,.45)',
+    face: [252, 240, 214], pipHi: [84, 66, 48], pipLo: [24, 17, 9], sheen: 0,
+  },
+  christmas: {
+    body: '#8DBBDB', edge: 'rgba(52,96,136,.6)', shadow: 'rgba(30,58,85,.4)',
+    face: [228, 244, 255], pipHi: [62, 104, 150], pipLo: [18, 40, 70], sheen: 0.5,
+  },
+};
+
 
 /* --------------------------------------------------------- quaternion */
 
@@ -259,18 +277,19 @@ export function drawDie(cv, q) {
       ]));
     }
   }
+  const look = DIE_LOOK[P.theme] ?? DIE_LOOK.default;
   if (corners.length) {
     const body = hull(corners);
     ctx.save();
-    ctx.shadowColor = 'rgba(20,12,4,.45)';
+    ctx.shadowColor = look.shadow;
     ctx.shadowBlur = s * 0.05;
     ctx.shadowOffsetY = s * 0.018;
     roundPoly(ctx, body, s * 0.035);
-    ctx.fillStyle = '#C4AC84';
+    ctx.fillStyle = look.body;
     ctx.fill();
     ctx.restore();
     roundPoly(ctx, body, s * 0.035);
-    ctx.strokeStyle = 'rgba(78,58,36,.55)';
+    ctx.strokeStyle = look.edge;
     ctx.lineWidth = s * 0.012;
     ctx.lineJoin = 'round';
     ctx.stroke();
@@ -281,7 +300,8 @@ export function drawDie(cv, q) {
     const k = 0.62 + 0.50 * lit;                       // hệ số sáng của mặt
     const tint = (mul) => {
       const t = Math.min(1, k * mul);
-      return `rgb(${Math.round(252 * t)},${Math.round(240 * t)},${Math.round(214 * t)})`;
+      const [r, g, b] = look.face;
+      return `rgb(${Math.round(r * t)},${Math.round(g * t)},${Math.round(b * t)})`;
     };
 
     /* Thu mặt vào trong một chút để lộ cạnh vát */
@@ -299,6 +319,21 @@ export function drawDie(cv, q) {
     roundPoly(ctx, pts, s * 0.055);
     ctx.fillStyle = grd;
     ctx.fill();
+
+    /* Mặt băng: một vệt sáng chéo từ góc trên, mờ dần — đủ để đọc ra chất băng
+       mà không lấn lên chấm */
+    if (look.sheen > 0) {
+      ctx.save();
+      roundPoly(ctx, pts, s * 0.055);
+      ctx.clip();
+      const sh = ctx.createLinearGradient(pts[0].x, pts[0].y, pts[2].x, pts[2].y);
+      sh.addColorStop(0.18, 'rgba(255,255,255,0)');
+      sh.addColorStop(0.3, `rgba(255,255,255,${look.sheen * lit})`);
+      sh.addColorStop(0.42, 'rgba(255,255,255,0)');
+      ctx.fillStyle = sh;
+      ctx.fill();
+      ctx.restore();
+    }
 
     /* Chấm — vẽ trong hệ toạ độ của mặt nên tự méo đúng theo phối cảnh */
     const o = proj(g.c);
@@ -321,8 +356,9 @@ export function drawDie(cv, q) {
         rg.addColorStop(0, `rgb(${Math.round(226 * dim)},${Math.round(86 * dim)},${Math.round(62 * dim)})`);
         rg.addColorStop(1, `rgb(${Math.round(126 * dim)},${Math.round(26 * dim)},${Math.round(16 * dim)})`);
       } else {
-        rg.addColorStop(0, `rgb(${Math.round(84 * dim)},${Math.round(66 * dim)},${Math.round(48 * dim)})`);
-        rg.addColorStop(1, `rgb(${Math.round(24 * dim)},${Math.round(17 * dim)},${Math.round(9 * dim)})`);
+        const [h, l] = [look.pipHi, look.pipLo];
+        rg.addColorStop(0, `rgb(${Math.round(h[0] * dim)},${Math.round(h[1] * dim)},${Math.round(h[2] * dim)})`);
+        rg.addColorStop(1, `rgb(${Math.round(l[0] * dim)},${Math.round(l[1] * dim)},${Math.round(l[2] * dim)})`);
       }
       ctx.fillStyle = rg;
       ctx.beginPath();

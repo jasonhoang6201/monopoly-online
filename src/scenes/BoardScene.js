@@ -23,6 +23,10 @@ import {
 import { BOARD, money } from '../data/board.js';
 import { audio } from '../audio/audio.js';
 import { DPR, px } from '../dpr.js';
+import { onTheme } from '../theme/theme.js';
+import {
+  ledBulbs, paintBulbGlow, paintSnowflake, snowLevel,
+} from '../render/xmasDeco.js';
 
 /* Người dùng xin bớt chuyển động thì ô đổi trạng thái ngay, không diễn */
 const REDUCED_MOTION = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
@@ -191,14 +195,18 @@ export default class BoardScene extends Phaser.Scene {
 
   create() {
     this.boardPx = boardTextureSize();
+    /** Nấc gờ tuyết đang vẽ trên ảnh bàn cờ (chủ đề Giáng Sinh). */
+    this.snowLevel = 0;
     this.textures.addCanvas('board', paintBoard(this.boardPx));
 
     /* Quân cờ vẽ dư độ phân giải để không bị rỗ khi bàn cờ lớn, nhưng chỉ vẽ
        khi biết ván này gồm những màu nào (xem `setPlayers`) — bảng có 18 sắc mà
        một ván nhiều nhất 6 người, dựng cả 18 tấm là phí bộ nhớ ảnh. */
     this.textures.addCanvas('die-shadow', paintDieShadow(128));
-    this.textures.addCanvas('house', paintHouseGlyph(192));
-    this.textures.addCanvas('hotel', paintHotelGlyph(192));
+    this.textures.addCanvas('house', paintHouseGlyph(192, this.xmas));
+    this.textures.addCanvas('hotel', paintHotelGlyph(192, this.xmas));
+    this.textures.addCanvas('bulb-glow', paintBulbGlow(64));
+    this.textures.addCanvas('snowflake', paintSnowflake(24));
     this.textures.addCanvas('edge-glow', paintEdgeGlow(512, 256));
     this.textures.addCanvas('edge-spill', paintEdgeSpill(512, 512));
     this.textures.addCanvas('coin', paintCoin(96));
@@ -295,11 +303,112 @@ export default class BoardScene extends Phaser.Scene {
       .setDepth(30).setVisible(false));
     this.diceHome = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
 
+    /* Chủ đề Giáng Sinh: quầng đèn LED quanh lòng bàn cờ (depth 2.3 — trên
+       nước màu chủ đất, dưới vệt đèn nhà) và tuyết rơi (depth 0.5 — ngay trên
+       mặt bàn, dưới mọi thứ khác). Rỗng khi chơi chủ đề mặc định. */
+    this.ledLayer = this.add.container(0, 0).setDepth(2.3);
+    this.leds = [];
+    this.snowLayer = this.add.container(0, 0).setDepth(0.5);
+    this.flakes = [];
+    this.events.on(Phaser.Scenes.Events.UPDATE, (time, delta) => this.tickXmas(time, delta / 1000));
+    onTheme(() => this.retheme());
+
     this.setupTileInput();
     this.layout();
     // Đổi cỡ cửa sổ hay bật toàn màn hình đều phải dựng lại bố cục
     this.scale.on(Phaser.Scale.Events.RESIZE, () => this.relayout());
     this.game.events.emit('scene-ready', this);
+  }
+
+  /** Đang chơi chủ đề Giáng Sinh — đọc từ bảng màu bàn cờ, `theme.js` giữ nó đúng. */
+  get xmas() { return P.theme === 'christmas'; }
+
+  /**
+   * Đổi chủ đề: vẽ lại mọi texture có màu theo chủ đề (bàn cờ, nhà, xí ngầu,
+   * quân cờ) rồi dựng lại bố cục. Chỉ xảy ra ngoài ván hoặc lúc vừa vào ván —
+   * xem `theme/theme.js` — nên vẽ lại cả bàn một lần là chấp nhận được.
+   */
+  retheme() {
+    this.snowLevel = this.state && this.xmas ? snowLevel(this.state.laps ?? 0, this.state.players.length) : 0;
+    this.repaintBoard();
+    for (const [key, paint] of [['house', paintHouseGlyph], ['hotel', paintHotelGlyph]]) {
+      if (this.textures.exists(key)) this.textures.remove(key);
+      this.textures.addCanvas(key, paint(192, this.xmas));
+    }
+    this.diceTex.forEach((tex, i) => { drawDie(tex.getSourceImage(), this.diceQ[i]); tex.refresh(); });
+    this.hideHousePlaque();
+    if (this.players) this.setPlayers(this.players);
+    this.layout();
+  }
+
+  /** Vẽ lại ảnh bàn cờ ở độ phân giải hiện tại, theo chủ đề và nấc tuyết hiện tại. */
+  repaintBoard() {
+    if (this.textures.exists('board')) this.textures.remove('board');
+    this.textures.addCanvas('board', paintBoard(this.boardPx, { snowLevel: this.snowLevel }));
+    this.board.setTexture('board');
+    // Bản xám dựng theo ảnh cũ — bỏ đi, lần sau cần sẽ dựng lại
+    if (this.textures.exists('board-gray')) this.textures.remove('board-gray');
+  }
+
+  /**
+   * Dựng lại quầng đèn LED và hạt tuyết theo bố cục hiện tại. Gọi từ
+   * `layout()`; chủ đề mặc định thì dọn sạch hai lớp.
+   */
+  layoutXmas() {
+    this.ledLayer.removeAll(true);
+    this.leds = [];
+    this.snowLayer.removeAll(true);
+    this.flakes = [];
+    if (!this.xmas) return;
+
+    const r = this.size / 12 * 0.34;
+    for (const b of ledBulbs(TEX)) {
+      const s = this.toScreen(b.x, b.y);
+      const img = this.add.image(s.x, s.y, 'bulb-glow')
+        .setDisplaySize(r, r)
+        .setTint(b.color)
+        .setBlendMode(Phaser.BlendModes.ADD);
+      this.ledLayer.add(img);
+      this.leds.push({ img, group: b.group });
+    }
+
+    /* Tuyết rơi trên mặt bàn: thưa và chậm, chỉ để có không khí. Người dùng
+       xin bớt chuyển động thì không có. */
+    if (REDUCED_MOTION()) return;
+    const W = this.scale.width, H = this.scale.height;
+    const n = Math.round(Math.min(90, (W * H) / (px(1) * px(1)) / 14000));
+    for (let i = 0; i < n; i++) {
+      const img = this.add.image(Math.random() * W, Math.random() * H, 'snowflake');
+      const k = 0.4 + Math.random() * 0.6;          // gần to và nhanh, xa nhỏ và chậm
+      img.setDisplaySize(px(3 + 5 * k), px(3 + 5 * k)).setAlpha(0.45 + 0.4 * k);
+      this.snowLayer.add(img);
+      this.flakes.push({ img, k, ph: Math.random() * Math.PI * 2 });
+    }
+  }
+
+  /**
+   * Mỗi khung hình: đèn LED sáng dịu theo ba nhóm lệch pha (chu kỳ 3,6 giây,
+   * không bao giờ tắt hẳn — đèn chớp tắt liên tục gây khó chịu), tuyết rơi.
+   */
+  tickXmas(time, dt) {
+    if (this.leds.length) {
+      const calm = REDUCED_MOTION();
+      const ph = (time / 3600) * Math.PI * 2;
+      for (const l of this.leds) {
+        const a = calm ? 0.6 : 0.42 + 0.38 * (0.5 + 0.5 * Math.sin(ph + (l.group * Math.PI * 2) / 3));
+        l.img.setAlpha(a);
+      }
+    }
+    if (this.flakes.length) {
+      const W = this.scale.width, H = this.scale.height;
+      const fall = px(26), drift = px(10);
+      for (const f of this.flakes) {
+        f.ph += dt * (0.6 + f.k);
+        f.img.y += fall * (0.5 + f.k) * dt;
+        f.img.x += Math.sin(f.ph) * drift * dt;
+        if (f.img.y > H + 8) { f.img.y = -8; f.img.x = Math.random() * W; }
+      }
+    }
   }
 
   // ---------------------------------------------------------------- layout
@@ -314,11 +423,7 @@ export default class BoardScene extends Phaser.Scene {
     const need = Math.min(3200, Math.ceil((this.size * 1.06) / 128) * 128);
     if (need > this.boardPx) {
       this.boardPx = need;
-      this.textures.remove('board');
-      this.textures.addCanvas('board', paintBoard(need));
-      this.board.setTexture('board');
-      // Bản xám dựng theo bàn cũ thì lệch điểm ảnh — bỏ đi, lần sau cần sẽ dựng lại
-      if (this.textures.exists('board-gray')) this.textures.remove('board-gray');
+      this.repaintBoard();
       this.layout();
     }
   }
@@ -342,12 +447,20 @@ export default class BoardScene extends Phaser.Scene {
     this.board.setPosition(this.originX + this.size / 2, this.originY + this.size / 2);
     this.board.setDisplaySize(this.size, this.size);
 
-    // Phông nền cùng tông sơn mài với bàn cờ, hai vầng sáng ấm hắt từ giữa ra
+    // Phông nền cùng tông sơn mài với bàn cờ, hai vầng sáng ấm hắt từ giữa ra.
+    // Giáng Sinh: trời xanh băng, vầng sáng trắng như tuyết hắt lên.
     this.bg.clear();
-    this.bg.fillStyle(0x150a06, 1).fillRect(0, 0, W, H);
     const c = this.boardCenter();
-    this.bg.fillStyle(0x30150f, 0.6).fillCircle(c.x, c.y, this.size * 0.78);
-    this.bg.fillStyle(0x7c1e14, 0.18).fillCircle(c.x, c.y, this.size * 0.55);
+    if (this.xmas) {
+      this.bg.fillStyle(0xBCD6EA, 1).fillRect(0, 0, W, H);
+      this.bg.fillStyle(0xDCEBF6, 0.8).fillCircle(c.x, c.y, this.size * 0.78);
+      this.bg.fillStyle(0xFFFFFF, 0.35).fillCircle(c.x, c.y, this.size * 0.55);
+    } else {
+      this.bg.fillStyle(0x150a06, 1).fillRect(0, 0, W, H);
+      this.bg.fillStyle(0x30150f, 0.6).fillCircle(c.x, c.y, this.size * 0.78);
+      this.bg.fillStyle(0x7c1e14, 0.18).fillCircle(c.x, c.y, this.size * 0.55);
+    }
+    this.layoutXmas();
 
     this.dieSize = this.size * 0.086;
     this.dice.forEach((d, i) => {
@@ -552,7 +665,8 @@ export default class BoardScene extends Phaser.Scene {
     this.auras = [];
     this.auraColor = [];
     this.tokens = players.map((p) => {
-      const key = `tok-${p.token.key}`;
+      // Quân đội mũ theo chủ đề, nên chủ đề nằm trong tên texture
+      const key = `tok-${P.theme}-${p.token.key}`;
       if (!this.textures.exists(key)) this.textures.addCanvas(key, paintToken(p.token.css, 288));
       const spr = this.add.image(0, 0, key).setOrigin(0.5, 0.86);
       this.tokenLayer.add(spr);
@@ -1020,6 +1134,13 @@ export default class BoardScene extends Phaser.Scene {
   refresh(state) {
     this.diffTileFx(state);
     this.state = state;
+    /* Gờ tuyết dày dần theo số vòng cả bàn đã đi. Đổi nấc thì vẽ lại ảnh bàn
+       cờ — một ván chỉ bốn lần — trước khi dựng lớp phủ, vì dải tên ô dán lại
+       từ chính ảnh ấy. */
+    if (this.xmas) {
+      const lv = snowLevel(state.laps ?? 0, state.players.length);
+      if (lv !== this.snowLevel) { this.snowLevel = lv; this.repaintBoard(); }
+    }
     this.overlay.removeAll(true);
     this.glowLayer.removeAll(true);
     this.glowFx = [];
@@ -1233,9 +1354,10 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   /**
-   * Hoạt cảnh có nguyên nhân mà ảnh chụp không nói ra (động đất, hoả hoạn).
+   * Hoạt cảnh có nguyên nhân mà ảnh chụp không nói ra (động đất, hoả hoạn,
+   * bão tuyết).
    * Nhiều ô thì chạy so le 150ms, chỉ ô đầu có tiếng.
-   * @param {'quake'|'fire'} kind
+   * @param {'quake'|'fire'|'blizzard'} kind
    * @param {number[]} ids
    * @param {boolean} [lost] false khi chủ đã chống đỡ / dập lửa kịp: ô vẫn rung,
    *   vẫn cháy, chỉ không có căn nhà văng ra
@@ -1418,6 +1540,26 @@ export default class BoardScene extends Phaser.Scene {
     lamp(sh * (houses === 5 ? 1.10 : 0.92), sw * 1.04, base * 0.72);
     // Gốc đèn — vệt ngắn, đậm ngay chân ô; sắc của người chơi đọc ở đây
     lamp(sh * 0.34, sw * 0.86, base);
+
+    /* Giáng Sinh: thêm một dây đèn màu chủ đất chăng ngang mép trong ô, mỗi
+       căn nhà hai bóng, khách sạn kín cả dây. Nhìn dây đèn là biết đất của ai
+       và xây dày cỡ nào. Nhịp sáng đi theo `glowBeat` như vệt đèn nhà. */
+    if (this.xmas) {
+      const n = houses === 5 ? 9 : houses * 2;
+      const tx = Math.cos(edge.angle), ty = Math.sin(edge.angle);
+      const lift = sh * 0.07;                     // lùi vào lòng bàn cờ một chút
+      const dot = sw * 0.16;
+      for (let i = 0; i < n; i++) {
+        const u = ((i + 0.5) / n - 0.5) * sw * 0.86;
+        const x = s.x + tx * u + nx * lift, y = s.y + ty * u + ny * lift;
+        const halo = this.add.image(x, y, 'bulb-glow')
+          .setDisplaySize(dot * 2.2, dot * 2.2).setTint(tint).setBlendMode(Phaser.BlendModes.ADD);
+        const core = this.add.image(x, y, 'bulb-glow')
+          .setDisplaySize(dot * 0.8, dot * 0.8).setTint(0xFFFFFF);
+        this.glowLayer.add([halo, core]);
+        this.glowFx.push({ img: halo, base: 0.9, id }, { img: core, base: 0.85, id, beat: false });
+      }
+    }
   }
 
   /* ------------------------------------ bảng nhà bật lên khi rê chuột vào ô */

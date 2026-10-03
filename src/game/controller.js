@@ -15,7 +15,7 @@ import {
 import {
   cardType, isKeepable, demolishLevels, usableCard, useReason, cardTargets, moveDest,
   demolishGroups, demolishPicks,
-  othersOf, shareEach, repairBill, seizePrice, resumePrice,
+  othersOf, shareEach, repairBill, seizePrice, resumePrice, giftShares,
 } from '../core/cards.js';
 import { cardOf, CARD_KINDS, cardName, cardEffect, DECKS } from '../data/cards.js';
 import { inventoryModal } from '../ui/inventory.js';
@@ -36,7 +36,7 @@ import {
 } from '../ui/modals.js';
 import { raisePlan } from '../core/raisePlan.js';
 import {
-  bracePromptModal, firePromptModal, auctionBidModal, auctionResultModal, closeBidModal,
+  bracePromptModal, firePromptModal, snowPromptModal, auctionBidModal, auctionResultModal, closeBidModal,
 } from '../ui/eventModals.js';
 import { pickTileOnBoard, litTiles } from '../ui/tilePicker.js';
 import { pickGroupOnBoard } from '../ui/groupPicker.js';
@@ -45,6 +45,7 @@ import { audio } from '../audio/audio.js';
 import { MemeDeck } from '../ui/memes.js';
 import { skillIcon } from '../ui/skillIcons.js';
 import { fateCase, eventCase, newSeed } from '../ui/caseOpen.js';
+import { setTheme } from '../theme/theme.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -65,6 +66,12 @@ const offerTiles = (offer) => [...(offer?.give ?? []), ...(offer?.get ?? [])];
  * thẻ di chuyển để chạy vòng vòng không dứt.
  */
 const MAX_CARD_CHAIN = 2;
+
+/** Chủ đề của ván áp lên hình (bàn cờ, quân, CSS) và tiếng (nhạc, hiệu ứng). */
+function applyTheme(theme) {
+  setTheme(theme);
+  audio.setTheme(theme);
+}
 
 export class Game {
   constructor(scene) {
@@ -197,6 +204,9 @@ export class Game {
     const { names, tokens, settings } = await setupModal();
     audio.stopMusic();
     this.state = new GameState(names, tokens ?? null, settings);
+    /* Hộp bày bàn đã áp chủ đề lúc người chơi chọn; gọi lại theo `settings`
+       đã chốt cho chắc, trước khi dựng quân cờ (quân đội mũ theo chủ đề). */
+    applyTheme(this.state.settings.theme);
     this.quick.setState(this.state);
     this.hud = new Hud(this.state, (id) => this.showPlayer(id), this.quick);
     this.hookPeek();
@@ -237,6 +247,8 @@ export class Game {
     audio.stopMusic();
     this.net = room;
     this.state = fromSnapshot(snap);
+    // Vào lại giữa ván cũng đi qua đây: chủ đề lấy từ ảnh chụp, không từ phòng chờ
+    applyTheme(this.state.settings.theme);
     this.quick.setState(this.state);
     this.hud = new Hud(this.state, (id) => this.showPlayer(id), this.quick);
     this.hookPeek();
@@ -490,11 +502,11 @@ export class Game {
   }
 
   /**
-   * Hoạt cảnh động đất / hoả hoạn trên các ô vừa mất nhà — trên mọi máy.
+   * Hoạt cảnh động đất / hoả hoạn / bão tuyết trên các ô vừa mất nhà — trên mọi máy.
    * Xây nhà, thế chấp, chuộc lại thì không cần gọi: bàn cờ tự nhận ra từ ảnh
    * chụp (`BoardScene.diffTileFx`). Riêng nhà giảm thì ảnh chụp không nói vì
    * sao, nên máy cầm lái phải báo.
-   * @param {'quake'|'fire'} kind
+   * @param {'quake'|'fire'|'blizzard'} kind
    * @param {number[]} ids
    * @param {boolean} [lost] false = nhà được giữ lại, không diễn cảnh nhà văng
    */
@@ -691,6 +703,11 @@ export class Game {
       audio.sfx('turn');
       return litTiles(this.scene, data.lots.map((l) => l.id),
         () => firePromptModal(this.state, this.net.mySeat, data.lots, ms));
+    }
+    if (name === 'ev-snow') {
+      audio.sfx('turn');
+      return litTiles(this.scene, data.lots.map((l) => l.id),
+        () => snowPromptModal(this.state, this.net.mySeat, data.lots, ms));
     }
     if (name === 'ev-pick') {
       audio.sfx('turn');
@@ -1285,7 +1302,7 @@ export class Game {
         `<b>${p.name}</b> ra đôi ${d.a}, được đi thêm một lượt.`, { ms: 2200 });
     }
 
-    await this.advance(p, back ? -d.sum : d.sum, d);
+    await this.advance(p, (back ? -d.sum : d.sum) + await this.iceSlide(p, back), d);
 
     // Vào tù thì hết lượt ngay, kể cả khi vừa đổ đôi.
     if (st.over || p.bankrupt || p.inJail) { await this.endTurn(); return; }
@@ -1296,6 +1313,23 @@ export class Game {
     } else {
       this.setTurnActions(true);    // chỉ còn kết thúc lượt
     }
+  }
+
+  /**
+   * Thẻ Thời Cuộc "Đường Đóng Băng" đang chạy: nước đi bằng xí ngầu trượt
+   * thêm 1–2 ô. Máy cầm lái gieo số ô trượt rồi cộng thẳng vào số bước, nên
+   * máy ngồi xem nhận đúng một tin `move` với tổng số bước, không gieo lại.
+   * Thẻ dắt quân đi (Cơ Hội / Khí Vận) không trượt: đó là đi tới một ô định sẵn.
+   *
+   * @param {boolean} [back] nước đi lùi (kỹ năng) thì không trượt
+   * @returns {Promise<number>} số ô trượt thêm
+   */
+  async iceSlide(p, back = false) {
+    if (back || !this.state.hasMod('ice')) return 0;
+    const slide = Math.random() < 0.5 ? 1 : 2;
+    await this.bc.show('ĐƯỜNG ĐÓNG BĂNG',
+      `<b>${p.name}</b> trượt thêm <b>${slide} ô</b> trên mặt đường đóng băng.`, { ms: 1800 });
+    return slide;
   }
 
   /** Đi `steps` ô, cộng lương nếu đi ngang BẮT ĐẦU, rồi xử lý ô đáp xuống. */
@@ -1322,6 +1356,8 @@ export class Game {
          Điểm kỹ năng và bộ đếm lần qua cộng **trước** khi tính lương: Thâm Niên
          tính cả lần qua này. */
       const landed = p.pos === 0;      // dừng đúng ô 0, không chỉ đi ngang
+      // Bản Giáng Sinh có tiếng chuông riêng cho mốc này; bản gốc im, đã có tiếng xu bay
+      audio.sfx('go');
       const points = this.skills.lapStart(p);
       const { total, parts } = st.payslip(landed, p);
       // Cò Quay Lương: quay gấp đôi hoặc một nửa — chỉ phần lương, tiền giữ nhà Sổ Hồng đứng ngoài
@@ -1504,6 +1540,7 @@ export class Game {
     if (isKeepable(drawn.card)) return this.keepCard(p, kind, drawn, title, seed);
     switch (cardType(drawn.card)) {
       case 'collect': return this.cardCollect(p, kind, drawn.card, title, seed);
+      case 'gift':    return this.cardGift(p, kind, drawn.card, title, seed);
       case 'repair':  return this.cardRepair(p, kind, drawn.card, title, seed);
       case 'skill':   return this.cardSkill(p, kind, drawn.card, title, seed);
       case 'move':    return this.cardMove(p, kind, drawn.card, title, seed, dice);
@@ -1606,6 +1643,32 @@ export class Game {
     for (const seat of othersOf(st, p.id)) {
       if (st.players[seat].bankrupt) continue;
       await this.payPlayer(seat, p.id, each);
+    }
+  }
+
+  /**
+   * Quà Giáng Sinh: ngân hàng phát cho cả bàn, người ít tiền mặt nhất nhận
+   * gấp đôi. Chia theo `giftShares` tính một lần ở máy cầm lái, rồi phát từng
+   * phần qua `receiveFromBank` cho tiền bay tới đúng người.
+   */
+  async cardGift(p, kind, card, title, seed) {
+    const st = this.state;
+    const shares = giftShares(st, card);
+    const poor = shares.filter((s) => s.poorest).map((s) => st.players[s.seat].name);
+    // Cả bàn bằng tiền nhau thì ai cũng là "người ít tiền nhất" — nói thẳng ra
+    const allTie = poor.length === shares.length;
+    const note = allTie
+      ? `Cả bàn đang bằng tiền nhau nên ai cũng nhận gấp đôi: <b>${money(card.amount * 2)}</b>.`
+      : `Cả bàn mỗi người <b>${money(card.amount)}</b>, ${poor.join(', ')} ít tiền mặt nhất
+         nhận <b>${money(card.amount * 2)}</b>.`;
+    await this.showFateCard(kind, card, { amount: card.amount, note, label: 'Nhận quà', seed });
+    await this.bc.show(title, allTie
+      ? `Ông già Noel phát quà: cả bàn mỗi người <span class="up">${money(card.amount * 2)}</span>.`
+      : `Ông già Noel phát quà: mỗi người <span class="up">${money(card.amount)}</span>,
+         <b>${poor.join(', ')}</b> nhận gấp đôi <span class="up">${money(card.amount * 2)}</span>.`);
+    for (const s of shares) {
+      if (st.players[s.seat].bankrupt) continue;
+      await this.receiveFromBank(s.seat, s.amount);
     }
   }
 
@@ -2483,7 +2546,7 @@ export class Game {
       this.hud.refresh();
       await this.bc.show('RA ĐÔI, ĐƯỢC THA',
         `<b>${p.name}</b> đổ đôi ${d.a}, rời Khám Lớn và đi ${d.sum} ô.`);
-      await this.advance(p, d.sum, d);
+      await this.advance(p, d.sum + await this.iceSlide(p), d);
       // Ra đôi để thoát tù không cho thêm lượt lắc.
       if (st.over || p.bankrupt || p.inJail) { await this.endTurn(); return; }
       this.setTurnActions(true);
@@ -2505,7 +2568,7 @@ export class Game {
       st.releaseFromJail(p);
       st.rolled = true;
       this.hud.refresh();
-      await this.advance(p, d.sum, d);
+      await this.advance(p, d.sum + await this.iceSlide(p), d);
       if (st.over || p.bankrupt || p.inJail) { await this.endTurn(); return; }
       this.setTurnActions(true);
       return;
@@ -2882,8 +2945,9 @@ export class Game {
       `<b>${winner.name}</b> ${why}, <b>thắng ván này!</b>`, { ms: 6000 });
     this.scene.celebrate(5200, winner.token.color);
     await wait(1600);
-    // Ván đã hạ màn — quay về "màn hình chờ", nhạc nền nổi lại
-    audio.startMusic();
+    // Ván đã hạ màn — quay về "màn hình chờ", nhạc nền nổi lại (bản Giáng Sinh
+    // có riêng một bài cho lúc này)
+    audio.startMusic('win');
     const again = await winnerModal(this.state, winner);
 
     /* Ván online hạ màn thì phòng cũng hết việc: mã phòng cũ đã mang trạng

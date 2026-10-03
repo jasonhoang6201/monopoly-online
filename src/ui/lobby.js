@@ -13,6 +13,9 @@ import { inviteLink } from '../net/room.js';
 import { transportKind } from '../net/transport.js';
 import { myName, setMyName } from '../net/identity.js';
 import { EVENT_LEVELS } from '../data/events.js';
+import { THEMES, themeKey } from '../data/themes.js';
+import { setTheme } from '../theme/theme.js';
+import { audio } from '../audio/audio.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -61,11 +64,13 @@ export function lobbyModal(room, handle = {}) {
         <div class="lobby-seats"></div>
         <div class="lobby-colors"></div>
         <div class="lobby-rule"></div>
+        <div class="lobby-theme"></div>
         <p class="lobby-foot"></p>`;
 
       const seatsEl = box.querySelector('.lobby-seats');
       const colorsEl = box.querySelector('.lobby-colors');
       const ruleEl = box.querySelector('.lobby-rule');
+      const themeEl = box.querySelector('.lobby-theme');
       const countEl = box.querySelector('.lobby-count');
       const footNote = box.querySelector('.lobby-foot');
 
@@ -163,7 +168,7 @@ export function lobbyModal(room, handle = {}) {
         const iAmReady = !!room.seats[mine]?.ready;
         const sig = JSON.stringify([
           room.seats.map((s) => [s.name, s.token, s.ready, s.online]),
-          room.hostId, mine, room.options?.events,
+          room.hostId, mine, room.options?.events, room.options?.theme,
         ]);
         // Đang gõ dở mà vẽ lại cả danh sách là mất chữ và mất con trỏ — chỉ vẽ
         // khi sổ ghế thật sự khác lần trước.
@@ -264,6 +269,13 @@ export function lobbyModal(room, handle = {}) {
           });
         }
 
+        themeEl.innerHTML = themePickHtml(room.options?.theme, !iAmHost);
+        if (iAmHost) {
+          themeEl.querySelector('select').addEventListener('change', (e) => {
+            room.setOptions({ theme: e.target.value });
+          });
+        }
+
         footNote.innerHTML = iAmHost
           ? `Bạn là chủ phòng: khi <b>mọi người đã sẵn sàng</b> thì nút
              <b>Khai cuộc</b> mở ra. Bấm <b>✕</b> để mời ai đó ra khỏi phòng.`
@@ -291,14 +303,42 @@ export function lobbyModal(room, handle = {}) {
         foot.appendChild(out);
       };
 
+      /* Chủ đề áp ngay trong phòng chờ, trên mọi máy: bàn cờ phía sau, khung
+         đèn hộp thoại và nhạc chờ đổi theo lựa chọn của chủ phòng, nên ai
+         cũng thấy trước ván sắp chơi trông ra sao. `setTheme` tự bỏ qua khi
+         chủ đề không đổi, gọi mỗi lần sổ ghế đổi cũng không tốn gì. */
+      const applyTheme = () => {
+        setTheme(room.options?.theme);
+        audio.setTheme(themeKey(room.options?.theme));
+      };
+
       // Sổ ghế đổi (người vào, người ra, ai đó bấm sẵn sàng) → vẽ lại
-      room.on.room = () => { paint(); paintColors(); };
+      room.on.room = () => { applyTheme(); paint(); paintColors(); };
       room.on.kicked = () => close('kicked');
       room.on.closed = () => close('closed');
+      applyTheme();
       paint();
       paintColors();
     },
   });
+}
+
+/**
+ * Ô chọn chủ đề — dùng chung cho phòng chờ online và hộp bày bàn một máy.
+ * `data-theme-pick` để bài kiểm thử tìm ra mà không phụ thuộc chữ hiển thị.
+ */
+export function themePickHtml(theme, locked = false) {
+  const cur = THEMES[themeKey(theme)];
+  return `
+    <div class="rule-head">
+      <span class="rule-label">CHỦ ĐỀ</span>
+      <i>${esc(cur.name.split(' · ')[0])}</i>
+    </div>
+    <select class="theme-pick" data-theme-pick aria-label="Chủ đề bàn cờ" ${locked ? 'disabled' : ''}>
+      ${Object.values(THEMES).map((t) => `
+        <option value="${t.key}" ${t.key === cur.key ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
+    </select>
+    <p class="rule-note">${esc(cur.desc)}${locked ? ' Chủ phòng chọn chủ đề.' : ''}</p>`;
 }
 
 /** Báo cho người vừa bị mời ra khỏi phòng. */

@@ -34,6 +34,7 @@
  */
 import { MAX_PLAYERS, TOKENS } from '../core/state.js';
 import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
+import { DEFAULT_THEME } from '../data/themes.js';
 import { makeTransport } from './transport.js';
 
 /** Mã phòng 4 ký tự, bỏ các chữ dễ đọc nhầm (I, O, 0, 1). */
@@ -107,7 +108,7 @@ export class Room {
      * Đi kèm sổ ghế chứ không gửi riêng: người vào phòng muộn phải biết ngay
      * ván này chơi luật gì, mà sổ ghế thì lúc nào cũng được phát lại cho họ.
      */
-    this.options = { events: DEFAULT_EVENT_LEVEL };
+    this.options = { events: DEFAULT_EVENT_LEVEL, theme: DEFAULT_THEME };
 
     this.on = {
       room: () => {}, kicked: () => {}, full: () => {}, closed: () => {},

@@ -18,7 +18,7 @@ import { drawEvent, planEvent, autoRaise } from '../core/events.js';
 import { houseImmune } from '../core/skills.js';
 import { handoff } from '../ui/modal.js';
 import {
-  bracePromptModal, firePromptModal, auctionBidModal, auctionResultModal,
+  bracePromptModal, firePromptModal, snowPromptModal, auctionBidModal, auctionResultModal,
 } from '../ui/eventModals.js';
 import { litTiles } from '../ui/tilePicker.js';
 import { audio } from '../audio/audio.js';
@@ -128,6 +128,9 @@ export class EventRunner {
       case 'hoa-hoan':
         return `Khu <b>${GROUPS[plan.group].name}</b>: lửa lan cả khu,
                 ${hitCount(plan)} trong ${plan.tiles.length} ô đang có nhà.`;
+      case 'bao-tuyet':
+        return `Khu <b>${GROUPS[plan.group].name}</b>: tuyết phủ cả khu,
+                ${hitCount(plan)} trong ${plan.tiles.length} ô đang có nhà.`;
       case 'mo-duong':
         return `Khu <b>${GROUPS[plan.group].name}</b> lên giá thuê <b>+50%</b>, vĩnh viễn.`;
       case 'trung-thu':
@@ -176,7 +179,9 @@ export class EventRunner {
       case 'mat-mua':
       case 'bao-gia':
       case 'gioi-nghiem':
+      case 'duong-dong-bang':
       case 'mo-duong':            return this.applyMod(card, plan);
+      case 'bao-tuyet':           return this.blizzard(card, plan);
       case 'dong-dat':            return this.quake(card, plan);
       case 'hoa-hoan':            return this.fire(card, plan);
       case 'mat-giay-to':         return this.lostDeeds(plan);
@@ -255,6 +260,7 @@ export class EventRunner {
       salary: 'Lương qua ô Bắt Đầu chỉ còn <b>một nửa</b>',
       build: 'Giá xây nhà tăng <b>50%</b>',
       'freeze-build': '<b>Cấm xây cất</b> trên toàn bàn',
+      ice: 'Đường <b>đóng băng</b>: mỗi lần lắc đi, quân trượt thêm 1 hoặc 2 ô',
       'group-rent': `Tiền thuê khu <b>${GROUPS[plan.mod.group]?.name ?? ''}</b> tăng <b>50%</b>`,
     }[plan.mod.type];
     await this.g.bc.show(card.title, `${what} ${rounds}.`,
@@ -382,6 +388,64 @@ export class EventRunner {
       this.g.tileFx('fire', burnt);
       await this.g.bc.show('CHÁY NHÀ',
         `<b>${p.name}</b> để mặc lửa cháy, mất <b>${gone} cấp nhà</b> ở
+         ${lots.map((l) => tileShortLabel(l.id)).join(', ')}, không đền bù.`,
+        { kind: 'bad', ms: 4600 });
+      await this.g.spot(lots.map((l) => l.id), 1600);
+    }
+  }
+
+  /**
+   * Bão tuyết: cả một khu bốc thăm trúng cùng hứng tuyết.
+   *
+   * Cùng khuôn với hoả hoạn — hỏi theo chủ đất, trả một khoản giữ cả mấy ô —
+   * chỉ khác số cấp mất (`snowLoss`: một cấp, khách sạn hai) và hoạt cảnh.
+   */
+  async blizzard(_card, plan) {
+    const st = this.state;
+    await this.g.spot(plan.tiles.map((l) => l.id));
+
+    const bySeat = lotsBySeat(st, plan);
+
+    const answers = await this.askMany([...bySeat].map(([seat, lots]) => ({
+      seat,
+      name: 'ev-snow',
+      data: { lots },
+      local: () => litTiles(this.g.scene, lots.map((l) => l.id),
+        () => snowPromptModal(st, seat, lots, this.localMs)),
+      fallback: null,
+      note: 'mái nhà của họ đang oằn dưới tuyết',
+    })));
+
+    for (const [seat, lots] of bySeat) {
+      const p = st.players[seat];
+      const total = lots.reduce((sum, l) => sum + l.save, 0);
+      // Chốt lại ở máy cầm lái: câu trả lời gửi từ xa không được tin suông
+      if (answers.get(seat) === 'save' && p.money >= total) {
+        // Gió tuyết vẫn quét qua cho cả bàn thấy, chỉ không có mái nào sập
+        this.g.tileFx('blizzard', lots.filter((l) => l.lose > 0).map((l) => l.id), false);
+        await this.g.bc.show('XÚC TUYẾT KỊP',
+          `<b>${p.name}</b> trả <span class="down">${money(total)}</span> thuê phu xúc tuyết,
+           mái nhà ở ${lots.map((l) => tileShortLabel(l.id)).join(', ')} còn nguyên.`);
+        await this.g.payBank(seat, total);
+        continue;
+      }
+
+      let gone = 0;
+      const hit = [];
+      for (const lot of lots) {
+        const had = st.housesOn(lot.id);
+        for (let i = 0; i < lot.lose && st.housesOn(lot.id) > 0; i++) {
+          this.collapse(lot.id);
+          gone += 1;
+        }
+        if (st.housesOn(lot.id) < had) hit.push(lot.id);
+      }
+      this.g.hud.refresh();
+      this.g.scene.refresh(st);
+      this.g.sync();
+      this.g.tileFx('blizzard', hit);
+      await this.g.bc.show('SẬP MÁI',
+        `<b>${p.name}</b> để mặc tuyết đè, mất <b>${gone} cấp nhà</b> ở
          ${lots.map((l) => tileShortLabel(l.id)).join(', ')}, không đền bù.`,
         { kind: 'bad', ms: 4600 });
       await this.g.spot(lots.map((l) => l.id), 1600);

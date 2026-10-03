@@ -104,6 +104,41 @@ export function bracePromptModal(state, playerId, lots, ms = 0) {
 }
 
 /**
+ * Bão tuyết: trả tiền thuê phu xúc tuyết thì mái nhà còn nguyên, để mặc thì
+ * mỗi ô sập một cấp, khách sạn sập hai (đã tính sẵn trong `lose`).
+ *
+ * @param {Array<{id:number,houses:number,lose:number,save:number}>} lots
+ */
+export function snowPromptModal(state, playerId, lots, ms = 0) {
+  const p = state.players[playerId];
+  const total = lots.reduce((s, l) => s + l.save, 0);
+  const losing = lots.reduce((s, l) => s + l.lose, 0);
+  let ticker = 0;
+
+  const pr = openModal({
+    eyebrow: 'BÃO TUYẾT',
+    title: 'Thuê phu xúc tuyết?',
+    sub: `Xúc kịp thì mái nhà còn nguyên. Để mặc thì mất
+          <b>${losing} cấp nhà</b>, không đền bù. Bạn đang có ${money(p.money)}.`,
+    body: `${lots.map((l) => tileRow(l.id,
+      `Đang có ${l.houses === 5 ? 'khách sạn' : `${l.houses} nhà`} · sập
+       ${l.lose} cấp · xúc tuyết ${money(l.save)}`)).join('')}
+      <div class="trade-summary">Xúc tuyết tất cả: <b>${money(total)}</b></div>
+      ${PEEK_HINT}`,
+    dismissible: false,
+    buttons: [
+      { label: `Xúc tuyết ${money(total)}`, value: 'save', cls: 'btn-gold', disabled: p.money < total },
+      { label: 'Để mặc mái sập', value: null, cls: 'btn-danger' },
+    ],
+    onMount: (body, close) => {
+      if (ms) ticker = attachTimer(body, ms, close, null, 'để quyết định. Hết giờ thì mái sập.');
+    },
+  });
+  pr.finally(() => clearInterval(ticker));
+  return pr;
+}
+
+/**
  * Hoả hoạn: trả tiền phu chữa cháy thì cả mấy ô đang cháy của mình giữ nguyên
  * nhà, để mặc thì mỗi ô mất nửa số nhà (đã tính sẵn trong `lose`).
  *

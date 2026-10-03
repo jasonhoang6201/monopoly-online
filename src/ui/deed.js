@@ -1,8 +1,8 @@
 /**
  * Thẻ đất dạng card — hiển thị mỗi ô đất y như một quân bài của bàn cờ.
- * Ảnh thẻ được vẽ một lần rồi lưu lại (cache) theo cặp (ô, bề ngang).
+ * Ảnh thẻ được vẽ một lần rồi lưu lại (cache) theo bộ (chủ đề, ô, bề ngang).
  */
-import { paintTileCard } from '../render/boardArt.js';
+import { paintTileCard, P } from '../render/boardArt.js';
 import { isCorner } from '../render/geometry.js';
 import { houseSvg, hotelSvg, HOUSE_PATH, HOTEL_PATH } from '../render/glyphs.js';
 import { BOARD, money, tileShortLabel } from '../data/board.js';
@@ -11,7 +11,8 @@ const cache = new Map();
 
 /** Ảnh thẻ của một ô, trả về dưới dạng data URL để nhúng vào HTML. */
 export function tileCardUrl(tileId, w = 200) {
-  const key = `${tileId}:${w}`;
+  // Chủ đề đổi màu nền và nét của thẻ, nên phải nằm trong khoá
+  const key = `${P.theme}:${tileId}:${w}`;
   if (!cache.has(key)) {
     cache.set(key, paintTileCard(tileId, w * 2).toDataURL());   // ×2 cho màn Retina
   }

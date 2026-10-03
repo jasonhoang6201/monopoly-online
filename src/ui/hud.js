@@ -6,6 +6,7 @@
 import { money, TOTAL_HOUSES, tileLabel } from '../data/board.js';
 import { cardOf, cardName } from '../data/cards.js';
 import { paintToken } from '../render/pieces.js';
+import { P } from '../render/boardArt.js';
 import {
   eventsOn, unlocked, pressureRatio, threshold, modLabel, shrinkBoost,
 } from '../core/events.js';
@@ -38,10 +39,10 @@ const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => (
 /** Ảnh quân cờ dùng làm avatar — vẽ một lần rồi cache theo loại quân. */
 const tokenArt = new Map();
 export function tokenImage(token) {
-  if (!tokenArt.has(token.key)) {
-    tokenArt.set(token.key, paintToken(token.css, 120).toDataURL());
-  }
-  return tokenArt.get(token.key);
+  // Chủ đề Giáng Sinh vẽ quân đội mũ — khoá theo cả chủ đề
+  const key = `${P.theme}:${token.key}`;
+  if (!tokenArt.has(key)) tokenArt.set(key, paintToken(token.css, 120).toDataURL());
+  return tokenArt.get(key);
 }
 
 export class Hud {

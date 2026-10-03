@@ -18,6 +18,16 @@ export const HOUSE_PATH = 'M224,120v96a8,8,0,0,1-8,8H160a8,8,0,0,1-8-8V164a4,4,0
 /** Khách sạn: khối nhà cao tầng có ô cửa sổ và cổng lớn. */
 export const HOTEL_PATH = 'M240,208h-8V72a8,8,0,0,0-8-8H184V40a8,8,0,0,0-8-8H80a8,8,0,0,0-8,8V96H32a8,8,0,0,0-8,8V208H16a8,8,0,0,0,0,16H240a8,8,0,0,0,0-16ZM80,176H64a8,8,0,0,1,0-16H80a8,8,0,0,1,0,16Zm0-32H64a8,8,0,0,1,0-16H80a8,8,0,0,1,0,16Zm64,64H112V168h32Zm-8-64H120a8,8,0,0,1,0-16h16a8,8,0,0,1,0,16Zm0-32H120a8,8,0,0,1,0-16h16a8,8,0,0,1,0,16Zm0-32H120a8,8,0,0,1,0-16h16a8,8,0,0,1,0,16Zm56,96H176a8,8,0,0,1,0-16h16a8,8,0,0,1,0,16Zm0-32H176a8,8,0,0,1,0-16h16a8,8,0,0,1,0,16Zm0-32H176a8,8,0,0,1,0-16h16a8,8,0,0,1,0,16Z';
 
+/**
+ * Lớp tuyết trên mái — chủ đề Giáng Sinh. Cùng khung 256 × 256 với hai hình
+ * trên, mép dưới rủ thành giọt. Nhà một mái dốc; khách sạn ba khối, mỗi đỉnh
+ * khối một lớp.
+ */
+export const HOUSE_SNOW = 'M20 124L117 27Q128 17 139 27L236 124Q229 134 220 128Q212 140 203 130L128 56L53 130Q44 140 36 128Q27 134 20 124Z';
+export const HOTEL_SNOW = 'M66 36Q66 20 82 22L174 22Q190 20 190 36Q182 44 174 38Q164 50 154 40Q140 46 128 40Q114 48 102 40Q90 48 82 38Q72 44 66 36Z'
+  + 'M178 68Q178 54 192 56L226 56Q240 54 240 68Q232 76 222 70Q210 80 198 70Q188 76 178 68Z'
+  + 'M16 100Q16 86 30 88L66 88Q80 86 80 100Q72 108 62 102Q50 112 40 102Q28 108 16 100Z';
+
 /** Ngân hàng — nút thế chấp. */
 export const BANK_PATH = 'M248,208a8,8,0,0,1-8,8H16a8,8,0,0,1,0-16H240A8,8,0,0,1,248,208ZM16.3,98.18a8,8,0,0,1,3.51-9l104-64a8,8,0,0,1,8.38,0l104,64A8,8,0,0,1,232,104H208v64h16a8,8,0,0,1,0,16H32a8,8,0,0,1,0-16H48V104H24A8,8,0,0,1,16.3,98.18ZM144,160a8,8,0,0,0,16,0V112a8,8,0,0,0-16,0Zm-48,0a8,8,0,0,0,16,0V112a8,8,0,0,0-16,0Z';
 
@@ -28,11 +38,15 @@ export const KEY_PATH = 'M216.57,39.43A80,80,0,0,0,83.91,120.78L28.69,176A15.86,
    Bản HTML — dùng `currentColor` để nơi nào gọi thì nơi ấy định màu
    ================================================================== */
 
-const svg = (d, cls) => `<svg class="gi ${cls}" viewBox="0 0 ${GLYPH_BOX} ${GLYPH_BOX}"
-    xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><path d="${d}"/></svg>`;
+/* `snow` là lớp tuyết trên mái: luôn có trong mã HTML, CSS chỉ cho hiện ở chủ
+   đề Giáng Sinh (`.gi-snow`). Nhờ vậy chuỗi HTML dựng sẵn không phải dựng lại
+   khi đổi chủ đề. */
+const svg = (d, cls, snow = '') => `<svg class="gi ${cls}" viewBox="0 0 ${GLYPH_BOX} ${GLYPH_BOX}"
+    xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><path d="${d}"/>${
+  snow ? `<path class="gi-snow" d="${snow}"/>` : ''}</svg>`;
 
-export const houseSvg = () => svg(HOUSE_PATH, 'gi-house');
-export const hotelSvg = () => svg(HOTEL_PATH, 'gi-hotel');
+export const houseSvg = () => svg(HOUSE_PATH, 'gi-house', HOUSE_SNOW);
+export const hotelSvg = () => svg(HOTEL_PATH, 'gi-hotel', HOTEL_SNOW);
 export const bankSvg = () => svg(BANK_PATH, 'gi-bank');
 export const keySvg = () => svg(KEY_PATH, 'gi-key');
 
@@ -100,17 +114,35 @@ export function paintGlyph(d, s = 128, o = {}) {
   ctx.strokeStyle = o.rim ?? '#122E24';
   ctx.stroke(path);
 
+  // Tuyết trên mái (chủ đề Giáng Sinh)
+  if (o.snow) {
+    const snow = new Path2D(o.snow);
+    ctx.save();
+    ctx.shadowColor = 'rgba(30,58,85,.35)';
+    ctx.shadowBlur = GLYPH_BOX * 0.03;
+    ctx.shadowOffsetY = GLYPH_BOX * 0.012;
+    const g2 = ctx.createLinearGradient(0, 0, 0, GLYPH_BOX * 0.6);
+    g2.addColorStop(0, '#FFFFFF');
+    g2.addColorStop(1, '#DCEBF6');
+    ctx.fillStyle = g2;
+    ctx.fill(snow);
+    ctx.restore();
+    ctx.lineWidth = GLYPH_BOX * 0.012;
+    ctx.strokeStyle = '#8FB4D0';
+    ctx.stroke(snow);
+  }
+
   return cv;
 }
 
 /** Căn nhà — ngọc bích, tông nhà ngói cũ. */
-export const paintHouseGlyph = (s = 128) => paintGlyph(HOUSE_PATH, s, {
-  top: '#7ED0A6', bottom: '#2E6B52', rim: '#10281F',
+export const paintHouseGlyph = (s = 128, snow = false) => paintGlyph(HOUSE_PATH, s, {
+  top: '#7ED0A6', bottom: '#2E6B52', rim: '#10281F', snow: snow ? HOUSE_SNOW : null,
 });
 
 /** Khách sạn — sơn son thếp vàng, hạng trên hẳn căn nhà. */
-export const paintHotelGlyph = (s = 128) => paintGlyph(HOTEL_PATH, s, {
-  top: '#F6DFA2', bottom: '#C8A048', rim: '#4A3410',
+export const paintHotelGlyph = (s = 128, snow = false) => paintGlyph(HOTEL_PATH, s, {
+  top: '#F6DFA2', bottom: '#C8A048', rim: '#4A3410', snow: snow ? HOTEL_SNOW : null,
 });
 
 /**

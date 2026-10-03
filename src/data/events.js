@@ -53,6 +53,11 @@
  * Ba quẻ ☳ (chấn — động), ☲ (ly — lửa), ☵ (khảm — nước) vừa đơn sắc vừa đúng
  * chất Á Đông của bộ bài.
  *
+ * ── Thẻ riêng của một chủ đề ───────────────────────────────────────────────
+ * Thẻ mang `theme` (Bão Tuyết, Đường Đóng Băng — `theme: 'christmas'`) chỉ vào
+ * chồng khi ván chơi đúng chủ đề ấy (`cardInTheme` trong `data/themes.js`).
+ * Ván chủ đề mặc định giữ nguyên bộ thẻ cũ, không lệch tỉ lệ ra.
+ *
  * Luật thực thi nằm ở `core/events.js` (phần thuần dữ liệu) và
  * `game/eventRunner.js` (phần diễn).
  */
@@ -303,6 +308,41 @@ export const EVENTS = [
       'Bốc thăm một khu màu đã có chủ',
       `Tiền thuê cả khu ấy ${pct(c.mult)}`,
       forever,
+    ],
+  },
+  /* ------------------------------------------- Riêng chủ đề Giáng Sinh */
+  {
+    id: 'bao-tuyet', kind: 'bad', sigil: '❆', heavy: true, late: 'main', theme: 'christmas',
+    title: 'BÃO TUYẾT',
+    text: `Đêm Giáng Sinh, một trận tuyết hiếm thấy đổ xuống Sài Gòn. Mái ngói
+           không chịu nổi sức nặng, cả một dãy phố sụp mái.`,
+    /**
+     * Cùng khuôn với động đất và hoả hoạn: bốc thăm một khu, chủ đất chọn bỏ
+     * tiền hay chịu mất nhà. Tiền thuê phu xúc tuyết = 90% giá xây phần sắp
+     * sập, nằm giữa động đất (100%) và hoả hoạn (80%). Chỗ khác là khách sạn:
+     * mái rộng hứng nhiều tuyết nên sập hai cấp — người xây cao nhất chịu nặng
+     * nhất, đúng lúc cần kéo người dẫn đầu xuống.
+     */
+    clearRate: 0.9,
+    effect: (c) => [
+      'Bốc thăm một khu màu. Cả khu cùng hứng tuyết, ô chưa có nhà thì vô sự',
+      `Chủ đất được hỏi: trả ${Math.round(c.clearRate * 100)}% giá xây phần sắp sập để thuê phu xúc tuyết`,
+      'Không trả thì mỗi ô sập một cấp nhà, khách sạn mái rộng sập hai cấp, không đền bù',
+    ],
+  },
+  {
+    id: 'duong-dong-bang', kind: 'chaos', sigil: '❅', theme: 'christmas',
+    title: 'ĐƯỜNG ĐÓNG BĂNG',
+    text: `Mặt đường Catinat đóng một lớp băng mỏng. Xe kéo, xe ngựa, người đi
+           bộ đều trượt quá chỗ định dừng.`,
+    /* Đẩy quân tới những ô người ta không định tới: tiền thuê có đường chảy
+       mới, đúng cái bệnh bàn bí mà bộ thẻ sinh ra để chữa. Có hạn vì trượt
+       mãi thì xí ngầu không còn nghĩa lý gì. */
+    rounds: 2,
+    effect: (c) => [
+      'Mỗi lần lắc xí ngầu đi, quân trượt thêm 1 hoặc 2 ô',
+      'Trượt qua ô Bắt Đầu vẫn lãnh lương',
+      lasts(c),
     ],
   },
   {

@@ -22,6 +22,11 @@ import { EVENTS } from '../data/events.js';
 import { audio } from '../audio/audio.js';
 import { fateCardBody } from './modals.js';
 import { eventCardBody } from './eventModals.js';
+import { cardInTheme } from '../data/themes.js';
+import { currentTheme, isXmas } from '../theme/theme.js';
+
+/** Bộ bài lấp dải: bỏ thẻ riêng của chủ đề khác, kẻo dải chạy qua một lá không bao giờ rút được. */
+const inTheme = (cards) => cards.filter((c) => cardInTheme(c, currentTheme()));
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -49,7 +54,7 @@ export function rankOf(kind, card) {
   if (KEEPABLE.has(card.type)) return 'hiem';  // thẻ cất túi, chờ đúng lúc mới nổ
   // Thẻ dắt quân đi chỗ khác đổi thế cờ nhiều hơn một khoản tiền lẻ
   if (card.type === 'move') return card.jail ? 'hiem' : 'quy';
-  if (card.type === 'repair' || card.type === 'collect' || card.type === 'skill') return 'quy';
+  if (card.type === 'repair' || card.type === 'collect' || card.type === 'skill' || card.type === 'gift') return 'quy';
   return Math.abs(card.amount ?? 0) >= 150 ? 'kha' : 'thuong';
 }
 
@@ -58,6 +63,7 @@ export function shortLabel(kind, card) {
   if (kind === 'event') return card.title;
   switch (card.type) {
     case 'collect':       return 'TIỀN MỪNG';
+    case 'gift':          return 'QUÀ NOEL';
     case 'repair':        return 'THUẾ NHÀ';
     case 'skill':         return `+${card.points} ĐIỂM KỸ NĂNG`;
     case 'jail-free':     return 'VÉ RA TÙ';
@@ -123,8 +129,11 @@ export function buildStrip(kind, card, pool, rng, spin) {
 
 function cellHtml(kind, card, i) {
   const r = RANKS[rankOf(kind, card)];
+  /* `gift-N`: Giáng Sinh bọc mỗi ô thành hộp quà, bốn kiểu giấy gói xoay vòng
+     theo vị trí — chỉ CSS của chủ đề ấy đọc lớp này */
   return `
-    <div class="co-cell r-${r.key}" data-i="${i}" style="--r:${r.color}">
+    <div class="co-cell r-${r.key} gift-${i % 4}" data-i="${i}" style="--r:${r.color}">
+      <i class="co-lid" aria-hidden="true"></i>
       <div class="co-cell-top">${esc(deckName(kind, card))}</div>
       <div class="co-cell-sigil">${esc(sigilOf(kind, card))}</div>
       <div class="co-cell-label">${esc(shortLabel(kind, card))}</div>
@@ -405,6 +414,13 @@ export function caseOpenModal(kind, card, pool, o = {}) {
  * dù cỡ chữ hay bề ngang modal có đổi.
  */
 async function reveal(stage, reel, cell, kind, card, rank, o) {
+  /* Giáng Sinh: hộp quà trúng bật nắp trước rồi mặt thẻ mới nở ra từ lòng
+     hộp. Nắp bay bằng CSS (`.co-cell.gift-open`), ở đây chỉ chờ nó bay xong. */
+  if (isXmas()) {
+    cell.classList.add('gift-open');
+    if (o.sound !== false) audio.sfx('buy');
+    await new Promise((r) => setTimeout(r, 420));
+  }
   const face = document.createElement('div');
   face.className = `co-face r-${rank}`;
   const body = o.faceHtml
@@ -453,7 +469,7 @@ export function fateCase(kind, card, o = {}) {
      `dismissAfter`: đồng hồ lượt bên này không phải của họ, đóng hộ là cắt ngang
      giữa chừng. */
   const watching = !!o.closeOn;
-  return caseOpenModal(kind, card, DECKS[kind], {
+  return caseOpenModal(kind, card, inTheme(DECKS[kind]), {
     dismissAfter: !watching,
     ...o,
     faceHtml: fateCardBody(kind, card, o),
@@ -480,7 +496,7 @@ export function fateCase(kind, card, o = {}) {
  * @param {{detail?:string, label?:string, seed?:number}} [o]
  */
 export function eventCase(card, o = {}) {
-  return caseOpenModal('event', card, EVENTS, {
+  return caseOpenModal('event', card, inTheme(EVENTS), {
     yieldToNext: true,
     dismissAfter: true,
     ...o,

@@ -1,6 +1,7 @@
 /**
  * Modal dùng chung — có hiệu ứng ẩn/hiện (mờ nền + trượt lên + bung nhẹ).
  */
+import { attachLedFrame } from './ledFrame.js';
 
 const root = () => document.getElementById('modal-root');
 
@@ -117,6 +118,8 @@ export function openModal(o) {
   const modal = document.createElement('div');
   modal.className = 'modal' + (o.wide ? ' wide' : '');
   scrim.appendChild(modal);
+  // Chủ đề Giáng Sinh: viền đèn LED quanh hộp (khung rỗng ở chủ đề khác)
+  attachLedFrame(modal);
 
   const head = document.createElement('div');
   head.className = 'modal-head';
