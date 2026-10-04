@@ -638,19 +638,20 @@ export class EventRunner {
        lại một lần. */
     this.bumpClock('đấu giá');
 
-    /* Xếp theo giá, hoà thì người đi trước trong vòng lượt thắng — một luật rõ
-       ràng, khỏi phải mở thêm một vòng đấu nữa giữa hai người bằng điểm.
+    /* Xếp theo giá, hoà thì ai chốt giá trước thắng (thứ tự câu trả lời về
+       tới máy này, xem `askMany`) — khỏi phải mở thêm một vòng đấu giữa hai
+       người bằng điểm, và ai quyết nhanh thì được thưởng.
 
        Giữ cả người ghi 0 lại trong `rows`: bảng giá lúc chốt phiên có tên đủ
        mặt người được hỏi thì mới đọc ra được ai bỏ qua, ai đua tới cùng. */
-    const order = st.playOrder;
+    const arrived = [...answers.keys()];
     const rows = bidders
       .filter((seat) => !st.players[seat].bankrupt)
       .map((seat) => {
         const n = Math.floor(answers.get(seat) ?? 0);
         return { seat, bid: Math.min(Number.isFinite(n) ? Math.max(n, 0) : 0, st.players[seat].money) };
       })
-      .sort((a, b) => b.bid - a.bid || order.indexOf(a.seat) - order.indexOf(b.seat));
+      .sort((a, b) => b.bid - a.bid || arrived.indexOf(a.seat) - arrived.indexOf(b.seat));
     const bids = rows.filter((b) => b.bid > 0);
 
     if (bids.length === 0) {
@@ -776,6 +777,11 @@ export class EventRunner {
    * chứ không xếp hàng từng người một. Bản một máy thì đành lần lượt, vì chỉ
    * có một cái máy để chuyền.
    *
+   * Map ghi câu trả lời theo **thứ tự về tới máy hỏi**, nên duyệt Map là ra ai
+   * chốt trước — đấu giá dùng thứ tự này để xử hoà. Ở bản online, thứ tự tới
+   * máy trọng tài là mốc chung duy nhất; đồng hồ của từng máy lệch nhau nên
+   * không dùng giờ gửi được.
+   *
    * @returns {Promise<Map<number, any>>} ghế → câu trả lời
    */
   async askMany(list) {
@@ -797,13 +803,12 @@ export class EventRunner {
          trả lời…`, { kind: 'trade', ms: 2400 });
     }
 
-    const answers = await Promise.all([
-      ...mine.map((q) => q.local().then((v) => [q.seat, v])),
+    await Promise.all([
+      ...mine.map((q) => q.local().then((v) => out.set(q.seat, v))),
       ...others.map((q) => this.g.net
         .ask(q.seat, q.name, q.data, { fallback: q.fallback, timeout: this.askMs + 8000 })
-        .then((v) => [q.seat, v ?? q.fallback])),
+        .then((v) => out.set(q.seat, v ?? q.fallback))),
     ]);
-    for (const [seat, v] of answers) out.set(seat, v);
     return out;
   }
 

@@ -3,8 +3,8 @@
    Mọi quy tắc nằm dưới :root[data-theme="christmas"] (theme/theme.js đặt
    thuộc tính này), nên chủ đề mặc định không đổi một điểm ảnh nào.
 
-   Bàn cờ và nền quanh bàn là tuyết trắng, xanh nước biển nhạt (vẽ trong
-   canvas). Các bảng HTML phủ lên (cột trái, bảng nút, hộp thoại) dùng xanh
+   Mặt ô là tuyết trắng, còn khung, lòng bàn cờ và nền quanh bàn là xanh
+   đêm Noel (vẽ trong canvas) để đèn nhà và dây LED hiện rõ. Các bảng HTML phủ lên (cột trái, bảng nút, hộp thoại) dùng xanh
    đêm đông với nét viền xanh băng: chữ trong các bảng này vốn viết sáng trên
    nền tối, giữ nền tối thì chữ vẫn đọc rõ, và đèn LED quanh hộp thoại mới nổi
    lên được.
@@ -40,7 +40,7 @@
   --indigo:     #1A3556;
   --indigo-mid: #2A4C78;
 
-  --ground-night:#C7DDEE;
+  --ground-night:#0A1628;
   --ground-deep: #0F2238;
   --ground:      #16304E;
   --ground-light:#22446A;
@@ -66,7 +66,7 @@
   --x-rose:     #E8A3B0;
 }
 
-:root[data-theme="christmas"] body { background: #C7DDEE; }
+:root[data-theme="christmas"] body { background: #0A1628; }
 
 /* ------------------------------------------------------- cột điều khiển */
 :root[data-theme="christmas"] #sidebar {
@@ -179,6 +179,21 @@
 }
 :root[data-theme="christmas"] #actions .btn-ghost .btn-icon,
 :root[data-theme="christmas"] #actions .btn-jade .btn-icon { color: #A9CCE8; }
+/* Rê chuột: nút lún xuống và ngả xanh băng thay vì nhô lên, sáng thêm 16%
+   như bản gốc. Nút chính đã trắng, sáng thêm chỉ làm chói. Bọc trong
+   (hover: hover) để máy cảm ứng giữ quy tắc bỏ hover dính của style.css. */
+@media (hover: hover) {
+  :root[data-theme="christmas"] .btn:hover:not(:disabled) {
+    transform: translateY(1px);
+    filter: brightness(.9) saturate(1.15);
+  }
+  :root[data-theme="christmas"] .btn-primary:hover:not(:disabled),
+  :root[data-theme="christmas"] #actions .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #E4F0FA 0%, #C6DDF0 60%, #A9C9E6 100%);
+    filter: none;
+    box-shadow: var(--shadow-md), inset 0 2px 5px rgba(42, 88, 136, .28);
+  }
+}
 /* Phá sản: không tô nền, chỉ viền và chữ hồng nhạt — đọc ra là nút nguy hiểm
    mà không thêm một mảng đỏ vào bảng xanh */
 :root[data-theme="christmas"] .btn-danger,

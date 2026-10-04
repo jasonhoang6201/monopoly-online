@@ -291,24 +291,26 @@ if (want(3)) {
 /* ================================================ 4 · hoà giá */
 
 if (want(4)) {
-  console.log('\n▸ 4. Hoà giá: người đi trước trong vòng lượt thắng');
+  console.log('\n▸ 4. Hoà giá: người chốt giá trước thắng');
   const drv = await driverOf();
   const order = await drv.evaluate(() => window.__monopoly.controller.state.playOrder);
   const others = pages.filter((p) => p !== drv)
     .sort((a, b) => order.indexOf(seatOf.get(a)) - order.indexOf(seatOf.get(b)));
   const [early, late] = others;
   await start(drv, { tile: 8 });
-  // Người đi sau chốt trước, để chắc thứ tự trả lời không quyết thay luật hoà
+  // Người đi sau trong vòng lượt chốt trước: thắng phải theo thứ tự chốt,
+  // không theo thứ tự lượt
   await bid(late, 120);
+  await late.waitForTimeout(800);   // cách xa hơn độ trễ đường truyền
   await bid(early, 120);
   await bid(drv, 10);
   const tabs = await tablesEverywhere(ASK_MS + 20000);
   ok(!!tabs, 'bảng giá mở');
   if (tabs) {
-    const t = tabs.get(late);
-    const iLate = t.names.indexOf(names[seatOf.get(late)]);
-    ok(t.names[t.winAt] === names[seatOf.get(early)], 'người đi trước trong vòng lượt thắng', JSON.stringify(t.names));
-    ok(t.metas[iLate] === 'Bằng giá, thua vì đi sau', 'bảng nói rõ vì sao người bằng giá thua', t.metas[iLate]);
+    const t = tabs.get(early);
+    const iEarly = t.names.indexOf(names[seatOf.get(early)]);
+    ok(t.names[t.winAt] === names[seatOf.get(late)], 'người chốt giá trước thắng', JSON.stringify(t.names));
+    ok(t.metas[iEarly] === 'Bằng giá, thua vì chốt sau', 'bảng nói rõ vì sao người bằng giá thua', t.metas[iEarly]);
   }
   ok(await settle(), 'cả bàn về cùng một lượt');
 }

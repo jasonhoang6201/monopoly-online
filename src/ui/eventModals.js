@@ -249,7 +249,7 @@ export function auctionBidModal(state, playerId, tileId, o = {}) {
         </div>
       </div>
       <div class="trade-summary">Đấu giá kín: mọi người ghi cùng lúc. Hoà giá thì
-        người đi trước trong vòng lượt thắng.</div>
+        ai chốt giá trước thắng.</div>
       ${PEEK_HINT}`,
     buttons: [{ label: 'Chốt giá', value: 'bid', cls: 'btn-gold' }],
     onMount: (body, close, modal, foot) => {
@@ -321,8 +321,8 @@ export function closeBidModal() {
  *
  * @param {object} state
  * @param {number} tileId
- * @param {Array<{seat:number,bid:number}>} rows đã xếp sẵn, hoà thì người đi
- *   trước trong vòng lượt đứng trên
+ * @param {Array<{seat:number,bid:number}>} rows đã xếp sẵn, hoà thì người chốt
+ *   giá trước đứng trên
  * @param {{winner:?number, sellerName?:string, noSale?:string}} o
  *   `winner` null là phiên ế: không ai ghi giá (hay hết giờ cả bàn), bảng vẫn
  *   mở để ai cũng thấy phiên đã đóng chứ không ngồi chờ một kết quả không tới.
@@ -331,7 +331,7 @@ export function closeBidModal() {
 export function auctionResultModal(state, tileId, rows, o) {
   const t = BOARD[tileId];
   /* Xếp lại lần nữa cho chắc, và `sort` của JS giữ nguyên thứ tự hai giá bằng
-     nhau — tức giữ đúng luật hoà mà bên gọi đã áp: người đi trước đứng trên. */
+     nhau — tức giữ đúng luật hoà mà bên gọi đã áp: người chốt trước đứng trên. */
   const list = [...rows].sort((a, b) => b.bid - a.bid);
   const win = o.winner == null ? null : state.players[o.winner];
   /* Giá chốt lấy từ hàng của người thắng chứ không lấy hàng đầu bảng: người trả
@@ -347,7 +347,7 @@ export function auctionResultModal(state, tileId, rows, o) {
        người ấy tưởng máy tính sai chứ không nhớ ra luật hoà. */
     const meta = won ? 'Trả cao nhất, lấy đất'
       : !win ? 'Không ghi giá'
-      : r.bid === paid ? 'Bằng giá, thua vì đi sau'
+      : r.bid === paid ? 'Bằng giá, thua vì chốt sau'
       : r.bid > 0 ? `Hụt ${money(paid - r.bid)}`
       : 'Không ghi giá';
     return `

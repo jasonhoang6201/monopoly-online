@@ -77,6 +77,10 @@ const DIE_PAD = 1.75;
 
 /* Màu nền hiệu ứng ô cờ (vẽ ở chế độ blend cộng nên càng sáng càng đậm) */
 const HOVER_TINT = 0xC9A24A;      // rê chuột: ánh vàng ấm
+/* Giáng Sinh: mặt ô gần trắng nên cộng thêm sáng chỉ làm chữ trên ô bạc đi.
+   Rê chuột ở đây nhuộm nhân (MULTIPLY) một lớp xanh băng: ô tối xuống và ngả
+   xanh, chữ vẫn giữ độ đậm. */
+const HOVER_TINT_XMAS = 0x8FB8DC;
 const POS_TINT = 0xA87C28;        // quân đang đứng: màu dự phòng khi không rõ người chơi
 
 /* Lúc bắt chọn ô: cả khung vẽ tối đi bằng nấy, chỉ mấy ô chọn được là khoét
@@ -448,13 +452,13 @@ export default class BoardScene extends Phaser.Scene {
     this.board.setDisplaySize(this.size, this.size);
 
     // Phông nền cùng tông sơn mài với bàn cờ, hai vầng sáng ấm hắt từ giữa ra.
-    // Giáng Sinh: trời xanh băng, vầng sáng trắng như tuyết hắt lên.
+    // Giáng Sinh: trời đêm xanh đậm, vầng sáng xanh lạnh quanh bàn cờ.
     this.bg.clear();
     const c = this.boardCenter();
     if (this.xmas) {
-      this.bg.fillStyle(0xBCD6EA, 1).fillRect(0, 0, W, H);
-      this.bg.fillStyle(0xDCEBF6, 0.8).fillCircle(c.x, c.y, this.size * 0.78);
-      this.bg.fillStyle(0xFFFFFF, 0.35).fillCircle(c.x, c.y, this.size * 0.55);
+      this.bg.fillStyle(0x0A1628, 1).fillRect(0, 0, W, H);
+      this.bg.fillStyle(0x15305A, 0.6).fillCircle(c.x, c.y, this.size * 0.78);
+      this.bg.fillStyle(0x3D6FA3, 0.16).fillCircle(c.x, c.y, this.size * 0.55);
     } else {
       this.bg.fillStyle(0x150a06, 1).fillRect(0, 0, W, H);
       this.bg.fillStyle(0x30150f, 0.6).fillCircle(c.x, c.y, this.size * 0.78);
@@ -616,10 +620,13 @@ export default class BoardScene extends Phaser.Scene {
     // Sang ô mới thì nền loé lại từ mức thấp, nhìn ra được nhịp chuyển ô
     const from = this.hoverGfx.visible ? Math.min(this.hoverGfx.alpha, 0.14) : 0;
     this.coverTile(this.hoverGfx, id);
-    this.hoverGfx.setVisible(true);
+    this.hoverGfx
+      .setFillStyle(this.xmas ? HOVER_TINT_XMAS : HOVER_TINT, 1)
+      .setBlendMode(this.xmas ? Phaser.BlendModes.MULTIPLY : Phaser.BlendModes.ADD)
+      .setVisible(true);
     this.tweens.add({
       targets: this.hoverGfx,
-      alpha: { from, to: 0.34 },
+      alpha: { from, to: this.xmas ? 0.62 : 0.34 },
       duration: 170, ease: 'Sine.easeOut',
     });
   }

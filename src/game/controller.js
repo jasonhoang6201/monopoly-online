@@ -2021,7 +2021,7 @@ export class Game {
    * nên có quyền tranh mua lại.
    *
    * Dùng lại đúng phiên đấu giá của thẻ Thời Cuộc: một vòng ghi giá kín, cao
-   * nhất lấy đất, hoà thì người đi trước trong vòng lượt thắng.
+   * nhất lấy đất, hoà thì ai chốt giá trước thắng.
    */
   async resumeTile(p, tileId, card, title) {
     const st = this.state;

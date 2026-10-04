@@ -18,9 +18,11 @@ const BASE = { ...P };
 /**
  * Bảng màu bàn cờ của từng chủ đề — chỉ khai những màu khác bản gốc.
  *
- * Giáng Sinh: nền tuyết trắng và xanh nước biển nhạt. Đường kẻ vàng của bản
- * gốc nằm trên nền sẫm; nay nền sáng nên nét kẻ đổi sang xanh băng đậm, còn
- * đỏ sơn mài đổi sang đỏ Noel cho giá tiền và tấm biển giữa bàn.
+ * Giáng Sinh: mặt ô trắng tuyết, còn khung ngoài và lòng bàn cờ là xanh đêm
+ * Noel. Đèn nhà và dây LED vẽ bằng blend cộng, nên cần nền tối mới hiện ra;
+ * nền xanh nhạt trước đây làm đèn đất có nhà gần như mất hẳn. Nét kẻ trên ô
+ * đổi sang xanh băng đậm, đỏ sơn mài đổi sang đỏ Noel cho giá tiền và tấm
+ * biển giữa bàn.
  */
 const PALETTES = {
   default: {},
@@ -35,10 +37,10 @@ const PALETTES = {
     paperTop: '#FFFFFF',
     paperWarm: '#E4EEF7',
     paperDeep: '#C9DCEB',
-    groundLight: '#F4F9FD',
-    ground: '#DCEBF6',
-    groundDeep: '#B9D4E9',
-    groundNight: '#A9CBE2',
+    groundLight: '#284C78',
+    ground: '#17345A',
+    groundDeep: '#0C1D33',
+    groundNight: '#0F2440',
     ink: '#1E3A55',
     inkSoft: '#56758F',
     jade: '#2E6B45',

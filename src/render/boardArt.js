@@ -262,7 +262,7 @@ function drawWinterScene(ctx, x, y, size) {
   const cx = x + size / 2;
   const base = y + size * 0.88;
 
-  // Đồi tuyết: hai lớp sóng, lớp sau xanh nhạt, lớp trước trắng
+  // Đồi tuyết: hai lớp sóng, lớp sau xanh thép, lớp trước trắng ở đỉnh
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(x, y + size);
@@ -271,7 +271,7 @@ function drawWinterScene(ctx, x, y, size) {
   ctx.bezierCurveTo(x + size * 0.62, base - size * 0.09, x + size * 0.8, base - size * 0.01, x + size, base - size * 0.06);
   ctx.lineTo(x + size, y + size);
   ctx.closePath();
-  ctx.fillStyle = 'rgba(201,222,238,.9)';
+  ctx.fillStyle = 'rgba(70,108,152,.9)';
   ctx.fill();
   ctx.beginPath();
   ctx.moveTo(x, y + size);
@@ -279,9 +279,13 @@ function drawWinterScene(ctx, x, y, size) {
   ctx.bezierCurveTo(x + size * 0.3, base - size * 0.02, x + size * 0.65, base + size * 0.05, x + size, base + size * 0.01);
   ctx.lineTo(x + size, y + size);
   ctx.closePath();
+  /* Tuyết dưới trời đêm: sáng ở đỉnh đồi, tối dần xuống mép ô. Đèn nhà hàng
+     dưới loang vào đúng dải này bằng blend cộng, đáy đồi phải tối thì mới thấy. */
   const g = ctx.createLinearGradient(0, base - size * 0.03, 0, y + size);
-  g.addColorStop(0, '#FFFFFF');
-  g.addColorStop(1, '#E6F0F8');
+  g.addColorStop(0, '#E8F1F8');
+  g.addColorStop(0.18, '#8DADCD');
+  g.addColorStop(0.6, '#3A5F8A');
+  g.addColorStop(1, '#1A3558');
   ctx.fillStyle = g;
   ctx.fill();
   ctx.restore();

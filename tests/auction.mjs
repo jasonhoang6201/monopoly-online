@@ -102,7 +102,7 @@ const state = () => page.evaluate(() => {
   ok('ba người, ba hộp ghi giá chuyền tay', seen.length === 3, String(seen.length));
   ok('bản một máy không có đồng hồ trong hộp ghi giá', seen.every((s) => s.timer === 0));
   ok('bảng giá mở sau phiên', !!table, JSON.stringify(table));
-  ok('hoà giá thì người đi trước (ghế 0) thắng', table?.names[table.winAt] === names[0]);
+  ok('hoà giá thì người chốt trước (ghế 0, được chuyền máy đầu tiên) thắng', table?.names[table.winAt] === names[0]);
   const after = await state();
   ok('ghế 0 lấy đất, trả 100', after.owner[1] === 0 && after.money[0] === before.money[0] - 100);
   ok('người thua giữ nguyên tiền', after.money[1] === before.money[1] && after.money[2] === before.money[2]);
