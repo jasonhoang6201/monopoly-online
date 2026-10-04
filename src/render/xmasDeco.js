@@ -10,17 +10,16 @@
  * bàn cờ chỉ vẽ lại khi gờ tuyết dày thêm một nấc (theo số vòng đã chơi —
  * `snowLevel`), tối đa bốn lần một ván.
  *
- * Phần đèn **sáng** (quầng sáng nhấp nháy) không nằm ở đây: canvas này chỉ có
- * dây và thân bóng đèn. Quầng sáng là ảnh nhỏ riêng do `BoardScene` dựng theo
- * `ledBulbs`, để nhấp nháy bằng độ trong suốt mà không phải vẽ lại cả bàn.
+ * Canvas này chỉ có dây và bóng đèn **đang tắt**. Bóng sáng là ảnh nhỏ riêng
+ * do `BoardScene.addTileGlow` dựng theo `ledBulbs`, chỉ ở ô đã có nhà, nên
+ * xây thêm hay bán bớt nhà không phải vẽ lại cả bàn.
  */
 import { BOARD } from '../data/board.js';
 import { tileCenter, tileAngle, tileSize, isCorner, innerRect, DEPTH, EDGE } from './geometry.js';
 import { drawXmasIcon } from './xmasArt.js';
 
-/** Năm màu bóng đèn — xen kẽ theo vị trí, lặp lại quanh bàn. */
-export const LED_COLORS = [0xFF5A5F, 0x5CD18A, 0xFFD25A, 0x6CC3FF, 0xFF9BD2];
-const css = (n) => `#${n.toString(16).padStart(6, '0')}`;
+/** Số bóng trên đoạn dây trước mỗi ô: 1–4 nhà bật 1–4 bóng, khách sạn bật đủ. */
+export const LEDS_PER_TILE = 5;
 
 /**
  * Nấc dày của gờ tuyết theo số vòng cả bàn đã đi qua ô Bắt Đầu.
@@ -57,28 +56,29 @@ function rng(seed) {
 }
 
 /**
- * Vị trí bóng đèn quanh lòng bàn cờ: mỗi ô hai bóng, đặt ngay trên mép
- * trong (phía lòng bàn cờ) để không đè lên chữ của ô.
- * @returns {Array<{x:number, y:number, color:number, group:number}>}
+ * Vị trí bóng đèn quanh lòng bàn cờ: mỗi ô `LEDS_PER_TILE` bóng, đặt ngay
+ * trên mép trong (phía lòng bàn cờ) để không đè lên chữ của ô. `tile` là ô
+ * đứng sau bóng ấy, `slot` là thứ tự bóng trong đoạn dây của ô (0…4).
+ * @returns {Array<{x:number, y:number, tile:number, slot:number}>}
  */
 export function ledBulbs(S) {
   const { x, y, size } = innerRect(S);
   const e = EDGE(S);
   const off = e * 0.16;          // lùi vào lòng bàn cờ bấy nhiêu
-  const per = 18;                // 9 ô × 2 bóng mỗi cạnh
+  const per = 9 * LEDS_PER_TILE; // 9 ô mỗi cạnh
   const out = [];
+  /* Mỗi cạnh đi theo chiều số ô tăng dần (xem `tileCenter`): `first` là ô
+     đầu cạnh. Cạnh dưới đi phải → trái, cạnh trái đi dưới → lên. */
   const sides = [
-    (u) => ({ x: x + u, y: y + off }),                // cạnh trên
-    (u) => ({ x: x + size - off, y: y + u }),         // cạnh phải
-    (u) => ({ x: x + size - u, y: y + size - off }),  // cạnh dưới
-    (u) => ({ x: x + off, y: y + size - u }),         // cạnh trái
+    { first: 21, at: (u) => ({ x: x + u, y: y + off }) },                // cạnh trên
+    { first: 31, at: (u) => ({ x: x + size - off, y: y + u }) },         // cạnh phải
+    { first: 1, at: (u) => ({ x: x + size - u, y: y + size - off }) },   // cạnh dưới
+    { first: 11, at: (u) => ({ x: x + off, y: y + size - u }) },         // cạnh trái
   ];
-  let i = 0;
-  for (const at of sides) {
+  for (const { first, at } of sides) {
     for (let k = 0; k < per; k++) {
       const p = at(((k + 0.5) / per) * size);
-      out.push({ ...p, color: LED_COLORS[i % LED_COLORS.length], group: i % 3 });
-      i++;
+      out.push({ ...p, tile: first + Math.floor(k / LEDS_PER_TILE), slot: k % LEDS_PER_TILE });
     }
   }
   return out;
@@ -226,7 +226,7 @@ function drawInnerSnow(ctx, S) {
 function drawWire(ctx, S) {
   const bulbs = ledBulbs(S);
   const e = EDGE(S);
-  const sag = e * 0.09;
+  const sag = e * 0.035;          // bóng dày (5 bóng một ô) nên mỗi nhịp dây võng nông
   const { x, y, size } = innerRect(S);
   const cx = x + size / 2, cy = y + size / 2;
 
@@ -244,7 +244,9 @@ function drawWire(ctx, S) {
   });
   ctx.stroke();
 
-  const r = e * 0.075;
+  /* Bóng tắt: thuỷ tinh xám xanh, chỉ có một vệt phản quang. Không vẽ màu ở
+     đây: màu là của chủ đất, bật lên ở `BoardScene.addTileGlow` khi ô có nhà. */
+  const r = e * 0.065;
   for (const b of bulbs) {
     const ang = Math.atan2(cy - b.y, cx - b.x);  // bóng chúc đầu vào lòng bàn cờ
     ctx.save();
@@ -252,12 +254,12 @@ function drawWire(ctx, S) {
     ctx.rotate(ang - Math.PI / 2);
     ctx.fillStyle = '#1F4D31';
     ctx.fillRect(-r * 0.45, -r * 0.6, r * 0.9, r * 0.7);
-    ctx.fillStyle = css(b.color);
-    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#4A607A';
+    ctx.globalAlpha = 0.9;
     ctx.beginPath();
     ctx.ellipse(0, r * 0.75, r * 0.62, r * 0.95, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = 0.7;
+    ctx.globalAlpha = 0.3;
     ctx.fillStyle = '#FFFFFF';
     ctx.beginPath();
     ctx.ellipse(-r * 0.2, r * 0.5, r * 0.16, r * 0.3, 0, 0, Math.PI * 2);

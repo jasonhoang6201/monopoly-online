@@ -278,8 +278,20 @@ export class Game {
     room.on.ask = (name, data) => this.onAsk(name, data);
     room.on.room = () => this.onRoomChange();
     room.on.link = (st) => this.onLink(st);
-    // Có người vào lại giữa ván → gửi ngay ván hiện tại cho họ dựng lại bàn cờ
-    room.onNeedSync = () => this.sync();
+    /* Có người vào lại giữa ván → gửi ván hiện tại cho họ dựng lại bàn cờ.
+       Người nhận `hello` là trọng tài, mà trọng tài thường không phải máy cầm
+       lái: bản sao của nó chỉ mới tới ảnh chụp gần nhất, còn máy cầm lái có
+       thể đang giữa một nước (đã xét đủ tiền, chưa kịp trừ). Trước đây trọng
+       tài phát luôn bản sao ấy với `rev` cao hơn một nấc, máy cầm lái nhận và
+       ghi đè số dư giữa chừng, rồi trừ tiền trên số dư cũ, ra tiền âm. Supabase
+       nối lại âm thầm mỗi lần mạng chập chờn, nên chơi lâu là gặp.
+       Giờ trọng tài chỉ nhắn máy cầm lái phát. Ngoại lệ: người vừa vào lại
+       chính là người đang tới lượt, tức máy cầm lái vừa mất ván (tải lại
+       trang), thì bản sao của trọng tài là bản tốt nhất còn lại. */
+    room.onNeedSync = (seat) => {
+      if (this.isDriver() || seat === this.state?.turn) this.sync();
+      else this.netEmit('needsync', {});
+    };
     if (this.skillBtn) this.skillBtn.hidden = false;
     this.refreshSkillBtn();
 
@@ -581,6 +593,8 @@ export class Game {
     if (name === 'meme') { this.memes.receive(data.seat, data.id); return; }
     // Học kỹ năng ngoài lượt: chỉ máy cầm lái xử lý, không phải hoạt cảnh
     if (name === 'learn') { this.skills.onLearnMsg(data); return; }
+    // Trọng tài nhờ phát ván cho người vừa vào lại — xem `room.onNeedSync`
+    if (name === 'needsync') { if (this.isDriver()) this.sync(); return; }
     const sc = this.scene;
     if (name === 'dice') {
       await sc.rollDiceAnim(data.a, data.b, data.only);

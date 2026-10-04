@@ -14,7 +14,7 @@
         "type": "property",
         "color_group": "brown",
         "price": 60,
-        "rent": 2,
+        "rent": 6,
         "house_cost": 50,
         "image": "quai_de_larroyo_chinois.png"
     },
@@ -32,7 +32,7 @@
         "type": "property",
         "color_group": "brown",
         "price": 60,
-        "rent": 4,
+        "rent": 8,
         "house_cost": 50,
         "image": "quai_de_mytho.png"
     },
@@ -59,7 +59,7 @@
         "type": "property",
         "color_group": "light_blue",
         "price": 100,
-        "rent": 6,
+        "rent": 12,
         "house_cost": 50,
         "image": "rue_mac_mahon.png"
     },
@@ -77,7 +77,7 @@
         "type": "property",
         "color_group": "light_blue",
         "price": 100,
-        "rent": 6,
+        "rent": 12,
         "house_cost": 50,
         "image": "rue_paul_blanchy.png"
     },
@@ -88,7 +88,7 @@
         "type": "property",
         "color_group": "light_blue",
         "price": 120,
-        "rent": 8,
+        "rent": 14,
         "house_cost": 50,
         "image": "rue_dormay.png"
     },
@@ -106,7 +106,7 @@
         "type": "property",
         "color_group": "pink",
         "price": 140,
-        "rent": 10,
+        "rent": 17,
         "house_cost": 100,
         "image": "rue_pellerin.png"
     },
@@ -125,7 +125,7 @@
         "type": "property",
         "color_group": "pink",
         "price": 140,
-        "rent": 10,
+        "rent": 17,
         "house_cost": 100,
         "image": "rue_la_grandiere.png"
     },
@@ -136,7 +136,7 @@
         "type": "property",
         "color_group": "pink",
         "price": 160,
-        "rent": 12,
+        "rent": 19,
         "house_cost": 100,
         "image": "rue_despagne.png"
     },
@@ -155,7 +155,7 @@
         "type": "property",
         "color_group": "orange",
         "price": 180,
-        "rent": 14,
+        "rent": 22,
         "house_cost": 100,
         "image": "boulevard_de_la_somme.png"
     },
@@ -173,7 +173,7 @@
         "type": "property",
         "color_group": "orange",
         "price": 180,
-        "rent": 14,
+        "rent": 22,
         "house_cost": 100,
         "image": "boulevard_gallieni.png"
     },
@@ -184,7 +184,7 @@
         "type": "property",
         "color_group": "orange",
         "price": 200,
-        "rent": 16,
+        "rent": 24,
         "house_cost": 100,
         "image": "quai_de_belgique.png"
     },
@@ -202,7 +202,7 @@
         "type": "property",
         "color_group": "red",
         "price": 220,
-        "rent": 18,
+        "rent": 26,
         "house_cost": 150,
         "image": "rue_taberd.png"
     },
@@ -220,7 +220,7 @@
         "type": "property",
         "color_group": "red",
         "price": 220,
-        "rent": 18,
+        "rent": 26,
         "house_cost": 150,
         "image": "rue_richaud.png"
     },
@@ -231,7 +231,7 @@
         "type": "property",
         "color_group": "red",
         "price": 240,
-        "rent": 20,
+        "rent": 29,
         "house_cost": 150,
         "image": "rue_chasseloup_laubat.png"
     },
@@ -250,7 +250,7 @@
         "type": "property",
         "color_group": "yellow",
         "price": 260,
-        "rent": 22,
+        "rent": 31,
         "house_cost": 150,
         "image": "rue_testard.png"
     },
@@ -261,7 +261,7 @@
         "type": "property",
         "color_group": "yellow",
         "price": 260,
-        "rent": 22,
+        "rent": 31,
         "house_cost": 150,
         "image": "rue_garcerie.png"
     },
@@ -280,7 +280,7 @@
         "type": "property",
         "color_group": "yellow",
         "price": 280,
-        "rent": 24,
+        "rent": 34,
         "house_cost": 150,
         "image": "boulevard_norodom.png"
     },
@@ -298,7 +298,7 @@
         "type": "property",
         "color_group": "green",
         "price": 300,
-        "rent": 26,
+        "rent": 36,
         "house_cost": 200,
         "image": "boulevard_charner.png"
     },
@@ -309,7 +309,7 @@
         "type": "property",
         "color_group": "green",
         "price": 300,
-        "rent": 26,
+        "rent": 36,
         "house_cost": 200,
         "image": "boulevard_bonard.png"
     },
@@ -327,7 +327,7 @@
         "type": "property",
         "color_group": "green",
         "price": 320,
-        "rent": 28,
+        "rent": 38,
         "house_cost": 200,
         "image": "place_rigault_de_genouilly.png"
     },
@@ -353,7 +353,7 @@
         "type": "property",
         "color_group": "dark_blue",
         "price": 350,
-        "rent": 35,
+        "rent": 42,
         "house_cost": 200,
         "image": "rue_catinat.png"
     },

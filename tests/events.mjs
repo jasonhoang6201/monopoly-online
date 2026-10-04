@@ -390,8 +390,8 @@ const surge = await page.evaluate(async () => {
   st.eventTally = { 'thue-khu': 50 };
   out.rates = [t1?.rate, t3?.rate, E.landTaxRate(st, EVENT_BY_ID['thue-khu'])];
   out.house = [h1, h3];
-  out.taxStacks = t1.rate === 0.15 && Math.abs(t3.rate - 0.25) < 1e-9 && out.rates[2] === 0.4
-    && h1.perHouse === 60 && h3.perHouse === 120 && h3.perHotel === 500 && t3.nth === 3;
+  out.taxStacks = t1.rate === 0.08 && Math.abs(t3.rate - 0.14) < 1e-9 && out.rates[2] === 0.2
+    && h1.perHouse === 30 && h3.perHouse === 45 && h3.perHotel === 180 && t3.nth === 3;
 
   // Pha cuối ván có đất trống: Đại Hạ Giá ra dày hơn hẳn lúc đầu ván, thuế ra lặp được
   BOARD.filter((t) => t.ownable).slice(0, 4).forEach((t) => st.owner.delete(t.id));

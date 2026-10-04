@@ -25,7 +25,7 @@ import { audio } from '../audio/audio.js';
 import { DPR, px } from '../dpr.js';
 import { onTheme } from '../theme/theme.js';
 import {
-  ledBulbs, paintBulbGlow, paintSnowflake, snowLevel,
+  ledBulbs, LEDS_PER_TILE, paintBulbGlow, paintSnowflake, snowLevel,
 } from '../render/xmasDeco.js';
 
 /* Người dùng xin bớt chuyển động thì ô đổi trạng thái ngay, không diễn */
@@ -307,11 +307,9 @@ export default class BoardScene extends Phaser.Scene {
       .setDepth(30).setVisible(false));
     this.diceHome = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
 
-    /* Chủ đề Giáng Sinh: quầng đèn LED quanh lòng bàn cờ (depth 2.3 — trên
-       nước màu chủ đất, dưới vệt đèn nhà) và tuyết rơi (depth 0.5 — ngay trên
-       mặt bàn, dưới mọi thứ khác). Rỗng khi chơi chủ đề mặc định. */
-    this.ledLayer = this.add.container(0, 0).setDepth(2.3);
-    this.leds = [];
+    /* Chủ đề Giáng Sinh: tuyết rơi (depth 0.5 — ngay trên mặt bàn, dưới mọi
+       thứ khác). Dây đèn LED vẽ sẵn trên ảnh bàn cờ, bóng nào cũng tắt; ô có
+       nhà mới bật bóng, xem `addTileGlow`. Rỗng khi chơi chủ đề mặc định. */
     this.snowLayer = this.add.container(0, 0).setDepth(0.5);
     this.flakes = [];
     this.events.on(Phaser.Scenes.Events.UPDATE, (time, delta) => this.tickXmas(time, delta / 1000));
@@ -355,26 +353,13 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   /**
-   * Dựng lại quầng đèn LED và hạt tuyết theo bố cục hiện tại. Gọi từ
-   * `layout()`; chủ đề mặc định thì dọn sạch hai lớp.
+   * Dựng lại hạt tuyết theo bố cục hiện tại. Gọi từ `layout()`; chủ đề mặc
+   * định thì dọn sạch lớp tuyết.
    */
   layoutXmas() {
-    this.ledLayer.removeAll(true);
-    this.leds = [];
     this.snowLayer.removeAll(true);
     this.flakes = [];
     if (!this.xmas) return;
-
-    const r = this.size / 12 * 0.34;
-    for (const b of ledBulbs(TEX)) {
-      const s = this.toScreen(b.x, b.y);
-      const img = this.add.image(s.x, s.y, 'bulb-glow')
-        .setDisplaySize(r, r)
-        .setTint(b.color)
-        .setBlendMode(Phaser.BlendModes.ADD);
-      this.ledLayer.add(img);
-      this.leds.push({ img, group: b.group });
-    }
 
     /* Tuyết rơi trên mặt bàn: thưa và chậm, chỉ để có không khí. Người dùng
        xin bớt chuyển động thì không có. */
@@ -390,19 +375,8 @@ export default class BoardScene extends Phaser.Scene {
     }
   }
 
-  /**
-   * Mỗi khung hình: đèn LED sáng dịu theo ba nhóm lệch pha (chu kỳ 3,6 giây,
-   * không bao giờ tắt hẳn — đèn chớp tắt liên tục gây khó chịu), tuyết rơi.
-   */
+  /** Mỗi khung hình: tuyết rơi. */
   tickXmas(time, dt) {
-    if (this.leds.length) {
-      const calm = REDUCED_MOTION();
-      const ph = (time / 3600) * Math.PI * 2;
-      for (const l of this.leds) {
-        const a = calm ? 0.6 : 0.42 + 0.38 * (0.5 + 0.5 * Math.sin(ph + (l.group * Math.PI * 2) / 3));
-        l.img.setAlpha(a);
-      }
-    }
     if (this.flakes.length) {
       const W = this.scale.width, H = this.scale.height;
       const fall = px(26), drift = px(10);
@@ -1519,6 +1493,8 @@ export default class BoardScene extends Phaser.Scene {
 
     const tint = glowTint(owner.token.color);
 
+    if (this.xmas) { this.lightBulbs(id, houses, tint); return; }
+
     // Vũng tối lùi vào lòng ô — chân đèn, để vệt sáng không như dán đè lên ô
     const shade = this.add.image(s.x - nx * sh * 0.18, s.y - ny * sh * 0.18, 'edge-glow')
       .setRotation(edge.angle)
@@ -1547,25 +1523,30 @@ export default class BoardScene extends Phaser.Scene {
     lamp(sh * (houses === 5 ? 1.10 : 0.92), sw * 1.04, base * 0.72);
     // Gốc đèn — vệt ngắn, đậm ngay chân ô; sắc của người chơi đọc ở đây
     lamp(sh * 0.34, sw * 0.86, base);
+  }
 
-    /* Giáng Sinh: thêm một dây đèn màu chủ đất chăng ngang mép trong ô, mỗi
-       căn nhà hai bóng, khách sạn kín cả dây. Nhìn dây đèn là biết đất của ai
-       và xây dày cỡ nào. Nhịp sáng đi theo `glowBeat` như vệt đèn nhà. */
-    if (this.xmas) {
-      const n = houses === 5 ? 9 : houses * 2;
-      const tx = Math.cos(edge.angle), ty = Math.sin(edge.angle);
-      const lift = sh * 0.07;                     // lùi vào lòng bàn cờ một chút
-      const dot = sw * 0.16;
-      for (let i = 0; i < n; i++) {
-        const u = ((i + 0.5) / n - 0.5) * sw * 0.86;
-        const x = s.x + tx * u + nx * lift, y = s.y + ty * u + ny * lift;
-        const halo = this.add.image(x, y, 'bulb-glow')
-          .setDisplaySize(dot * 2.2, dot * 2.2).setTint(tint).setBlendMode(Phaser.BlendModes.ADD);
-        const core = this.add.image(x, y, 'bulb-glow')
-          .setDisplaySize(dot * 0.8, dot * 0.8).setTint(0xFFFFFF);
-        this.glowLayer.add([halo, core]);
-        this.glowFx.push({ img: halo, base: 0.9, id }, { img: core, base: 0.85, id, beat: false });
-      }
+  /**
+   * Giáng Sinh: thay cho vệt hào quang, bật bóng trên đoạn dây LED trước ô.
+   * Cả dây vẽ sẵn ở trạng thái tắt (`drawWire`), nên nhìn qua bàn cờ là thấy
+   * ngay đoạn nào sáng: 1–4 nhà bật 1–4 bóng từ giữa ra hai bên, khách sạn bật
+   * đủ cả đoạn và quầng to hơn. Màu bóng là màu chủ đất. Nhịp sáng đi theo
+   * `glowBeat` như vệt đèn nhà ở chủ đề mặc định.
+   */
+  lightBulbs(id, houses, tint) {
+    const hotel = houses === 5;
+    const lit = hotel ? LEDS_PER_TILE : Math.min(houses, LEDS_PER_TILE);
+    // Thứ tự bật: bóng giữa trước, rồi lần ra hai bên cho đoạn dây cân
+    const order = [2, 1, 3, 0, 4].slice(0, lit);
+    const dot = this.size / 12 * (hotel ? 0.24 : 0.2);
+    for (const b of ledBulbs(TEX)) {
+      if (b.tile !== id || !order.includes(b.slot)) continue;
+      const { x, y } = this.toScreen(b.x, b.y);
+      const halo = this.add.image(x, y, 'bulb-glow')
+        .setDisplaySize(dot * 2.4, dot * 2.4).setTint(tint).setBlendMode(Phaser.BlendModes.ADD);
+      const core = this.add.image(x, y, 'bulb-glow')
+        .setDisplaySize(dot * 0.7, dot * 0.7).setTint(0xFFFFFF);
+      this.glowLayer.add([halo, core]);
+      this.glowFx.push({ img: halo, base: hotel ? 1 : 0.9, id }, { img: core, base: 0.9, id, beat: false });
     }
   }
 

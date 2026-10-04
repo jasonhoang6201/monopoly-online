@@ -38,9 +38,10 @@
  * còn thẻ không mang cờ ấy mỗi lần bị rút lên chỉ được giữ với xác suất
  * `LATE_RARE`. Chồng bài xáo lại liên tục nên thẻ bị gạt còn được thử lại:
  * `tests/events.mjs` đo ra chúng xuất hiện chừng 1/3 số lần của thẻ tài chính.
- * Thêm vào đó, ba thẻ trong `LATE_PRIORITY` (Đại Hạ Giá, hai thẻ thuế) được
- * thử trước cả chồng với xác suất tăng dần theo số lần nổ, và hai thẻ thuế
- * mỗi lần ra lại thì thu nặng hơn lần trước.
+ * Thêm vào đó, sáu thẻ trong `LATE_PRIORITY` (Mở Đường Lớn, Đại Hạ Giá, Hoả
+ * Hoạn, Giá Gạo Leo Thang, hai thẻ thuế) được thử trước cả chồng với xác
+ * suất tăng dần theo số lần nổ, và hai thẻ thuế mỗi lần ra lại thì thu nặng
+ * hơn lần trước.
  * `late: 'off'` là không bao giờ ra nữa: Giới Nghiêm chặn đường xây nhà, mà
  * cuối ván xây nhà là cách duy nhất để ván kết thúc.
  *
@@ -92,14 +93,14 @@ export const EVENTS = [
     title: 'SƯU CAO THUẾ NẶNG',
     text: `Toà Đô Chánh ra lệnh trưng thu sưu thuế điền thổ toàn hạt Gia Định.
            Nhà nào cửa nấy đều bị gọi tên, không ai khất được.`,
-    /* Đơn giá cũ (25/100) thu của một bộ ba ô đủ nhà chưa tới 300$ — bằng một
-       lần tiền thuê, không đủ bắt ai phải bán bớt. Nay mỗi nóc nhà nộp hơn nửa
-       giá xây, tức xây dày thì thuế mới thành khoản phải tính trước. */
-    perHouse: 60, perHotel: 250,
-    /* Mỗi lần thẻ đã ra trước đó cộng thêm nửa đơn giá gốc: lần hai 90/375,
-       lần ba 120/500. Cuối ván nhà đã dày, thuế cố định thì bàn trả được mãi;
-       thuế dồn lên thì sớm muộn có người phải bán nhà. */
-    stack: 0.5,
+    /* Thuế này rút tiền của chủ nhà về Quỹ Công, nên ở mức 60/250 người xây
+       dày bị trừ nặng mà ván không ngắn đi. Ván kết thúc nhờ tiền thuê (xem
+       RENT_TABLE trong data/board.js); thuế chỉ giữ mức nhắc chủ nhà để dành
+       tiền mặt. */
+    perHouse: 30, perHotel: 120,
+    /* Mỗi lần thẻ đã ra trước đó cộng thêm 1/4 đơn giá gốc: lần hai 38/150,
+       lần ba 45/180. */
+    stack: 0.25,
     effect: (c) => [
       `Mỗi căn nhà nộp ${money(c.perHouse)}, mỗi khách sạn ${money(c.perHotel)}`,
       `Mỗi lần thẻ này ra lại, đơn giá cộng thêm ${Math.round(c.stack * 100)}% mức gốc`,
@@ -113,10 +114,11 @@ export const EVENTS = [
            đất và số nóc nhà đang đứng trên đó.`,
     /* Tính trên giá gốc của đất cộng giá xây đã đổ vào, nên khu đắt và khu
        xây dày nộp nhiều hơn; khu mới mua đất trống chỉ nộp phần nhỏ. */
-    rate: 0.15,
+    rate: 0.08,
     /* Mỗi lần thẻ đã ra trước đó (khu nào cũng tính) cộng thêm `rateStep` vào
-       thuế suất, chặn ở `rateCap`: 15%, 20%, 25%… tới 40%. */
-    rateStep: 0.05, rateCap: 0.4,
+       thuế suất, chặn ở `rateCap`: 8%, 11%, 14%… tới 20%. Mức cũ 15% → 40%
+       đánh chủ đất nặng hơn cả tiền thuê họ thu được. */
+    rateStep: 0.03, rateCap: 0.2,
     effect: (c) => [
       'Bốc thăm một khu màu đã có chủ',
       `Chủ đất trong khu nộp ${Math.round(c.rate * 100)}% giá đất cộng giá nhà đã xây ở khu ấy`,
@@ -423,18 +425,28 @@ export const LATE_RARE = 0.1;
  * qua mốc LATE_AFTER)`, chặn ở `cap`. Trúng thì ra luôn, kể cả khi vừa ra lần
  * trước, nên hai thẻ thuế ra được nhiều lần liền và mức thu dồn lên.
  *
- * Vì sao là ba thẻ này: đất còn ế cuối ván là đất không ai chịu đi tới để
- * mua, đem đấu giá thì nó có chủ và bắt đầu thu thuê; thuế thì rút tiền khỏi
- * bàn. Cả hai đường đều làm người chơi cạn tiền nhanh hơn, ván ngắn lại.
+ * Vì sao là mấy thẻ này: đất còn ế cuối ván là đất không ai chịu đi tới để
+ * mua, đem đấu giá thì nó có chủ và bắt đầu thu thuê. Mở Đường Lớn và Giá Gạo
+ * Leo Thang nâng tiền thuê, Hoả Hoạn bắt chủ nhà trả tiền chữa hoặc mất nhà;
+ * cả ba làm người chơi cạn tiền qua tiền thuê nên ván ngắn lại. Ba thẻ ấy được
+ * trần cao hơn hai thẻ thuế nhà: thuế đánh theo số nóc nhà thì người chơi
+ * ngại xây, mà cuối ván xây nhà là đường chính để có người thắng.
  *
- * Trần thấp là cố ý: ba lần thử độc lập cộng lại, ở trần thì chừng 45% lần nổ
- * rơi vào ba thẻ này, phần còn lại vẫn rút chồng nên động đất, sang nhượng,
- * hoán đổi địa bạ vẫn ra. Trần 0.4–0.5 thì ba thẻ này ăn gần 90% số lần nổ.
+ * Giá Gạo Leo Thang chỉ ra một lần mỗi ván (`usable` chặn khi đang có hiệu
+ * lực), Hoả Hoạn chỉ ra khi bàn đã có nhà, nên thử trúng mà không dùng được
+ * thì lượt thử ấy bỏ qua.
+ *
+ * Trần cộng lại vừa phải: sáu lần thử độc lập, ở trần thì chừng một nửa số
+ * lần nổ rơi vào nhóm này, phần còn lại vẫn rút chồng nên động đất, sang
+ * nhượng, hoán đổi địa bạ vẫn ra.
  */
 export const LATE_PRIORITY = {
-  'dai-ha-gia':    { base: 0.08, step: 0.03, cap: 0.2 },
-  'thue-khu':      { base: 0.08, step: 0.03, cap: 0.2 },
-  'thue-dien-tho': { base: 0.06, step: 0.03, cap: 0.15 },
+  'mo-duong':      { base: 0.08, step: 0.03, cap: 0.15 },
+  'dai-ha-gia':    { base: 0.08, step: 0.03, cap: 0.15 },
+  'hoa-hoan':      { base: 0.06, step: 0.02, cap: 0.12 },
+  'lam-phat':      { base: 0.06, step: 0.02, cap: 0.12 },
+  'thue-khu':      { base: 0.05, step: 0.02, cap: 0.1 },
+  'thue-dien-tho': { base: 0.03, step: 0.01, cap: 0.06 },
 };
 
 /** Đủ vòng này thì mở khoá dù đất chưa bán hết — đề phòng bàn ế đất mãi. */

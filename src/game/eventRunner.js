@@ -713,7 +713,10 @@ export class EventRunner {
     const p = st.players[seat];
     if (amount <= 0) return true;
 
-    if (p.money < amount) {
+    /* Vòng lặp chứ không phải một lần xét: băng "CẤN NỢ" đứng chờ vài giây,
+       mà trong lúc ấy ván có thể nhận ảnh chụp từ máy khác. Xét lại ngay trước
+       khi trừ thì số dư không bao giờ xuống dưới 0. */
+    while (p.money < amount) {
       const { ok, mortgaged, sold } = autoRaise(st, seat, amount);
       if (mortgaged.length || sold.length) {
         this.g.hud.refresh();

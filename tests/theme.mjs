@@ -135,14 +135,36 @@ const inGame = await page.evaluate(() => {
     theme: c.state.settings.theme,
     menu: window.__audioProbe.menuMode,
     hats: sc.tokens.every((t) => t.texture.key.startsWith('tok-christmas-')),
-    leds: sc.leds.length,
     flakes: sc.flakes.length,
+    // Chưa ai có nhà: không bóng đèn nào bật
+    litBefore: sc.glowLayer.length,
   };
+});
+
+/* Đèn chỉ bật ở ô có nhà: 2 nhà bật 2 bóng, khách sạn bật đủ 5 bóng. Mỗi bóng
+   sáng là hai ảnh (quầng + lõi). */
+const bulbs = await page.evaluate(() => {
+  const c = window.__monopoly.controller;
+  const st = c.state;
+  const count = () => c.scene.glowLayer.length / 2;
+  st.owner.set(1, 0); st.owner.set(3, 0); st.owner.set(39, 1);
+  st.houses.set(1, 2);
+  c.scene.refresh(st);
+  const two = count();
+  st.houses.set(39, 5);
+  c.scene.refresh(st);
+  const plusHotel = count();
+  st.owner.delete(1); st.owner.delete(3); st.owner.delete(39);
+  st.houses.delete(1); st.houses.delete(39);
+  c.scene.refresh(st);
+  return { two, plusHotel, after: count() };
 });
 ok('ván chơi chủ đề Giáng Sinh', inGame.theme === 'christmas');
 ok('vào ván thì tắt nhạc nền', inGame.menu === false);
 ok('quân cờ dùng texture có mũ Noel', inGame.hats);
-ok('72 bóng đèn LED quanh lòng bàn cờ', inGame.leds === 72, String(inGame.leds));
+ok('chưa có nhà thì dây đèn tắt hết', inGame.litBefore === 0, String(inGame.litBefore));
+ok('2 nhà bật 2 bóng, khách sạn bật đủ 5 bóng',
+  bulbs.two === 2 && bulbs.plusHotel === 7 && bulbs.after === 0, JSON.stringify(bulbs));
 ok('có tuyết rơi trên bàn cờ', inGame.flakes > 0, String(inGame.flakes));
 
 /* ------------------------------------------------------- thẻ quà Noel chạy thật */

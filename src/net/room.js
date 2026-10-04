@@ -144,7 +144,7 @@ export class Room {
     this.helloAt = new Map();
     /** Đã từng thấy chủ phòng chưa — chưa thấy thì đừng vội kêu phòng đóng. */
     this.sawHost = asHost;
-    /** Controller gắn vào: dựng ảnh chụp ván cho người xin vào lại. */
+    /** Controller gắn vào: dựng ảnh chụp ván cho người xin vào lại (nhận số ghế của họ). */
     this.onNeedSync = null;
     /** Đường truyền của máy này có đang đứt không — xem `#onLink`. */
     this.linkLost = false;
@@ -339,7 +339,7 @@ export class Room {
          trả lời đã xét ở đầu hàm bằng `arbiterExcept`, không xét lại nữa. */
       this.#publishRoom(true);
       // Vào lại giữa ván thì sổ ghế thôi chưa đủ — họ cần cả ván cờ hiện tại.
-      if (!inLobby) this.onNeedSync?.();
+      if (!inLobby) this.onNeedSync?.(i);
       return;
     }
 

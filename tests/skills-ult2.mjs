@@ -133,8 +133,8 @@ const rent = await run(`
 check(rent.plain === 50 && rent.lv1 === 70 && rent.lv3 === 90,
   `2 bến: 50$ → Vé Tháng lv1 +10×2 = 70$, lv3 +20×2 = 90$ (${rent.plain}/${rent.lv1}/${rent.lv3})`);
 check(rent.bill === 54, `người trả có Vé Tháng lv1 trả 60% của 90$ = 54$ (được ${rent.bill})`);
-check(rent.front === 2 + 27 && rent.gains.some(([id, n]) => id === 'acV' && n === 27),
-  `Mặt Tiền lv1, 3 màu: đất 2$ +9×3 = 29$, ghi 27$ vào tiến độ (${rent.front}, ${JSON.stringify(rent.gains)})`);
+check(rent.front === 6 + 27 && rent.gains.some(([id, n]) => id === 'acV' && n === 27),
+  `Mặt Tiền lv1, 3 màu: đất 6$ +9×3 = 33$, ghi 27$ vào tiến độ (${rent.front}, ${JSON.stringify(rent.gains)})`);
 check(rent.mort === 0, 'ô thế chấp vẫn không thu thuê');
 
 /* ------------------------------------------------ 3. Bảo Hiểm Xã Hội */

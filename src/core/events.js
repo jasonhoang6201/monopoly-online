@@ -121,7 +121,7 @@ function lateSkip(st, card) {
 /**
  * Pha cuối ván: thử từng thẻ ưu tiên (`LATE_PRIORITY`) trước khi rút chồng.
  * Xác suất tăng theo số lần nổ đã qua mốc, nên càng về cuối đất ế càng hay bị
- * đem đấu giá và thuế càng hay ra. Thẻ ưu tiên không lấy từ chồng, nên ra lại
+ * đem đấu giá, tiền thuê càng hay được nâng. Thẻ ưu tiên không lấy từ chồng, nên ra lại
  * được ngay lần sau và thuế dồn lên được.
  */
 function latePriority(st) {

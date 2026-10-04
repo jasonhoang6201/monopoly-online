@@ -107,9 +107,9 @@ export const CHANCE = [
   },
   {
     text: 'Sở Lục Lộ tổng kiểm tra nhà phố: nhà nào cũng phải sửa mái, quét vôi lại.',
-    /* Đơn giá cũ 25/100 chỉ bằng một lần tiền thuê ô rẻ — ai xây dày cũng
-       không thấy đau. Nay nộp cỡ nửa giá xây mỗi nóc nhà. */
-    type: 'repair', perHouse: 50, perHotel: 200,
+    /* Thu của chủ nhà theo số nóc, về ngân hàng. Mức 50/200 trừ người xây
+       dày quá nặng; tiền thuê mới là đường làm ván ngắn lại. */
+    type: 'repair', perHouse: 25, perHotel: 100,
   },
   {
     text: 'Quen lớn với ông Cò bót Catinat, xin sẵn một tờ giấy bãi nại phòng thân.',
@@ -186,7 +186,7 @@ export const CHEST = [
   },
   {
     text: 'Toà Đô Chánh đánh thuế thổ trạch: cứ mỗi nóc nhà, mỗi khách sạn đều phải nộp.',
-    type: 'repair', perHouse: 75, perHotel: 250,
+    type: 'repair', perHouse: 40, perHotel: 125,
   },
   {
     text: 'Có người thân làm thơ ký trong Khám Lớn, dặn sẵn khi hữu sự thì đưa giấy này ra.',
