@@ -49,6 +49,34 @@ const PALETTES = {
     lineSoft: 'rgba(30,58,85,.28)',
     theme: 'christmas',
   },
+  /* Halloween: mặt ô tím đêm, chữ màu xương. Bàn tối hẳn vì đèn bí ngô, nghĩa
+     địa và dơi đều cần nền tối mới nổi (đèn vẽ bằng blend cộng). `lac` là màu
+     giá tiền và ô Cơ Hội nên đổi sang cam bí ngô cho đọc rõ trên nền tím;
+     `lacLight`/`lacDeep` là tấm biển giữa bàn nên giữ tím. `jade` (ô Khí Vận)
+     là xanh độc, `indigo` (ga, công ty) là tím hoa cà. */
+  halloween: {
+    lacDeep: '#1E0F33',
+    lac: '#F08A3C',
+    lacLight: '#5A3590',
+    gold: '#8C6BC0',
+    goldLight: '#ECE6D6',
+    goldDeep: '#6B3FA0',
+    paper: '#2A1E3C',
+    paperTop: '#2E2142',
+    paperWarm: '#21172F',
+    paperDeep: '#171024',
+    groundLight: '#2C1A47',
+    ground: '#171024',
+    groundDeep: '#0B0712',
+    groundNight: '#0E0A16',
+    ink: '#ECE6D6',
+    inkSoft: '#B79BE0',
+    jade: '#9AC85A',
+    indigo: '#B79BE0',
+    line: 'rgba(183,155,224,.38)',
+    lineSoft: 'rgba(183,155,224,.24)',
+    theme: 'halloween',
+  },
 };
 
 let current = DEFAULT_THEME;
@@ -57,6 +85,7 @@ const subs = new Set();
 /** Chủ đề đang áp trên máy này. */
 export const currentTheme = () => current;
 export const isXmas = () => current === 'christmas';
+export const isHalloween = () => current === 'halloween';
 
 /**
  * Áp một chủ đề. Gọi lại với đúng chủ đề đang chạy thì không làm gì, nên chỗ

@@ -191,6 +191,31 @@ function groupLots(st, group, lossOf, rate) {
  */
 export function burnLoss(houses) { return Math.ceil(houses / 2); }
 
+/**
+ * Những cặp ô Phù Thuỷ Cưỡi Chổi đổi chủ được: hai lô của hai người còn sống
+ * khác nhau, khu màu của mỗi bên chưa xây căn nào (như luật cưỡng chế mua:
+ * rút một lô khỏi khu đã xây là làm mất bộ của người ta), giá chênh nhau không
+ * quá `priceGap`.
+ * @returns {Array<[number, number]>}
+ */
+export function witchPairs(st, card) {
+  const lots = [...st.owner.entries()].filter(([id, seat]) => {
+    if (st.players[seat].bankrupt || st.housesOn(id) > 0) return false;
+    const g = BOARD[id].color_group;
+    return !g || !st.groupBuilt(seat, g);
+  });
+  const out = [];
+  for (let i = 0; i < lots.length; i++) {
+    for (let j = i + 1; j < lots.length; j++) {
+      const [a, sa] = lots[i], [b, sb] = lots[j];
+      if (sa === sb) continue;
+      const pa = BOARD[a].price, pb = BOARD[b].price;
+      if (Math.abs(pa - pb) / Math.max(pa, pb) <= card.priceGap) out.push([a, b]);
+    }
+  }
+  return out;
+}
+
 /** Số cấp nhà một ô mất khi để tuyết đè: một cấp, khách sạn mái rộng mất hai. */
 export function snowLoss(houses) { return houses === 5 ? 2 : 1; }
 
@@ -236,7 +261,12 @@ export function usable(st, card) {
     case 'mat-mua':
     case 'bao-gia':
     case 'duong-dong-bang':
+    case 'trang-mau':
       return !hasMod(st, card.id);
+    case 'xac-song':
+      return builtGroups(st).length > 0;
+    case 'phu-thuy':
+      return witchPairs(st, card).length > 0;
     /* Khu bốc thăm được là khu có ít nhất một ô đang có nhà. Cả bàn không còn
        căn nào thì thiên tai chẳng lấy được gì — bốc thẻ khác. */
     case 'dong-dat':
@@ -419,6 +449,26 @@ export function planEvent(st, card) {
       return { group, tiles: groupLots(st, group, snowLoss, card.clearRate) };
     }
 
+    case 'xac-song': {
+      /* Cả khu cùng bị kéo tới, nhưng chỉ hỏi những ô đang thu được tiền thuê:
+         ô thế chấp vốn đã không thu, đuổi xác sống khỏi đó là trả tiền suông. */
+      const group = pick(builtGroups(st));
+      const tiles = GROUP_TILES[group]
+        .filter((id) => st.owner.has(id) && !st.isMortgaged(id))
+        .map((id) => ({ id, seat: st.owner.get(id), cost: Math.ceil(BOARD[id].house_cost * card.exorciseRate) }));
+      return tiles.length ? { group, tiles, turns: rounds(st, card.rounds) } : null;
+    }
+
+    case 'phu-thuy': {
+      const pairs = witchPairs(st, card);
+      if (!pairs.length) return null;
+      const [a, b] = pick(pairs);
+      return { a, b, seatA: st.owner.get(a), seatB: st.owner.get(b) };
+    }
+
+    case 'trang-mau':
+      return { mod: { id: card.id, type: 'blood-moon', mult: card.mult, turns: rounds(st, card.rounds) } };
+
     case 'mat-giay-to': {
       const seats = alive.filter((p) => st.propertiesOf(p.id).length > 0).map((p) => p.id);
       return { seats, turns: rounds(st, card.rounds) };
@@ -472,6 +522,9 @@ export function modLabel(m) {
     case 'group-rent':   return `${GROUPS[m.group]?.name ?? 'Một khu'} +${Math.round((m.mult - 1) * 100)}%`;
     case 'frozen':       return `${m.tiles.length} ô mất giấy tờ${left}`;
     case 'ice':          return `Đường đóng băng${left}`;
+    case 'zombie':       return `${m.tiles.length} ô bị xác sống chiếm${left}`;
+    case 'curse':        return `${m.name ?? 'Một người'} bị nguyền, không thu thuê${left}`;
+    case 'blood-moon':   return `Trăng máu: ô có nhà +${Math.round((m.mult - 1) * 100)}%${left}`;
     default:             return '';
   }
 }

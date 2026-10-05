@@ -22,6 +22,10 @@
 
 import { SONGS, PLAYLISTS, scheduleSongBar, barSeconds } from './xmasSongs.js';
 import { XMAS_SFX } from './xmasSfx.js';
+import { HALLOWEEN_SFX } from './halloweenSfx.js';
+import {
+  HALLOWEEN_SONGS, HALLOWEEN_PLAYLISTS, scheduleSpookyBar, spookyBarSeconds,
+} from './halloweenSongs.js';
 
 const A4 = 440;
 /** Số hiệu MIDI → tần số (Hz). */
@@ -115,7 +119,7 @@ export class Audio {
     this.started = false;
     /** Đang ở màn hình chờ — nơi duy nhất được phép có nhạc nền. */
     this.menuMode = false;
-    /** Chủ đề đang chơi: 'default' (ghi-ta phòng trà) hay 'christmas'. */
+    /** Chủ đề đang chơi: 'default' (ghi-ta phòng trà), 'christmas' hay 'halloween'. */
     this.theme = 'default';
     /** 'menu' = màn chờ, 'win' = màn hạ màn — bản Giáng Sinh mỗi chỗ một bài. */
     this.mode = 'menu';
@@ -484,7 +488,7 @@ export class Audio {
     const switching = this.mode !== mode;
     this.mode = mode;
     if (this.started) {
-      if (switching && this.theme === 'christmas') this.restartSong();
+      if (switching && this.theme !== 'default') this.restartSong();
       return;
     }
     if (this.ctx.state === 'suspended') this.ctx.resume();
@@ -517,7 +521,7 @@ export class Audio {
    * thì từ tiếng kế tiếp.
    */
   setTheme(theme) {
-    const next = theme === 'christmas' ? 'christmas' : 'default';
+    const next = theme === 'christmas' || theme === 'halloween' ? theme : 'default';
     if (next === this.theme) return;
     this.theme = next;
     if (this.started) this.restartSong();
@@ -568,6 +572,7 @@ export class Audio {
     }
     const lookahead = 1.2;
     if (this.theme === 'christmas') { this.scheduleXmas(lookahead); return; }
+    if (this.theme === 'halloween') { this.scheduleSpooky(lookahead); return; }
 
     while (this.nextBarTime < this.ctx.currentTime + lookahead) {
       this.scheduleBar(this.nextBarTime);
@@ -602,8 +607,32 @@ export class Audio {
     }
   }
 
+  /**
+   * Lập lịch Danse Macabre: cùng cách với nhạc Giáng Sinh, hết bài thì nghỉ
+   * một ô nhịp rồi lặp lại (mỗi chế độ chỉ một bài).
+   */
+  scheduleSpooky(lookahead) {
+    const list = HALLOWEEN_PLAYLISTS[this.mode] ?? HALLOWEEN_PLAYLISTS.menu;
+    while (this.nextBarTime < this.ctx.currentTime + lookahead) {
+      const song = HALLOWEEN_SONGS[list[this.listIdx % list.length]];
+      if (this.songBar >= song.bars.length) {
+        this.nextBarTime += spookyBarSeconds(song);
+        this.songBar = 0;
+        this.listIdx = (this.listIdx + 1) % list.length;
+        continue;
+      }
+      scheduleSpookyBar(this, song, this.songBar, this.nextBarTime);
+      this.nextBarTime += spookyBarSeconds(song);
+      this.songBar += 1;
+    }
+  }
+
   /** Tên bài đang chơi — tiện cho việc kiểm thử. */
   get songName() {
+    if (this.theme === 'halloween') {
+      const list = HALLOWEEN_PLAYLISTS[this.mode] ?? HALLOWEEN_PLAYLISTS.menu;
+      return HALLOWEEN_SONGS[list[this.listIdx % list.length]].name;
+    }
     if (this.theme !== 'christmas') return 'Phòng trà';
     const list = PLAYLISTS[this.mode] ?? PLAYLISTS.menu;
     return SONGS[list[this.listIdx % list.length]].name;
@@ -716,7 +745,8 @@ export class Audio {
     const t = this.ctx.currentTime;
     /* Chủ đề Giáng Sinh thay tiếng nào có bản riêng; tiếng nào không có (pháo
        hoa, đất rung, lửa…) vẫn dùng bản gốc. */
-    const own = this.theme === 'christmas' ? XMAS_SFX[name] : null;
+    const own = this.theme === 'christmas' ? XMAS_SFX[name]
+      : this.theme === 'halloween' ? HALLOWEEN_SFX[name] : null;
     if (own) { own(this, t, opts); return; }
     (this.SFX[name] ?? this.SFX.click).call(this, t, opts);
   }

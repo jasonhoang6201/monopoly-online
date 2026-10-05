@@ -25,6 +25,14 @@ const DIE_LOOK = {
     body: '#8DBBDB', edge: 'rgba(52,96,136,.6)', shadow: 'rgba(30,58,85,.4)',
     face: [228, 244, 255], pipHi: [62, 104, 150], pipLo: [18, 40, 70], sheen: 0.5,
   },
+  /* Halloween: quả bí ngô vuông. Thân cam sẫm, mặt cam có múi chạy dọc, chấm
+     là lỗ khắc có nến bên trong — tâm vàng sáng, viền tối. Mặt 1 và 4 cũng
+     khắc như các mặt khác, không còn chấm đỏ. */
+  halloween: {
+    body: '#A8461A', edge: 'rgba(70,24,6,.7)', shadow: 'rgba(8,4,14,.55)',
+    face: [240, 128, 46], pipHi: [255, 240, 170], pipLo: [255, 150, 40], sheen: 0.18,
+    ribs: 'rgba(150,56,14,.55)', carved: true,
+  },
 };
 
 
@@ -340,7 +348,7 @@ export function drawDie(cv, q) {
     const pu = proj([g.c[0] + g.u[0] * e, g.c[1] + g.u[1] * e, g.c[2] + g.u[2] * e]);
     const pw = proj([g.c[0] + g.w[0] * e, g.c[1] + g.w[1] * e, g.c[2] + g.w[2] * e]);
     const val = g.f.v;
-    const red = val === 1 || val === 4;                // lối xí ngầu Á Đông
+    const red = !look.carved && (val === 1 || val === 4);   // lối xí ngầu Á Đông
     const dim = Math.min(1, 0.55 + 0.45 * k);
 
     /* Mặt gần như nghiêng hẳn: nền chiếu suy biến, bỏ chấm cho khỏi loang */
@@ -349,8 +357,27 @@ export function drawDie(cv, q) {
 
     ctx.save();
     ctx.transform(pu.x - o.x, pu.y - o.y, pw.x - o.x, pw.y - o.y, o.x, o.y);
+    /* Múi bí ngô: hai đường cong chạy dọc mặt, vẽ trong hệ của mặt nên cong
+       đúng phối cảnh */
+    if (look.ribs) {
+      ctx.strokeStyle = look.ribs;
+      ctx.lineWidth = 0.07;
+      ctx.beginPath();
+      for (const u of [-0.42, 0.42]) {
+        ctx.moveTo(u, -0.86);
+        ctx.quadraticCurveTo(u * 1.25, 0, u, 0.86);
+      }
+      ctx.stroke();
+    }
     for (const [a, b] of PIPS[val]) {
       const r = (val === 1 ? 0.20 : 0.148);
+      // Lỗ khắc: viền tối quanh chấm sáng, như mặt bí ngô có nến bên trong
+      if (look.carved) {
+        ctx.fillStyle = `rgba(70,22,4,${0.85 * dim})`;
+        ctx.beginPath();
+        ctx.arc(a, b, r * 1.22, 0, Math.PI * 2);
+        ctx.fill();
+      }
       const rg = ctx.createRadialGradient(a - r * 0.3, b - r * 0.3, r * 0.08, a, b, r);
       if (red) {
         rg.addColorStop(0, `rgb(${Math.round(226 * dim)},${Math.round(86 * dim)},${Math.round(62 * dim)})`);

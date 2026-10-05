@@ -9,6 +9,7 @@
  *   · `bank`      — cộng/trừ tiền với ngân hàng (mặc định khi chỉ có `amount`).
  *   · `collect`   — tiền mừng: **chia đều thu từ những người chơi khác**, chứ
  *                   không phải ngân hàng bao. Quà mừng thì phải có người mừng.
+ *                   Khai `each` thay cho `amount` thì mỗi người góp đúng `each`.
  *   · `repair`    — thuế nhà cửa: tính trên từng căn nhà, từng khách sạn mình
  *                   đang có (`perHouse` / `perHotel`).
  *   · `jail-free` — vé ra tù.
@@ -29,11 +30,13 @@
  *   · `gift`      — quà Giáng Sinh: **cả bàn** cùng nhận `amount` từ ngân
  *                   hàng, người ít tiền mặt nhất nhận gấp đôi. Chỉ có ở ván
  *                   chủ đề Giáng Sinh (`theme: 'christmas'`, xem `data/themes.js`).
+ *   · `curse`     — bị nguyền: người rút **không thu được tiền thuê của ai**
+ *                   trong một vòng. Chỉ có ở ván chủ đề Halloween.
  *   · `move`      — dắt quân đi chỗ khác rồi **xử ô mới như vừa lắc tới đó**:
  *                   mua được, phải trả tiền thuê, rút tiếp thẻ nếu đáp trúng ô
  *                   Cơ Hội / Khí Vận. Ô đến khai bằng một trong bốn cách:
- *                   `to` (ô cố định), `nearest` ('station' | 'utility' — ô gần
- *                   nhất **phía trước**), `ahead` (tiến mấy ô, không thẻ nào đi lùi), `jail` (về Khám
+ *                   `to` (ô cố định), `nearest` ('station' | 'utility' | 'free'
+ *                   là lô đất chưa ai mua — ô gần nhất **phía trước**), `ahead` (tiến mấy ô, không thẻ nào đi lùi), `jail` (về Khám
  *                   Lớn, không lãnh lương dọc đường).
  *
  * ── Vì sao thêm thẻ di chuyển ──────────────────────────────────────────────
@@ -142,6 +145,18 @@ export const CHANCE = [
     text: 'Đi theo ông chủ hãng buôn Hoa kiều một chuyến, học được cách làm ăn.',
     type: 'skill', points: 1,
   },
+  /* Thẻ riêng chủ đề Halloween — để cuối bộ như lá Ông Già Noel, chỉ số các
+     lá cũ khỏi xê dịch. */
+  {
+    text: `Một bộ xương cầm đèn lồng vẫy tay, dắt bạn qua mấy con hẻm tắt tới
+           một lô đất còn bỏ hoang.`,
+    type: 'move', nearest: 'free', theme: 'halloween',
+  },
+  {
+    text: `Lỡ tay hất đổ bình tro trong nhà mồ họ Lâm. Lời nguyền bám theo bạn
+           về tới tận nhà, khách thuê ai cũng sợ không dám đưa tiền.`,
+    type: 'curse', theme: 'halloween',
+  },
 ];
 
 export const CHEST = [
@@ -220,6 +235,17 @@ export const CHEST = [
     text: `Đêm Giáng Sinh, ông già Noel ghé từng nhà trong xóm, để lại quà dưới
            gốc cây thông.`,
     type: 'gift', amount: 50, theme: 'christmas',
+  },
+  /* Thẻ riêng chủ đề Halloween */
+  {
+    text: 'Tụi nhỏ trong xóm gõ cửa từng nhà: "Cho kẹo hay bị ghẹo!"',
+    type: 'collect', each: 25, theme: 'halloween',
+  },
+  { text: 'Đào nhầm trúng một hũ bạc cũ chôn dưới chân mộ.', amount: 75, theme: 'halloween' },
+  {
+    text: `Trả giá rẻ quá với mụ phù thuỷ đầu hẻm, mụ giận đọc một câu chú lên
+           cổng nhà bạn.`,
+    type: 'curse', theme: 'halloween',
   },
 ];
 

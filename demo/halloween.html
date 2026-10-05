@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Âm thanh Halloween</title>
+<!-- Mở qua dev server (/demo/halloween.html): trang gọi thẳng mã âm thanh của
+     game (src/audio), nên nghe ở đây là nghe đúng tiếng trong ván. -->
+<link rel="stylesheet" href="/fonts/fonts.css" />
+<style>
+:root { color-scheme: dark; }
+body {
+  margin: 0; min-height: 100vh;
+  background: #0E0A16; color: #ECE6D6;
+  font-family: "Be Vietnam Pro", system-ui, sans-serif;
+}
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 48px; }
+h1 { font-family: "Playfair Display", Georgia, serif; font-weight: 700; margin: 0 0 6px; }
+p { color: #B9AECB; line-height: 1.55; margin: 0 0 20px; }
+h2 { font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: #B79BE0; margin: 28px 0 10px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+button {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  text-align: left; padding: 12px 14px; border-radius: 10px; cursor: pointer;
+  background: #171024; color: #ECE6D6; border: 1px solid rgba(183,155,224,.3);
+  font: inherit;
+}
+button:hover { border-color: #B79BE0; background: #21172F; }
+button:focus-visible { outline: 2px solid #E8742A; outline-offset: 2px; }
+button b { font-size: 15px; }
+button span { font-size: 12.5px; color: #A79FB4; }
+button.on { background: #E8742A; color: #2A1206; border-color: #FFC48A; }
+button.on span { color: #4A2410; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Âm thanh chủ đề Halloween</h1>
+  <p>Mỗi nút phát đúng hàm trong <code>src/audio/halloweenSfx.js</code> và
+     <code>halloweenSongs.js</code>. Nghe xong tiếng nào chưa ưng thì ghi tên nút
+     gửi lại.</p>
+
+  <h2>Nhạc nền</h2>
+  <div class="grid">
+    <button data-music="menu"><b>Danse Macabre · phòng chờ</b><span>12 tiếng Rê nửa đêm, vĩ cầm lên dây, valse mộc cầm, câu đi xuống nửa cung</span></button>
+    <button data-music="win"><b>Danse Macabre · hạ màn</b><span>Chỉ đoạn valse, nhanh hơn</span></button>
+  </div>
+
+  <h2>Tiếng hiệu ứng</h2>
+  <div class="grid" id="sfx"></div>
+</main>
+<script type="module">
+import { audio } from '/src/audio/audio.js';
+
+audio.setTheme('halloween');
+
+const SFX = [
+  ['dice', 'Lắc xí ngầu', 'Xương lạch cạch rồi ba cú rơi'],
+  ['step', 'Bộ xương bước', 'Mỗi ô một tiếng xương khẽ'],
+  ['go', 'Qua ô Bắt Đầu', 'Ba tiếng chuông nhà nguyện 196 Hz'],
+  ['buy', 'Mua đất', 'Theremin 330 → 520 → 280 Hz'],
+  ['coin', 'Tiền bay', 'Mộc cầm Rê 4, Fa 4, La 4'],
+  ['build', 'Xây nhà', 'Bốn nốt mộc cầm đi lên'],
+  ['turn', 'Tới lượt', 'La 4 rồi Rê 5'],
+  ['card', 'Lật thẻ', 'Mộc cầm lướt lên'],
+  ['click', 'Bấm nút', 'Một nốt Rê 5 rất ngắn'],
+  ['jail', 'Vào tù', 'Một hồi chuông 147 Hz'],
+  ['bankrupt', 'Phá sản', 'Hợp âm Rê thứ trên organ'],
+  ['grave', 'Bia mộ mọc', 'Tiếng đất uỵch và xương'],
+  ['zombie', 'Xác Sống Tràn Phố', 'Tiếng rên trầm'],
+  ['witch', 'Phù Thuỷ Cưỡi Chổi', 'Theremin vụt lên 880 Hz'],
+];
+const box = document.getElementById('sfx');
+for (const [name, title, note] of SFX) {
+  const b = document.createElement('button');
+  b.innerHTML = `<b>${title}</b><span>${note}</span>`;
+  b.addEventListener('click', () => audio.sfx(name));
+  box.appendChild(b);
+}
+
+let playing = null;
+for (const b of document.querySelectorAll('[data-music]')) {
+  b.addEventListener('click', () => {
+    const mode = b.dataset.music;
+    document.querySelectorAll('[data-music]').forEach((x) => x.classList.remove('on'));
+    if (playing === mode) { audio.stopMusic(0.6); playing = null; return; }
+    audio.startMusic(mode);
+    playing = mode;
+    b.classList.add('on');
+  });
+}
+</script>
+</body>
+</html>

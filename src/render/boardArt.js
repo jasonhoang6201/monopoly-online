@@ -13,6 +13,8 @@ import { icon, TILE_ICON } from './icons.js';
 import { drawArt } from './artwork.js';
 import { drawXmasIcon } from './xmasArt.js';
 import { drawXmasDeco } from './xmasDeco.js';
+import { drawHalloweenIcon } from './halloweenArt.js';
+import { drawGraveyard, drawHalloweenDeco } from './halloweenDeco.js';
 
 export const P = {
   lacDeep:  '#450D09',
@@ -177,6 +179,7 @@ export function paintBoard(S = TEX, o = {}) {
   for (const t of BOARD) drawTile(ctx, t, S);
   drawOuterTrim(ctx, S);
   if (P.theme === 'christmas') drawXmasDeco(ctx, S, o.snowLevel ?? 0);
+  if (P.theme === 'halloween') drawHalloweenDeco(ctx, S);
 
   return cv;
 }
@@ -209,6 +212,13 @@ function drawInner(ctx, S) {
   ctx.fillStyle = g;
   ctx.fillRect(x, y, size, size);
   paperGrain(ctx, x, y, size, size, 0.055, 23);
+
+  // Halloween: nghĩa địa phủ kín lòng bàn, không còn trống đồng hay hồi văn
+  if (P.theme === 'halloween') {
+    drawGraveyard(ctx, S);
+    drawCartouche(ctx, cx, cy, size);
+    return;
+  }
 
   // Mặt trống đồng làm hoa văn chìm.
   // Hoa văn trống để chìm, riêng vành chim Lạc đậm hơn cho thấy rõ dáng chim.
@@ -649,7 +659,12 @@ function drawSpecialFace(ctx, t, w, h) {
 function drawCornerFace(ctx, t, w, h) {
   const accent = { 0: P.goldDeep, 10: P.indigo, 20: P.jade, 30: P.lac }[t.id];
   // Dồn nội dung về phía trong bàn cờ, chừa nửa ngoài cho quân cờ đứng.
-  icon(ctx, TILE_ICON[t.id], 0, -h * 0.30, w * 0.30, accent);
+  // Halloween giữ tên ô, chỉ đổi hình: cổng nghĩa địa, đầu lâu sau song sắt,
+  // vạc phù thuỷ, bàn tay xác sống.
+  if (P.theme === 'halloween') {
+    const art = { 0: 'gate', 10: 'jail', 20: 'cauldron', 30: 'hand' }[t.id];
+    drawHalloweenIcon(ctx, art, 0, -h * 0.30, w * 0.36);
+  } else icon(ctx, TILE_ICON[t.id], 0, -h * 0.30, w * 0.30, accent);
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

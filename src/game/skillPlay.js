@@ -980,12 +980,15 @@ export class SkillPlay {
   cardDoes(p, card) {
     if (isKeepable(card)) return 'Cất vào túi, dùng sau';
     switch (cardType(card)) {
-      case 'collect': return `Tiền mừng ${money(card.amount)}, cả bàn chia nhau góp`;
+      case 'collect': return card.each
+        ? `Mỗi người còn lại đưa bạn ${money(card.each)}`
+        : `Tiền mừng ${money(card.amount)}, cả bàn chia nhau góp`;
+      case 'curse': return 'Bị nguyền: 1 vòng không thu được tiền thuê';
       case 'repair': return `Thuế nhà cửa: bạn nộp ${money(repairBill(this.st, p.id, card).amount)}`;
       case 'skill': return `Nhận ${card.points} điểm kỹ năng`;
       case 'move': {
         if (card.jail) return 'Vào tù';
-        const dest = moveDest(card, p.pos);
+        const dest = moveDest(card, p.pos, this.st);
         return card.ahead ? `Tiến ${dest.steps} ô tới ${tileLabel(dest.tile)}` : `Đi tới ${tileLabel(dest.tile)}`;
       }
       default: return card.amount > 0 ? `Nhận ${money(card.amount)}` : `Nộp ${money(-card.amount)}`;
@@ -999,7 +1002,7 @@ export class SkillPlay {
   async dodgeCard(p, card) {
     if (!has(p, 'cnS1')) return false;
     const t = cardType(card);
-    const bad = (t === 'bank' && card.amount < 0) || t === 'repair' || (t === 'move' && card.jail);
+    const bad = (t === 'bank' && card.amount < 0) || t === 'repair' || t === 'curse' || (t === 'move' && card.jail);
     if (!bad || Math.random() >= param(p, 'cnS1').chance) return false;
     credit(p, 'cnS1');
     await this.bc(title('cnS1'), `${named(p)} rút phải thẻ xấu, <b>Bảo Hộ Lao Động</b> cho bỏ qua: “${card.text}”.`, { ms: 2600 });

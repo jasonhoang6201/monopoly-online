@@ -10,7 +10,9 @@ import {
   TEX, DEPTH, EDGE, tileCenter, tokenSpot, tileEdgePoint, tileSize, tileAngle, isCorner,
 } from '../render/geometry.js';
 import { paintBoard, nameBand, P } from '../render/boardArt.js';
-import { paintToken, paintCoin, paintAura, paintGhost, auraPad } from '../render/pieces.js';
+import {
+  paintToken, paintCoin, paintAura, paintGhost, auraPad, paintSkeletonToken, WALK_FRAMES,
+} from '../render/pieces.js';
 import { ultColors, ultColor } from '../core/skills.js';
 import { makeTileFx, fxBox, FX_TILE_W } from '../render/tileFx.js';
 import {
@@ -27,6 +29,12 @@ import { onTheme } from '../theme/theme.js';
 import {
   ledBulbs, LEDS_PER_TILE, paintBulbGlow, paintSnowflake, snowLevel,
 } from '../render/xmasDeco.js';
+import {
+  paintHalloweenIcon, paintWebCorner, paintBatFrame, paintTombstone,
+  paintHauntedHouse, paintHauntedCastle, drawSkeleton,
+} from '../render/halloweenArt.js';
+import { graveLayout, pumpkinSpots, pumpkinSize } from '../render/halloweenDeco.js';
+import { batSwarm } from '../ui/batSwarm.js';
 
 /* Người dùng xin bớt chuyển động thì ô đổi trạng thái ngay, không diễn */
 const REDUCED_MOTION = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
@@ -81,6 +89,8 @@ const HOVER_TINT = 0xC9A24A;      // rê chuột: ánh vàng ấm
    Rê chuột ở đây nhuộm nhân (MULTIPLY) một lớp xanh băng: ô tối xuống và ngả
    xanh, chữ vẫn giữ độ đậm. */
 const HOVER_TINT_XMAS = 0x8FB8DC;
+/* Halloween: mặt ô tím đêm, cộng thêm ánh tím hoa cà như bản gốc cộng ánh vàng */
+const HOVER_TINT_SPOOKY = 0x8C5CC8;
 const POS_TINT = 0xA87C28;        // quân đang đứng: màu dự phòng khi không rõ người chơi
 
 /* Lúc bắt chọn ô: cả khung vẽ tối đi bằng nấy, chỉ mấy ô chọn được là khoét
@@ -207,8 +217,7 @@ export default class BoardScene extends Phaser.Scene {
        khi biết ván này gồm những màu nào (xem `setPlayers`) — bảng có 18 sắc mà
        một ván nhiều nhất 6 người, dựng cả 18 tấm là phí bộ nhớ ảnh. */
     this.textures.addCanvas('die-shadow', paintDieShadow(128));
-    this.textures.addCanvas('house', paintHouseGlyph(192, this.xmas));
-    this.textures.addCanvas('hotel', paintHotelGlyph(192, this.xmas));
+    this.paintHouseTextures();
     this.textures.addCanvas('bulb-glow', paintBulbGlow(64));
     this.textures.addCanvas('snowflake', paintSnowflake(24));
     this.textures.addCanvas('edge-glow', paintEdgeGlow(512, 256));
@@ -313,6 +322,22 @@ export default class BoardScene extends Phaser.Scene {
     this.snowLayer = this.add.container(0, 0).setDepth(0.5);
     this.flakes = [];
     this.events.on(Phaser.Scenes.Events.UPDATE, (time, delta) => this.tickXmas(time, delta / 1000));
+
+    /* Chủ đề Halloween: nghĩa địa giữa bàn có bộ xương đi, dơi bay, sương trôi,
+       trăng đổi đỏ lúc Trăng Máu (depth 0.5, cùng chỗ tuyết rơi). Bia mộ người
+       phá sản mọc ở mép trong ô họ ngã xuống — depth 5.8, ngay dưới quân cờ.
+       Rỗng ở chủ đề khác. */
+    this.graveLayer = this.add.container(0, 0).setDepth(0.5);
+    this.tombLayer = this.add.container(0, 0).setDepth(5.8);
+    this.walkers = [];
+    this.bats = [];
+    this.fogs = [];
+    this.moonRed = null;
+    this.walkKey = '';
+    /** Bia mộ đang dựng: khoá `ghế:ô` → ảnh. */
+    this.tombs = new Map();
+    this.tombState = null;
+    this.events.on(Phaser.Scenes.Events.UPDATE, (time, delta) => this.tickSpooky(time, delta / 1000));
     onTheme(() => this.retheme());
 
     this.setupTileInput();
@@ -325,6 +350,29 @@ export default class BoardScene extends Phaser.Scene {
   /** Đang chơi chủ đề Giáng Sinh — đọc từ bảng màu bàn cờ, `theme.js` giữ nó đúng. */
   get xmas() { return P.theme === 'christmas'; }
 
+  /** Đang chơi chủ đề Halloween. */
+  get spooky() { return P.theme === 'halloween'; }
+
+  /** Hình nhà và khách sạn của bảng nhà bật lên khi rê chuột, theo chủ đề. */
+  paintHouseTextures() {
+    for (const key of ['house', 'hotel']) if (this.textures.exists(key)) this.textures.remove(key);
+    if (this.spooky) {
+      this.textures.addCanvas('house', paintHauntedHouse(192));
+      this.textures.addCanvas('hotel', paintHauntedCastle(192));
+      return;
+    }
+    this.textures.addCanvas('house', paintHouseGlyph(192, this.xmas));
+    this.textures.addCanvas('hotel', paintHotelGlyph(192, this.xmas));
+  }
+
+  /**
+   * Sắc chủ đất phủ lên mặt ô. Mặt ô Halloween tối, nên thay vì dìm màu người
+   * chơi cho tách khỏi nền giấy (`ownerTint`) thì kéo nó lên tươi và sáng,
+   * phủ một lớp cố định.
+   */
+  ownTint(color) { return this.spooky ? glowTint(color, 0.86) : ownerTint(color); }
+  washOf(own) { return this.spooky ? 0.3 : OWNER_WASH(own); }
+
   /**
    * Đổi chủ đề: vẽ lại mọi texture có màu theo chủ đề (bàn cờ, nhà, xí ngầu,
    * quân cờ) rồi dựng lại bố cục. Chỉ xảy ra ngoài ván hoặc lúc vừa vào ván —
@@ -333,10 +381,10 @@ export default class BoardScene extends Phaser.Scene {
   retheme() {
     this.snowLevel = this.state && this.xmas ? snowLevel(this.state.laps ?? 0, this.state.players.length) : 0;
     this.repaintBoard();
-    for (const [key, paint] of [['house', paintHouseGlyph], ['hotel', paintHotelGlyph]]) {
-      if (this.textures.exists(key)) this.textures.remove(key);
-      this.textures.addCanvas(key, paint(192, this.xmas));
-    }
+    this.paintHouseTextures();
+    // Bia mộ và bộ xương vẽ theo chủ đề — dựng lại từ đầu
+    this.clearTombs();
+    this.walkKey = '';
     this.diceTex.forEach((tex, i) => { drawDie(tex.getSourceImage(), this.diceQ[i]); tex.refresh(); });
     this.hideHousePlaque();
     if (this.players) this.setPlayers(this.players);
@@ -433,12 +481,17 @@ export default class BoardScene extends Phaser.Scene {
       this.bg.fillStyle(0x0A1628, 1).fillRect(0, 0, W, H);
       this.bg.fillStyle(0x15305A, 0.6).fillCircle(c.x, c.y, this.size * 0.78);
       this.bg.fillStyle(0x3D6FA3, 0.16).fillCircle(c.x, c.y, this.size * 0.55);
+    } else if (this.spooky) {
+      this.bg.fillStyle(0x0E0A16, 1).fillRect(0, 0, W, H);
+      this.bg.fillStyle(0x2C1A47, 0.6).fillCircle(c.x, c.y, this.size * 0.78);
+      this.bg.fillStyle(0x6B3FA0, 0.14).fillCircle(c.x, c.y, this.size * 0.55);
     } else {
       this.bg.fillStyle(0x150a06, 1).fillRect(0, 0, W, H);
       this.bg.fillStyle(0x30150f, 0.6).fillCircle(c.x, c.y, this.size * 0.78);
       this.bg.fillStyle(0x7c1e14, 0.18).fillCircle(c.x, c.y, this.size * 0.55);
     }
     this.layoutXmas();
+    this.layoutSpooky();
 
     this.dieSize = this.size * 0.086;
     this.dice.forEach((d, i) => {
@@ -595,7 +648,7 @@ export default class BoardScene extends Phaser.Scene {
     const from = this.hoverGfx.visible ? Math.min(this.hoverGfx.alpha, 0.14) : 0;
     this.coverTile(this.hoverGfx, id);
     this.hoverGfx
-      .setFillStyle(this.xmas ? HOVER_TINT_XMAS : HOVER_TINT, 1)
+      .setFillStyle(this.xmas ? HOVER_TINT_XMAS : this.spooky ? HOVER_TINT_SPOOKY : HOVER_TINT, 1)
       .setBlendMode(this.xmas ? Phaser.BlendModes.MULTIPLY : Phaser.BlendModes.ADD)
       .setVisible(true);
     this.tweens.add({
@@ -649,6 +702,14 @@ export default class BoardScene extends Phaser.Scene {
       // Quân đội mũ theo chủ đề, nên chủ đề nằm trong tên texture
       const key = `tok-${P.theme}-${p.token.key}`;
       if (!this.textures.exists(key)) this.textures.addCanvas(key, paintToken(p.token.css, 288));
+      // Bộ xương có thêm mấy khung bước đi cho `moveToken`
+      if (this.spooky) {
+        for (let k = 0; k < WALK_FRAMES; k++) {
+          if (!this.textures.exists(`${key}-w${k}`)) {
+            this.textures.addCanvas(`${key}-w${k}`, paintSkeletonToken(p.token.css, 288, { frame: k }));
+          }
+        }
+      }
       const spr = this.add.image(0, 0, key).setOrigin(0.5, 0.86);
       this.tokenLayer.add(spr);
       return spr;
@@ -723,13 +784,20 @@ export default class BoardScene extends Phaser.Scene {
     if (!spr || steps === 0) return Promise.resolve();
     const dir = Math.sign(steps);
     const n = Math.abs(steps);
-    const hop = this.size * 0.038;
+    /* Halloween: quân là bộ xương đi bộ — không nhảy, chỉ nhún nhẹ theo bước
+       chân, mỗi ô hai khung hình bước. Ô kế nằm bên trái thì quay mặt sang trái. */
+    const walk = this.spooky && this.textures.exists(`${spr.texture.key.replace(/-w\d$/, '')}-w0`);
+    const standKey = spr.texture.key.replace(/-w\d$/, '');
+    const hop = this.size * (walk ? 0.008 : 0.038);
     const stopTrail = this.trail(playerIndex);
 
     return new Promise((resolve) => {
       let i = 0;
       const step = () => {
-        if (i >= n) { stopTrail(); resolve(); return; }
+        if (i >= n) {
+          if (walk) spr.setTexture(standKey);
+          stopTrail(); resolve(); return;
+        }
         i++;
         const pos = ((fromPos + dir * i) % 40 + 40) % 40;
         const t = this.tokenTarget(playerIndex, pos);
@@ -738,23 +806,34 @@ export default class BoardScene extends Phaser.Scene {
           targets: spr,
           x: t.x,
           duration: STEP_MS,
-          ease: 'Sine.easeInOut',
+          ease: walk ? 'Linear' : 'Sine.easeInOut',
           onStart: () => {
             // Mỗi nhịp nhảy một tiếng gõ gỗ — nghe rõ quân đang đếm mấy ô
             audio.sfx('step', { i });
+            if (walk) {
+              if (Math.abs(t.x - spr.x) > 1) spr.setFlipX(t.x < spr.x);
+              spr.setTexture(`${standKey}-w${(i * 2) % WALK_FRAMES}`);
+              this.time.delayedCall(HALF, () => {
+                if (i <= n) spr.setTexture(`${standKey}-w${(i * 2 + 1) % WALK_FRAMES}`);
+              });
+            }
             this.tweens.add({
               targets: spr, y: t.y - hop, duration: HALF, ease: 'Quad.easeOut',
               onComplete: () => {
                 this.tweens.add({ targets: spr, y: t.y, duration: HALF, ease: 'Quad.easeIn' });
               },
             });
-            this.tweens.add({
-              targets: spr,
-              scaleX: spr.scaleX * 1.08, scaleY: spr.scaleY * 1.08,
-              duration: HALF, yoyo: true, ease: 'Sine.easeOut',
-            });
+            if (!walk) {
+              this.tweens.add({
+                targets: spr,
+                scaleX: spr.scaleX * 1.08, scaleY: spr.scaleY * 1.08,
+                duration: HALF, yoyo: true, ease: 'Sine.easeOut',
+              });
+            }
           },
           onComplete: () => {
+            // Halloween: qua ô Bắt Đầu thì đàn dơi vụt ra khắp màn hình
+            if (this.spooky && dir > 0 && pos === 0) this.batsFromGo();
             if (onPass) onPass(pos, i === n);
             step();
           },
@@ -1147,7 +1226,7 @@ export default class BoardScene extends Phaser.Scene {
          như hoàng kim phải phủ dày tay hơn mới thấy. Chặn trên hạ xuống 0,48
          (trước là 0,62) và dải tên ô được dán lại nguyên bản đè lên — xem
          `addNameBand` — nên đọc tên đất không còn phải nheo mắt. */
-      const own = ownerTint(p.token.color);
+      const own = this.ownTint(p.token.color);
       /* Ô thế chấp: mặt ô dán lại từ bản xám của bàn cờ — cùng một cách nhìn
          với thẻ đất trong hộp thoại (`.deedcard.is-mortgaged`: xám + nhãn đỏ).
          Nước màu chủ đất nhạt đi nhưng vẫn giữ, vì đó là thứ duy nhất còn nói
@@ -1156,7 +1235,7 @@ export default class BoardScene extends Phaser.Scene {
       const grayParts = [];
       if (mort) grayParts.push(this.pasteBoard(t.id, 0, 1, 'board-gray').img);
       const dim = mort ? 0.5 : 1;
-      const wash = OWNER_WASH(own) * dim;
+      const wash = this.washOf(own) * dim;
       g.fillStyle(own, wash);
       g.fillRect(-sw / 2, -sh / 2, sw, sh);
       this.overlay.add(g);
@@ -1176,8 +1255,23 @@ export default class BoardScene extends Phaser.Scene {
          màu chủ đất: nhìn cả bàn là thấy ngay dãy nào đang có nhà, mà không có
          hình khối nào che mất chữ. Muốn biết mấy căn thì rê chuột vào. */
       if (!state.isMortgaged(t.id)) this.addTileGlow(t.id, p, state.housesOn(t.id));
+
+      /* Ô bị xác sống chiếm (Halloween): phủ mỏng một lớp xanh độc, đủ để
+         nhìn ra mà chữ trên ô vẫn đọc được */
+      if (state.isZombied?.(t.id)) {
+        const z = this.add.graphics();
+        z.setPosition(sc.x, sc.y).setRotation(a);
+        z.fillStyle(0x7FB539, 0.26).fillRect(-sw / 2, -sh / 2, sw, sh);
+        z.lineStyle(Math.max(1.5, this.size * 0.003), 0x9AD14E, 0.9).strokeRect(-sw / 2, -sh / 2, sw, sh);
+        this.overlay.add(z);
+      }
     }
     this.syncAuras(state);
+    if (this.spooky) {
+      this.syncTombs(state);
+      this.syncWalkers();
+      this.moonRed?.setVisible(state.hasMod('blood-moon'));
+    }
     this.placeTokens();
     this.updateHousePlaque();
   }
@@ -1289,6 +1383,20 @@ export default class BoardScene extends Phaser.Scene {
     // Gốc container đặt ngay tâm nhãn để hoạt cảnh thế chấp phóng nhãn tại chỗ
     const tag = this.add.container(sc.x - Math.sin(a) * y, sc.y + Math.cos(a) * y, [bg, txt]).setRotation(a);
     bg.y -= y; txt.y -= y;
+    /* Halloween: mạng nhện giăng ở hai góc phía trong của ô. Góc ấy là mái
+       cổng, không có chữ; bán kính 0,22 bề ngang ô vẫn chưa chạm tới biển tên
+       (biển bắt đầu từ 0,16 bề ngang tính từ mép ô, 0,168 tính từ đầu ô). */
+    if (this.spooky) {
+      if (!this.textures.exists('web-corner')) this.textures.addCanvas('web-corner', paintWebCorner(128));
+      const r = sw * 0.22;
+      for (const side of [-1, 1]) {
+        const web = this.add.image(-side * 0, 0, 'web-corner')
+          .setOrigin(0, 0).setDisplaySize(r, r).setFlipX(side > 0);
+        web.x = side < 0 ? -sw / 2 : sw / 2 - r;
+        web.y = -sh / 2 - y;
+        tag.add(web);
+      }
+    }
     this.overlay.add(tag);
     return tag;
   }
@@ -1401,7 +1509,7 @@ export default class BoardScene extends Phaser.Scene {
     const cw = Math.max(2, Math.ceil(box.width * u)), ch = Math.max(2, Math.ceil(box.height * u));
 
     const owner = st.players[st.owner.get(id)];
-    const own = owner ? ownerTint(owner.token.color) : 0xffffff;
+    const own = owner ? this.ownTint(owner.token.color) : 0xffffff;
     const mortgaged = st.isMortgaged(id);
     const env = {
       hh,
@@ -1414,7 +1522,7 @@ export default class BoardScene extends Phaser.Scene {
       graySrc: this.tileSource(id, 'board-gray', u),
       wash: {
         css: `#${own.toString(16).padStart(6, '0')}`,
-        alpha: owner ? OWNER_WASH(own) * (mortgaged ? 0.5 : 1) : 0,
+        alpha: owner ? this.washOf(own) * (mortgaged ? 0.5 : 1) : 0,
       },
       glowFrom: opts.from ? GLOW_BY_HOUSES[Math.min(opts.from, 5)] / GLOW_BY_HOUSES[Math.min(opts.to ?? 1, 5)] : 0,
       sfx: (name) => { if (opts.sound !== false) audio.sfx(name); },
@@ -1494,6 +1602,7 @@ export default class BoardScene extends Phaser.Scene {
     const tint = glowTint(owner.token.color);
 
     if (this.xmas) { this.lightBulbs(id, houses, tint); return; }
+    if (this.spooky) { this.lightPumpkins(id, houses, tint); return; }
 
     // Vũng tối lùi vào lòng ô — chân đèn, để vệt sáng không như dán đè lên ô
     const shade = this.add.image(s.x - nx * sh * 0.18, s.y - ny * sh * 0.18, 'edge-glow')
@@ -1548,6 +1657,390 @@ export default class BoardScene extends Phaser.Scene {
       this.glowLayer.add([halo, core]);
       this.glowFx.push({ img: halo, base: hotel ? 1 : 0.9, id }, { img: core, base: 0.9, id, beat: false });
     }
+  }
+
+  /* ============================================================ Halloween */
+
+  /** Texture dùng chung của chủ đề Halloween, dựng lần đầu cần tới. */
+  ensureSpookyTextures() {
+    const add = (key, paint) => { if (!this.textures.exists(key)) this.textures.addCanvas(key, paint()); };
+    add('pumpkin-lit', () => paintHalloweenIcon('pumpkinLit', 96));
+    add('witch', () => paintHalloweenIcon('witch', 192));
+    add('zombie', () => paintHalloweenIcon('zombie', 128));
+    for (let k = 0; k < 4; k++) add(`bat-${k}`, () => paintBatFrame(96, k));
+    add('moon-blood', () => {
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = 256;
+      const g = cv.getContext('2d');
+      const halo = g.createRadialGradient(128, 128, 50, 128, 128, 128);
+      halo.addColorStop(0, 'rgba(200,40,50,.55)');
+      halo.addColorStop(1, 'rgba(200,40,50,0)');
+      g.fillStyle = halo; g.fillRect(0, 0, 256, 256);
+      const disc = g.createRadialGradient(112, 112, 6, 128, 128, 56);
+      disc.addColorStop(0, '#F07060');
+      disc.addColorStop(1, '#A3233A');
+      g.fillStyle = disc;
+      g.beginPath(); g.arc(128, 128, 56, 0, Math.PI * 2); g.fill();
+      return cv;
+    });
+    add('fog', () => {
+      const cv = document.createElement('canvas');
+      cv.width = 256; cv.height = 96;
+      const g = cv.getContext('2d');
+      g.scale(1, 96 / 256);
+      const f = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+      f.addColorStop(0, 'rgba(198,176,234,.5)');
+      f.addColorStop(1, 'rgba(198,176,234,0)');
+      g.fillStyle = f; g.fillRect(0, 0, 256, 256);
+      return cv;
+    });
+    add('purple-flame', () => {
+      const cv = document.createElement('canvas');
+      cv.width = 64; cv.height = 96;
+      const g = cv.getContext('2d');
+      const f = g.createLinearGradient(0, 96, 0, 0);
+      f.addColorStop(0, '#E6D2FF'); f.addColorStop(0.5, '#A66BFF'); f.addColorStop(1, 'rgba(110,50,200,0)');
+      g.fillStyle = f;
+      g.beginPath(); g.moveTo(32, 2); g.quadraticCurveTo(58, 52, 32, 94); g.quadraticCurveTo(6, 52, 32, 2); g.fill();
+      return cv;
+    });
+  }
+
+  /**
+   * Phần chuyển động của nghĩa địa: trăng đỏ (ẩn tới khi Trăng Máu), dơi,
+   * bộ xương của từng người còn trụ, sương. Dựng lại sau mỗi lần đổi bố cục
+   * hoặc khi số người còn trụ đổi. Toạ độ giữ theo hệ `TEX` rồi quy ra màn
+   * hình mỗi khung hình, nên đổi cỡ cửa sổ không làm lệch.
+   */
+  layoutSpooky() {
+    this.graveLayer.removeAll(true);
+    this.walkers = [];
+    this.bats = [];
+    this.fogs = [];
+    this.moonRed = null;
+    this.walkKey = '';
+    if (!this.spooky) return;
+    this.ensureSpookyTextures();
+    const L = graveLayout(TEX);
+
+    const m = this.toScreen(L.moon.x, L.moon.y);
+    const mr = L.moon.r * this.scaleF;
+    this.moonRed = this.add.image(m.x, m.y, 'moon-blood')
+      .setDisplaySize(256 * mr / 56, 256 * mr / 56)
+      .setVisible(!!this.state?.hasMod('blood-moon'));
+    this.graveLayer.add(this.moonRed);
+
+    for (let i = 0; i < 4; i++) {
+      const img = this.add.image(0, 0, 'bat-0').setAlpha(0.9);
+      this.graveLayer.add(img);
+      this.bats.push({
+        img, x: L.x + L.size * Math.random(), y: L.y + L.size * (0.1 + Math.random() * 0.25),
+        sp: L.size * (0.03 + Math.random() * 0.03), ph: Math.random() * 6, s: 0.05 + Math.random() * 0.03,
+      });
+    }
+
+    // Bộ xương của người còn trụ — mũ màu người chơi, làn xa đi trước
+    const players = (this.state?.players ?? this.players ?? []).filter((p) => !p.bankrupt);
+    this.walkKey = players.map((p) => p.token.key).join(',');
+    const byLane = players.map((p, i) => ({ p, lane: i % 3 })).sort((u, v) => u.lane - v.lane);
+    for (const { p, lane } of byLane) {
+      const keys = this.walkerFrames(p.token);
+      const img = this.add.image(0, 0, keys[0]).setOrigin(0.5, 0.95);
+      this.graveLayer.add(img);
+      const span = L.walk[1] - L.walk[0];
+      this.walkers.push({
+        img, keys, lane,
+        x: L.walk[0] + span * Math.random(),
+        dir: Math.random() < 0.5 ? -1 : 1,
+        speed: L.size * (0.022 + Math.random() * 0.012),
+        dist: 0,
+        h: L.size * (0.075 + lane * 0.02),
+      });
+    }
+
+    for (let k = 0; k < 3; k++) {
+      const img = this.add.image(0, 0, 'fog').setAlpha(0.55);
+      this.graveLayer.add(img);
+      this.fogs.push({ img, x: L.x + L.size * Math.random(), y: L.lanes[k], sp: L.size * 0.012 * (k % 2 ? 1 : -0.7) });
+    }
+    this.tickSpooky(0, 0);
+  }
+
+  /** Sáu khung bước của bộ xương nghĩa địa, mũ màu người chơi. */
+  walkerFrames(token) {
+    return Array.from({ length: 6 }, (_, k) => {
+      const key = `walk-${token.key}-${k}`;
+      if (!this.textures.exists(key)) {
+        const cv = document.createElement('canvas');
+        cv.width = 96; cv.height = 128;
+        drawSkeleton(cv.getContext('2d'), 46, 124, 96, {
+          phase: (k / 6) * Math.PI * 2, hat: token.css, lw: 1.2,
+        });
+        this.textures.addCanvas(key, cv);
+      }
+      return key;
+    });
+  }
+
+  /** Số người còn trụ đổi thì dựng lại hàng bộ xương. */
+  syncWalkers() {
+    const key = (this.state?.players ?? []).filter((p) => !p.bankrupt).map((p) => p.token.key).join(',');
+    if (key !== this.walkKey) this.layoutSpooky();
+  }
+
+  /** Mỗi khung hình: bộ xương đi qua đi lại, dơi bay, sương trôi, trăng máu thở. */
+  tickSpooky(time, dt) {
+    if (!this.spooky || !this.walkers) return;
+    const L = graveLayout(TEX);
+    const still = REDUCED_MOTION();
+    const step = still ? 0 : dt;
+    for (const w of this.walkers) {
+      w.x += w.dir * w.speed * step;
+      if (w.x > L.walk[1]) { w.x = L.walk[1]; w.dir = -1; }
+      if (w.x < L.walk[0]) { w.x = L.walk[0]; w.dir = 1; }
+      w.dist += w.speed * step;
+      const p = this.toScreen(w.x, L.lanes[w.lane]);
+      const hh = w.h * this.scaleF;
+      w.img.setTexture(w.keys[Math.floor(w.dist / (L.size * 0.012)) % w.keys.length])
+        .setFlipX(w.dir < 0).setPosition(p.x, p.y).setDisplaySize(hh * 0.75, hh);
+    }
+    for (const b of this.bats) {
+      b.x += b.sp * step;
+      if (b.x > L.x + L.size * 1.05) b.x = L.x - L.size * 0.05;
+      const p = this.toScreen(b.x, b.y + Math.sin(time * 0.0015 + b.ph) * L.size * 0.02);
+      const sw = L.size * b.s * this.scaleF;
+      b.img.setTexture(`bat-${still ? 1 : Math.floor(time / 70 + b.ph * 3) % 4}`)
+        .setPosition(p.x, p.y).setDisplaySize(sw, sw * 0.7);
+    }
+    for (const f of this.fogs) {
+      f.x += f.sp * step;
+      if (f.x > L.x + L.size * 1.2) f.x = L.x - L.size * 0.2;
+      if (f.x < L.x - L.size * 0.2) f.x = L.x + L.size * 1.2;
+      const p = this.toScreen(f.x, f.y);
+      f.img.setPosition(p.x, p.y).setDisplaySize(L.size * 0.55 * this.scaleF, L.size * 0.2 * this.scaleF);
+    }
+    if (this.moonRed?.visible) this.moonRed.setAlpha(0.82 + 0.18 * Math.sin(time * 0.002));
+  }
+
+  /**
+   * Bí ngô sáng thay bóng LED: dây bí ngô vẽ sẵn trên ảnh bàn cờ, quả nào
+   * cũng tắt; ô có nhà thì đặt bí ngô sáng đè đúng chỗ, quầng màu chủ đất.
+   * 1–4 nhà sáng 1–4 quả từ giữa ra, khách sạn sáng đủ năm và quả giữa có
+   * thêm ngọn lửa tím.
+   */
+  lightPumpkins(id, houses, tint) {
+    this.ensureSpookyTextures();
+    const hotel = houses === 5;
+    const lit = hotel ? 5 : Math.min(houses, 5);
+    const order = [2, 1, 3, 0, 4].slice(0, lit);
+    const ps = pumpkinSize(TEX) * this.scaleF;
+    for (const b of pumpkinSpots(TEX)) {
+      if (b.tile !== id || !order.includes(b.slot)) continue;
+      const { x, y } = this.toScreen(b.x, b.y);
+      const halo = this.add.image(x, y, 'bulb-glow')
+        .setDisplaySize(ps * 2.8, ps * 2.8).setTint(tint).setBlendMode(Phaser.BlendModes.ADD);
+      const pk = this.add.image(x, y, 'pumpkin-lit').setDisplaySize(ps, ps).setRotation(b.rot);
+      this.glowLayer.add([halo, pk]);
+      this.glowFx.push({ img: halo, base: hotel ? 1 : 0.85, id }, { img: pk, base: 1, id, beat: false });
+      if (hotel && b.slot === 2) {
+        const up = { x: Math.sin(b.rot), y: -Math.cos(b.rot) };
+        const fl = this.add.image(x + up.x * ps * 0.75, y + up.y * ps * 0.75, 'purple-flame')
+          .setDisplaySize(ps * 0.5, ps * 0.75).setRotation(b.rot).setBlendMode(Phaser.BlendModes.ADD);
+        this.glowLayer.add(fl);
+        this.glowFx.push({ img: fl, base: 1, id });
+      }
+    }
+  }
+
+  /** Gỡ hết bia mộ (đổi chủ đề, vào ván mới). */
+  clearTombs() {
+    this.tombLayer.removeAll(true);
+    this.tombs.clear();
+    this.tombState = null;
+  }
+
+  /**
+   * Bia mộ người phá sản, mọc ở mép trong đúng ô họ ngã xuống.
+   *
+   * Bia đứng ngoài ô, trên mép lòng bàn cờ, chứ không đè lên mặt ô: mặt ô có
+   * tên đường và giá, bia mà đè lên thì che chữ. Chân bia chạm mép trong của
+   * ô (phía sau dây bí ngô) nên đọc ra vẫn là "mộ ở ô này".
+   *
+   * Dựng từ ảnh chụp (`outPos`, `outRound`), nên máy nào vào lại giữa ván cũng
+   * thấy đủ bia. Chỉ khi cùng một `state` vừa có thêm người phá sản thì bia
+   * mới diễn cảnh mọc lên.
+   */
+  syncTombs(state) {
+    const fresh = this.tombState === state;
+    this.tombState = state;
+    const groups = new Map();
+    for (const p of state.players) {
+      if (!p.bankrupt) continue;
+      const pos = p.outPos ?? p.pos;
+      if (!groups.has(pos)) groups.set(pos, []);
+      groups.get(pos).push(p);
+    }
+    const keys = new Set();
+    for (const [pos, list] of groups) list.forEach((p, k) => keys.add(`${p.id}:${pos}:${k}:${list.length}`));
+    for (const [key, img] of this.tombs) {
+      if (!keys.has(key)) { img.destroy(); this.tombs.delete(key); }
+    }
+
+    const e = TEX / 12;
+    const tw = e * 0.78;
+    for (const [pos, list] of groups) {
+      const { h } = tileSize(pos, TEX);
+      const out = isCorner(pos) ? h * (Math.SQRT1_2 - 0.5) + e * 0.3 : e * 0.3;
+      const edge = tileEdgePoint(pos, TEX, out);
+      list.forEach((p, k) => {
+        const key = `${p.id}:${pos}:${k}:${list.length}`;
+        const off = (k - (list.length - 1) / 2) * tw * 1.05;
+        const at = this.toScreen(edge.x + Math.cos(edge.angle) * off, edge.y + Math.sin(edge.angle) * off);
+        const w = tw * this.scaleF;
+        let img = this.tombs.get(key);
+        const tex = `tomb-${p.id}-${p.outRound ?? 'x'}-${p.name}`;
+        if (!this.textures.exists(tex)) this.textures.addCanvas(tex, paintTombstone(p.name, p.outRound, p.token.css, 160));
+        if (img) { img.setPosition(at.x, at.y).setDisplaySize(w, w * 1.3); return; }
+        img = this.add.image(at.x, at.y, tex).setOrigin(0.5, 0.92).setRotation(edge.angle).setDisplaySize(w, w * 1.3);
+        this.tombLayer.add(img);
+        this.tombs.set(key, img);
+        if (fresh && !REDUCED_MOTION()) this.riseTomb(img);
+      });
+    }
+  }
+
+  /** Bia mộ trồi lên khỏi đất, đất bắn ra hai bên. */
+  riseTomb(img) {
+    const full = img.scaleY;
+    img.setScale(img.scaleX, 0.01);
+    audio.sfx('grave');
+    this.tweens.add({ targets: img, scaleY: full, duration: 950, ease: 'Back.easeOut' });
+    const n = 14;
+    for (let i = 0; i < n; i++) {
+      const d = this.add.circle(img.x, img.y, Math.max(2, this.size * 0.004), i % 2 ? 0x3B2A22 : 0x5A4632, 1).setDepth(55);
+      const a = img.rotation - Math.PI / 2 + (Math.random() - 0.5) * 2.2;
+      const r = this.size * (0.02 + Math.random() * 0.04);
+      this.tweens.add({
+        targets: d, x: d.x + Math.cos(a) * r, y: d.y + Math.sin(a) * r, alpha: 0,
+        duration: 600 + Math.random() * 400, ease: 'Cubic.easeOut', onComplete: () => d.destroy(),
+      });
+    }
+  }
+
+  /** Qua ô Bắt Đầu: đàn dơi bay ra từ ô ấy, phủ cả màn hình. */
+  batsFromGo() {
+    const c = tileCenter(0, TEX);
+    const sc = this.toScreen(c.x, c.y);
+    batSwarm(sc.x / DPR, sc.y / DPR);
+  }
+
+  /**
+   * Phù Thuỷ Cưỡi Chổi: mụ phù thuỷ bay theo đường cong từ ô `a` sang ô `b`,
+   * vệt chổi để lại đốm sáng tím.
+   * @returns {Promise<void>}
+   */
+  witchFly(a, b) {
+    if (!this.spooky) return Promise.resolve();
+    this.ensureSpookyTextures();
+    const ca = tileCenter(a, TEX), cb = tileCenter(b, TEX);
+    const pa = this.toScreen(ca.x, ca.y), pb = this.toScreen(cb.x, cb.y);
+    const c = this.boardCenter();
+    const ctrl = { x: (pa.x + pb.x) / 2 * 0.4 + c.x * 0.6, y: Math.min(pa.y, pb.y, c.y) - this.size * 0.25 };
+    const sz = this.size * 0.13;
+    const img = this.add.image(pa.x, pa.y, 'witch').setDisplaySize(sz, sz).setDepth(46);
+    const dur = REDUCED_MOTION() ? 300 : 1900;
+    let last = 0;
+    return new Promise((resolve) => {
+      this.tweens.addCounter({
+        from: 0, to: 1, duration: dur, ease: 'Sine.easeInOut',
+        onUpdate: (tw) => {
+          const t = tw.getValue(), it = 1 - t;
+          const x = it * it * pa.x + 2 * it * t * ctrl.x + t * t * pb.x;
+          const y = it * it * pa.y + 2 * it * t * ctrl.y + t * t * pb.y;
+          if (Math.abs(x - img.x) > 0.5) img.setFlipX(x < img.x);
+          img.setPosition(x, y).setAngle(Math.sin(t * Math.PI * 4) * 6);
+          if (this.time.now - last > 40) {
+            last = this.time.now;
+            const dot = this.add.circle(x, y + sz * 0.15, Math.max(2, this.size * 0.005), 0xC9A6FF, 0.9)
+              .setDepth(45).setBlendMode(Phaser.BlendModes.ADD);
+            this.tweens.add({
+              targets: dot, y: dot.y + this.size * 0.03, alpha: 0, scale: 0.3,
+              duration: 700, onComplete: () => dot.destroy(),
+            });
+          }
+        },
+        onComplete: () => {
+          this.flash(pa.x, pa.y, 0xA66BFF, 0.7);
+          this.flash(pb.x, pb.y, 0xA66BFF, 0.7);
+          this.tweens.add({ targets: img, alpha: 0, duration: 260, onComplete: () => img.destroy() });
+          resolve();
+        },
+      });
+    });
+  }
+
+  /**
+   * Xác Sống Tràn Phố: mỗi ô bị kéo tới có một xác sống lê từ nghĩa địa ra,
+   * tới nơi thì tan thành khói xanh. Không chờ — chạy song song với hộp hỏi.
+   */
+  zombieMarch(ids) {
+    if (!this.spooky || REDUCED_MOTION()) return;
+    this.ensureSpookyTextures();
+    const L = graveLayout(TEX);
+    const from = this.toScreen((L.walk[0] + L.walk[1]) / 2, L.lanes[1]);
+    ids.forEach((id, i) => {
+      const c = tileCenter(id, TEX);
+      const to = this.toScreen(c.x, c.y);
+      const sz = this.size * 0.07;
+      const img = this.add.image(from.x, from.y, 'zombie').setDisplaySize(sz * 0.6, sz * 0.6).setAlpha(0).setDepth(44);
+      this.tweens.add({ targets: img, alpha: 1, delay: i * 160, duration: 200 });
+      this.tweens.add({
+        targets: img, x: to.x, y: to.y, displayWidth: sz, displayHeight: sz,
+        delay: i * 160, duration: 1300, ease: 'Sine.easeInOut',
+        onUpdate: () => img.setAngle(Math.sin(this.time.now * 0.012 + i) * 9),
+        onComplete: () => {
+          for (let k = 0; k < 10; k++) {
+            const d = this.add.circle(to.x, to.y, Math.max(2, this.size * 0.006), 0x9AD14E, 0.8).setDepth(44);
+            const a = Math.random() * Math.PI * 2;
+            this.tweens.add({
+              targets: d, x: to.x + Math.cos(a) * sz * 0.6, y: to.y + Math.sin(a) * sz * 0.6 - sz * 0.3,
+              alpha: 0, scale: 2, duration: 700, onComplete: () => d.destroy(),
+            });
+          }
+          this.tweens.add({ targets: img, alpha: 0, duration: 300, onComplete: () => img.destroy() });
+        },
+      });
+    });
+  }
+
+  /**
+   * Màn thắng Halloween: bộ xương đội mũ màu người thắng đứng giữa nghĩa địa,
+   * cúi chào ba lần trong lúc pháo hoa nổ, rồi lui đi.
+   */
+  skeletonBow(css) {
+    if (!this.spooky) return;
+    const keys = [0, 0.5, 1].map((b, k) => {
+      const key = `bow-${css}-${k}`;
+      if (!this.textures.exists(key)) this.textures.addCanvas(key, paintSkeletonToken(css, 256, { bow: b }));
+      return key;
+    });
+    const L = graveLayout(TEX);
+    const at = this.toScreen((L.walk[0] + L.walk[1]) / 2, L.lanes[2]);
+    const h = this.size * 0.3;
+    const img = this.add.image(at.x, at.y, keys[0]).setOrigin(0.5, 0.9).setDisplaySize(h / 1.12, h).setDepth(48).setAlpha(0);
+    this.tweens.add({ targets: img, alpha: 1, duration: 300 });
+    const seq = [0, 1, 2, 2, 1, 0];
+    let t = 500;
+    for (let round = 0; round < 3; round++) {
+      for (const f of seq) {
+        this.time.delayedCall(t, () => img.active && img.setTexture(keys[f]));
+        t += f === 2 ? 320 : 140;
+      }
+      t += 500;
+    }
+    this.time.delayedCall(t, () => this.tweens.add({
+      targets: img, alpha: 0, duration: 500, onComplete: () => img.destroy(),
+    }));
   }
 
   /* ------------------------------------ bảng nhà bật lên khi rê chuột vào ô */
@@ -1617,15 +2110,17 @@ export default class BoardScene extends Phaser.Scene {
     const g = this.add.graphics();
     g.fillStyle(0x0A0603, 0.42)
       .fillRoundedRect(x0 - u * 0.015, y0 - u * 0.05, bw + u * 0.03, bh + u * 0.05, corners);
-    // Nền giấy dó, đậm dần về phía ngoài — cùng cách chuyển sắc với mặt ô
-    g.fillStyle(0xF1E4CA, 1).fillRoundedRect(x0, y0, bw, bh, corners);
-    g.fillStyle(0xE4D2AC, 0.5).fillRect(x0, y0 + bh * 0.45, bw, bh * 0.55);
+    // Nền giấy dó, đậm dần về phía ngoài — cùng cách chuyển sắc với mặt ô.
+    // Halloween: mặt ô tím đêm thì khoang cũng tím đêm.
+    const spooky = this.spooky;
+    g.fillStyle(spooky ? 0x2E2142 : 0xF1E4CA, 1).fillRoundedRect(x0, y0, bw, bh, corners);
+    g.fillStyle(spooky ? 0x21172F : 0xE4D2AC, 0.5).fillRect(x0, y0 + bh * 0.45, bw, bh * 0.55);
     // Nước màu chủ đất, đúng công thức đang phủ lên mặt ô (nhạt hơn chút cho
     // hình nhà còn nổi lên được)
-    const own = ownerTint(owner.token.color);
-    g.fillStyle(own, OWNER_WASH(own) * 0.8)
+    const own = this.ownTint(owner.token.color);
+    g.fillStyle(own, this.washOf(own) * 0.8)
       .fillRoundedRect(x0, y0, bw, bh, corners);
-    g.lineStyle(Math.max(1, this.size * 0.0016), 0x221A11, 0.62)
+    g.lineStyle(Math.max(1, this.size * 0.0016), spooky ? 0xB79BE0 : 0x221A11, 0.62)
       .strokeRoundedRect(x0, y0, bw, bh, corners);
 
     const kids = [g];

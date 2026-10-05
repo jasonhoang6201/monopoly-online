@@ -120,6 +120,13 @@ export class Player {
     this.stake = null;
     /** Số lượt đã ngồi yên trong lần vào tù này (Ở Tù Cho Lành). */
     this.jailSits = 0;
+    /**
+     * Ô đang đứng và vòng chơi lúc phá sản; `null` khi còn trụ. Chủ đề
+     * Halloween dựng bia mộ khắc tên ngay ô ấy, nên phải ghi lại: quân đã ẩn,
+     * mà `pos` còn đổi được nếu ván sau dọn ghế.
+     */
+    this.outPos = null;
+    this.outRound = null;
   }
 }
 
@@ -231,6 +238,11 @@ export class GameState {
      */
     this.turnNo = 0;
     /**
+     * Vòng chơi, bắt đầu từ 1: tăng mỗi khi lượt quay lại người đầu bảng thứ
+     * tự đi. Bia mộ chủ đề Halloween khắc số này ("phá sản vòng 14").
+     */
+    this.round = 1;
+    /**
      * Người đang đi đã lắc xong nước chính của lượt, chỉ còn chờ kết thúc lượt.
      *
      * Phải nằm trong trạng thái chứ không ở controller: `beginTurn` chạy lại mỗi
@@ -274,6 +286,33 @@ export class GameState {
   /** Ô đang bị treo giấy tờ — chủ vẫn giữ đất nhưng không thu được tiền thuê. */
   isFrozen(tileId) {
     return this.mods.some((m) => m.type === 'frozen' && m.tiles.includes(tileId));
+  }
+
+  /** Ô đang bị xác sống chiếm (sự kiện Xác Sống Tràn Phố, chủ đề Halloween). */
+  isZombied(tileId) {
+    return this.mods.some((m) => m.type === 'zombie' && m.tiles.includes(tileId));
+  }
+
+  /** Người này đang bị nguyền (thẻ Bị Nguyền): không thu được tiền thuê của ai. */
+  isCursed(seat) {
+    return this.mods.some((m) => m.type === 'curse' && m.seat === seat);
+  }
+
+  /**
+   * Lý do ô này lúc này không thu được tiền thuê, theo ba luật riêng của chủ
+   * đề Halloween; `null` là thu như thường. Controller đọc để báo đúng lý do
+   * thay vì một dòng "trả 0$".
+   * @returns {?'zombie'|'curse'|'blood-moon'}
+   */
+  rentBlock(tileId) {
+    const ownerId = this.owner.get(tileId);
+    if (ownerId === undefined) return null;
+    if (this.isZombied(tileId)) return 'zombie';
+    if (this.isCursed(ownerId)) return 'curse';
+    if (this.hasMod('blood-moon') && BOARD[tileId].type === 'property' && this.housesOn(tileId) === 0) {
+      return 'blood-moon';
+    }
+    return null;
   }
 
   /** Giá xây một căn ở ô này, đã tính bão giá vật liệu và kỹ năng Mái Ấm của chủ đất. */
@@ -445,8 +484,11 @@ export class GameState {
     const ownerId = this.owner.get(tileId);
     // Giấy tờ thất lạc thì chủ đất chưa đòi tiền ai được, y như đang thế chấp.
     if (ownerId === undefined || this.isMortgaged(tileId) || this.isFrozen(tileId)) return 0;
+    if (this.rentBlock(tileId)) return 0;
 
-    const k = this.rentMult(tileId) * ownerRentMult(this, tileId);
+    /* Đêm Trăng Máu: ô có nhà thu thêm. Ô đất trống đã bị `rentBlock` chặn. */
+    const moon = this.hasMod('blood-moon') && t.type === 'property' ? this.modMult('blood-moon') : 1;
+    const k = this.rentMult(tileId) * ownerRentMult(this, tileId) * moon;
     // Vé Tháng, Mặt Tiền cộng sau hệ số nhân — xem `ownerRentFlat`
     const flat = Object.values(ownerRentFlat(this, tileId)).reduce((n, x) => n + x, 0);
     let base = 0;
@@ -785,7 +827,11 @@ export class GameState {
     // Thẻ còn trong túi người vỡ nợ thì trả về bộ, đừng chôn theo họ
     while (p.cards.length) this.dropCard(playerId);
     p.money = 0;
-    if (!p.bankrupt) p.outRank = this.players.filter((x) => x.bankrupt).length + 1;
+    if (!p.bankrupt) {
+      p.outRank = this.players.filter((x) => x.bankrupt).length + 1;
+      p.outPos = p.pos;
+      p.outRound = this.round;
+    }
     p.bankrupt = true;
     p.inJail = false;
   }
@@ -806,6 +852,8 @@ export class GameState {
     for (let i = 1; i <= ord.length; i++) {
       const idx = ord[(at + i) % ord.length];
       if (!this.players[idx].bankrupt) {
+        // Vòng qua cuối bảng thứ tự đi là sang vòng mới
+        if (at + i >= ord.length) this.round += 1;
         this.turn = idx;
         // Đếm đổ đôi xoá ở đây, không ở `beginTurn` — xem `rolled`
         this.players[idx].doubles = 0;

@@ -1,0 +1,382 @@
+/* ============================================================
+   CHỦ ĐỀ HALLOWEEN — Nghĩa Địa Đô Thành
+   Mọi quy tắc nằm dưới :root[data-theme="halloween"] (theme/theme.js đặt
+   thuộc tính này), nên hai chủ đề còn lại không đổi một điểm ảnh nào.
+
+   Các bảng HTML (cột trái, bảng nút, hộp thoại) chỉ dùng một dải màu: đen
+   đêm tới tím phù thuỷ, chữ màu xương. Phân cấp bằng độ sáng chứ không bằng
+   sắc. Cam bí ngô chỉ có hai chỗ: đồ vật (nến, bí ngô) và hai nút hành động
+   chính, Lắc và Mua. Xanh độc chỉ dành cho xác sống trên bàn cờ.
+
+   Mạng nhện và dơi treo luôn nằm NGOÀI vùng chữ: ở góc ngoài hộp thoại, hoặc
+   ở góc thẻ người chơi đã chừa sẵn lề phải.
+   ============================================================ */
+
+:root[data-theme="halloween"] {
+  --lac-deep:   #1E0F33;
+  --lac:        #4A2C78;
+  --lac-light:  #6B3FA0;
+
+  /* "Vàng" của bản gốc là màu nét viền và chữ nhấn: đổi sang tím hoa cà, xương */
+  --gold-deep:  #6B3FA0;
+  --gold:       #B79BE0;
+  --gold-light: #ECE6D6;
+  --gold-pale:  #F6F1E6;
+
+  --jade-deep:  #2C1A47;
+  --jade:       #4A2C78;
+  --jade-light: #8C6BC0;
+
+  --paper:      #ECE6D6;
+  --paper-warm: #D9CFEA;
+  --paper-deep: #B79BE0;
+
+  --indigo-deep:#0E0A16;
+  --indigo:     #171024;
+  --indigo-mid: #2C1A47;
+
+  --ground-night:#0E0A16;
+  --ground-deep: #0B0712;
+  --ground:      #171024;
+  --ground-light:#2C1A47;
+
+  --ink:        #171024;
+  --ink-soft:   #4A3C5E;
+
+  --shadow-lg: 0 24px 60px rgba(5, 2, 10, .6), 0 4px 14px rgba(5, 2, 10, .45);
+  --shadow-md: 0 10px 26px rgba(5, 2, 10, .45);
+
+  --h-panel: linear-gradient(180deg, rgba(33, 23, 47, .97) 0%, rgba(14, 10, 22, .98) 100%);
+  --h-card:  linear-gradient(155deg, rgba(44, 26, 71, .94), rgba(23, 16, 36, .96));
+  --h-line:  rgba(183, 155, 224, .22);
+  --h-line-strong: rgba(183, 155, 224, .45);
+  --h-pumpkin: linear-gradient(180deg, #FFA055 0%, #E8742A 55%, #C25A1A 100%);
+  --h-pumpkin-ink: #2A1206;
+  --h-violet: linear-gradient(180deg, #7A4DB4 0%, #5A3590 55%, #45277A 100%);
+  --h-glass:  linear-gradient(180deg, rgba(58, 35, 96, .95), rgba(33, 21, 56, .97));
+  --h-rose:   #E8A3B0;
+}
+
+:root[data-theme="halloween"] body { background: #0E0A16; }
+
+/* ------------------------------------------------------- cột điều khiển */
+:root[data-theme="halloween"] #sidebar {
+  background: var(--h-panel);
+  border-right: 1px solid var(--h-line-strong);
+  box-shadow: 7px 0 26px rgba(5, 2, 10, .45);
+}
+:root[data-theme="halloween"] .brand,
+:root[data-theme="halloween"] .side-foot,
+:root[data-theme="halloween"] #quickview { border-color: var(--h-line); }
+:root[data-theme="halloween"] .brand-mark {
+  color: #ECE6D6;
+  text-shadow: 0 0 14px rgba(183, 155, 224, .8);
+}
+:root[data-theme="halloween"] .icon-btn {
+  background: linear-gradient(180deg, rgba(58, 35, 96, .95), rgba(30, 15, 51, .98));
+}
+:root[data-theme="halloween"] #sound-pop { background: var(--h-panel); }
+:root[data-theme="halloween"] .snd-row:hover { background: rgba(183, 155, 224, .14); }
+:root[data-theme="halloween"] .snd-check { color: #171024; }
+
+:root[data-theme="halloween"] .pcard,
+:root[data-theme="halloween"] .rchip {
+  background: var(--h-card);
+  border-color: var(--h-line);
+}
+:root[data-theme="halloween"] .rchip { border-bottom-color: var(--pc, var(--gold)); }
+:root[data-theme="halloween"] .pcard.is-active,
+:root[data-theme="halloween"] .rchip.is-active {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, .08), transparent 55%),
+    linear-gradient(155deg, #4A2C78, #24133D);
+  border-color: rgba(236, 230, 214, .7);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(183, 155, 224, .3), 0 0 22px rgba(140, 107, 192, .3);
+}
+:root[data-theme="halloween"] .rchip.is-active { border-bottom-color: var(--pc, var(--gold)); }
+/* Người đang tới lượt: mạng nhện giăng ở góc trên phải. Thẻ chừa sẵn lề phải
+   đúng bằng cỡ mạng nhện, nên tên và số tiền không bao giờ chạy vào dưới nó. */
+:root[data-theme="halloween"] .pcard.is-active { padding-right: 30px; }
+:root[data-theme="halloween"] .pcard.is-active::after {
+  content: ""; position: absolute; top: 1px; right: 1px;
+  width: 28px; height: 28px;
+  pointer-events: none;
+  background: no-repeat top right / 28px 28px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M64 0L0 0M64 0L5 24M64 0L17 47M64 0L40 59M64 0L64 64M51 0Q50 6 52 12Q56 13 60 13M38 0Q36 12 40 24Q50 26 64 26M25 0Q22 18 28 37Q46 40 64 39M12 0Q8 24 16 49Q40 54 64 52' fill='none' stroke='%23E2DAF0' stroke-width='1.6' stroke-opacity='.75'/%3E%3Cpath d='M44 18v10' stroke='%23E2DAF0' stroke-width='1'/%3E%3Ccircle cx='44' cy='31' r='3.2' fill='%230B0712' stroke='%238C6BC0'/%3E%3C/svg%3E");
+}
+/* Nhãn "ĐANG ĐI" mang ngọn nến nhỏ phía trước */
+:root[data-theme="halloween"] .pcard-turn {
+  display: inline-flex; align-items: center; gap: 3px;
+  background: #ECE6D6; color: #171024;
+}
+:root[data-theme="halloween"] .pcard-turn::before {
+  content: ""; width: 7px; height: 11px; flex: none;
+  background: no-repeat center / contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 22'%3E%3Cpath d='M7 0c3 3 4 6 0 9-4-3-3-6 0-9z' fill='%23F28A2E'/%3E%3Cpath d='M7 3c1 2 1 3 0 5-1-2-1-3 0-5z' fill='%23FFE7A6'/%3E%3Cpath d='M4 10h6v12H4z' fill='%23B79BE0'/%3E%3C/svg%3E");
+  animation: candle-flicker 1.6s steps(4) infinite;
+}
+@keyframes candle-flicker {
+  0%, 100% { transform: scaleY(1); }
+  50%      { transform: scaleY(.9) translateY(.5px); }
+}
+:root[data-theme="halloween"] .pcard-meta { color: rgba(236, 230, 214, .62); }
+:root[data-theme="halloween"] .pcard.is-bankrupt { filter: grayscale(1); }
+:root[data-theme="halloween"] #pop-card,
+:root[data-theme="halloween"] #pop-card::before {
+  background: rgba(23, 16, 36, .98);
+  border-color: var(--h-line-strong);
+}
+:root[data-theme="halloween"] .qv-row.now { background: rgba(183, 155, 224, .14); }
+:root[data-theme="halloween"] #fate-meter {
+  background: rgba(14, 10, 22, .5);
+  border-color: var(--h-line);
+}
+
+/* ------------------------------------------ bảng giữa bàn cờ (nút, tin) */
+:root[data-theme="halloween"] #actions,
+:root[data-theme="halloween"] .tile-pick {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, .05), transparent 46%),
+    var(--h-panel);
+  border-color: var(--h-line-strong);
+}
+:root[data-theme="halloween"] #actions::after,
+:root[data-theme="halloween"] .tile-pick::after { border-color: var(--h-line); }
+:root[data-theme="halloween"] #actions .btn-danger::before {
+  background: linear-gradient(90deg, transparent, rgba(183, 155, 224, .5), transparent);
+}
+:root[data-theme="halloween"] .bcast {
+  background: linear-gradient(160deg, rgba(36, 22, 58, .96), rgba(14, 10, 22, .97));
+  border-color: var(--h-line-strong);
+}
+
+/* ------------------------------------------------------------ nút
+   Viết cho cả `.btn-x` lẫn `#actions .btn-x`: bảng nút giữa bàn cờ có quy tắc
+   riêng với độ ưu tiên cao hơn. */
+:root[data-theme="halloween"] .btn {
+  background: linear-gradient(180deg, #3A2360, #24133D);
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, .12);
+}
+/* Cam bí ngô: chỉ nút chính (Lắc xí ngầu, Kết thúc lượt) và nút Mua đất */
+:root[data-theme="halloween"] .btn-primary,
+:root[data-theme="halloween"] #actions .btn-primary,
+:root[data-theme="halloween"] .btn-buy {
+  background: var(--h-pumpkin);
+  border-color: #FFC48A;
+  color: var(--h-pumpkin-ink);
+  box-shadow: var(--shadow-md), 0 0 18px rgba(232, 116, 42, .4), inset 0 -2px 0 rgba(120, 40, 8, .3);
+}
+:root[data-theme="halloween"] #actions .btn-primary::before {
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 236, 200, .55) 50%, transparent 62%);
+  background-size: 260% 100%;
+}
+:root[data-theme="halloween"] #actions .btn-primary .ai-dice { filter: drop-shadow(0 3px 4px rgba(42, 18, 6, .45)); }
+:root[data-theme="halloween"] .btn-gold,
+:root[data-theme="halloween"] #actions .btn-gold {
+  background: var(--h-violet);
+  border-color: #B79BE0;
+  color: #F6F1E6;
+  box-shadow: var(--shadow-md), 0 0 14px rgba(107, 63, 160, .4), inset 0 1px 0 rgba(255, 255, 255, .22);
+}
+/* `.btn-buy` mang cả `.btn-gold`: quy tắc này đứng sau nên giữ màu bí ngô */
+:root[data-theme="halloween"] .btn-gold.btn-buy {
+  background: var(--h-pumpkin);
+  border-color: #FFC48A;
+  color: var(--h-pumpkin-ink);
+}
+:root[data-theme="halloween"] .btn-jade,
+:root[data-theme="halloween"] #actions .btn-jade {
+  background: linear-gradient(180deg, rgba(183, 155, 224, .22), rgba(183, 155, 224, .1));
+  border-color: rgba(183, 155, 224, .6);
+  color: #F6F1E6;
+}
+:root[data-theme="halloween"] .btn-ghost {
+  background: rgba(183, 155, 224, .08);
+  border-color: var(--h-line-strong);
+}
+:root[data-theme="halloween"] #actions .btn-ghost {
+  background: var(--h-glass);
+  border-color: var(--h-line-strong);
+  color: #F6F1E6;
+}
+:root[data-theme="halloween"] #actions .btn-ghost .btn-icon,
+:root[data-theme="halloween"] #actions .btn-jade .btn-icon { color: #B79BE0; }
+@media (hover: hover) {
+  :root[data-theme="halloween"] .btn:hover:not(:disabled) {
+    filter: brightness(1.14);
+  }
+  :root[data-theme="halloween"] .btn-primary:hover:not(:disabled),
+  :root[data-theme="halloween"] #actions .btn-primary:hover:not(:disabled),
+  :root[data-theme="halloween"] .btn-buy:hover:not(:disabled) {
+    filter: brightness(1.08);
+    box-shadow: var(--shadow-md), 0 0 26px rgba(255, 150, 60, .6);
+  }
+}
+/* Phá sản: chỉ viền và chữ hồng nhạt, không tô thêm mảng đỏ vào bảng tím */
+:root[data-theme="halloween"] .btn-danger,
+:root[data-theme="halloween"] #actions .btn-danger {
+  background: rgba(255, 255, 255, .03);
+  border-color: rgba(232, 163, 176, .45);
+  color: #F3D5DB;
+  box-shadow: none;
+}
+:root[data-theme="halloween"] #actions .btn-danger .btn-icon { color: var(--h-rose); }
+:root[data-theme="halloween"] .btn-danger:hover:not(:disabled),
+:root[data-theme="halloween"] #actions .btn-danger:hover:not(:disabled) {
+  background: rgba(232, 163, 176, .1);
+  border-color: rgba(232, 163, 176, .75);
+}
+
+/* ------------------------------------------------------------ hộp thoại */
+:root[data-theme="halloween"] .scrim.show { background: rgba(8, 4, 14, .66); }
+:root[data-theme="halloween"] .modal {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, .05), transparent 42%),
+    linear-gradient(180deg, #24163A 0%, #120B1D 100%);
+  border-color: var(--h-line-strong);
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, .1);
+}
+:root[data-theme="halloween"] .modal::after { border-color: var(--h-line); }
+:root[data-theme="halloween"] .modal-head,
+:root[data-theme="halloween"] .modal-foot { border-color: var(--h-line); }
+:root[data-theme="halloween"] .modal-peek {
+  background: rgba(183, 155, 224, .1);
+  border-color: var(--h-line-strong);
+}
+:root[data-theme="halloween"] .peek-pill { background: var(--h-panel); }
+
+/* Mạng nhện hai góc trên và con dơi treo — ui/ledFrame.js dựng, đặt ngoài mép
+   hộp nên không che chữ nào trong hộp. */
+.spook-frame { display: none; }
+:root[data-theme="halloween"] .spook-frame {
+  display: block;
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+:root[data-theme="halloween"] .spook-web {
+  position: absolute; top: -50px;
+  width: 54px; height: 54px;
+  overflow: visible;
+}
+:root[data-theme="halloween"] .spook-web path {
+  fill: none; stroke: #E2DAF0; stroke-width: 1.3; stroke-opacity: .7;
+}
+:root[data-theme="halloween"] .spook-web.l { left: -50px; }
+:root[data-theme="halloween"] .spook-web.r { right: -50px; transform: scaleX(-1); }
+:root[data-theme="halloween"] .spook-bat {
+  position: absolute; top: -14px; right: -58px;
+  width: 54px; height: 54px;
+  overflow: visible;
+  transform-origin: 50% 0;
+  animation: bat-sway 3.2s ease-in-out infinite;
+}
+:root[data-theme="halloween"] .spook-bat path { fill: #0B0712; stroke: #B79BE0; stroke-width: 1.2; }
+:root[data-theme="halloween"] .spook-bat .thread { fill: none; stroke: #E2DAF0; stroke-opacity: .6; }
+:root[data-theme="halloween"] .spook-bat .eye { fill: #FFB347; }
+@keyframes bat-sway {
+  0%, 100% { transform: rotate(-6deg); }
+  50%      { transform: rotate(6deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="halloween"] .spook-bat,
+  :root[data-theme="halloween"] .pcard-turn::before { animation: none; }
+}
+/* Màn hẹp: hộp gần chạm mép màn hình, dơi treo ngoài mép sẽ bị cắt — bỏ dơi,
+   mạng nhện thu nhỏ */
+@media (max-width: 700px), (max-height: 480px) {
+  :root[data-theme="halloween"] .spook-bat { display: none; }
+  :root[data-theme="halloween"] .spook-web { width: 34px; height: 34px; top: -31px; }
+  :root[data-theme="halloween"] .spook-web.l { left: -31px; }
+  :root[data-theme="halloween"] .spook-web.r { right: -31px; }
+}
+
+/* Màn thắng: bộ xương cúi chào thay vương miện */
+:root[data-theme="halloween"] .crown.win-skel {
+  display: block; margin: 0 auto 6px;
+  width: 120px; height: 134px;
+  animation: none;
+}
+
+/* ------------------------------------------- băng chuyền: bia đá */
+:root[data-theme="halloween"] .co-reel {
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(183, 155, 224, .14), transparent 70%),
+    linear-gradient(180deg, rgba(8, 4, 14, .55), rgba(8, 4, 14, .25));
+  border-color: var(--h-line);
+}
+:root[data-theme="halloween"] .co-cell {
+  border-radius: 40% 40% 6px 6px / 22% 22% 6px 6px;
+  background: linear-gradient(90deg, #6A5E82 0%, #544A66 55%, #463D58 100%);
+  border: 1px solid #2B2236;
+  color: #ECE6D6;
+}
+/* Chữ trên ô màu trắng: nền bia đá xám, chữ tím sẫm của bản gốc chìm mất */
+:root[data-theme="halloween"] .co-cell-top,
+:root[data-theme="halloween"] .co-cell-label {
+  color: #FFFFFF;
+  opacity: 1;
+  text-shadow: 0 1px 2px rgba(14, 10, 22, .7);
+}
+:root[data-theme="halloween"] .co-mark {
+  background: linear-gradient(180deg, #FFD27A, #E8742A, #FFD27A);
+  box-shadow: 0 0 10px rgba(255, 160, 60, .8);
+}
+
+/* ------------------------------------------------- phòng chờ, chọn chủ đề */
+:root[data-theme="halloween"] .count-btn {
+  background: rgba(58, 35, 96, .75);
+  border-color: var(--h-line-strong);
+}
+:root[data-theme="halloween"] .count-btn.on {
+  background: #ECE6D6;
+  border-color: #FFFFFF; color: #171024;
+}
+:root[data-theme="halloween"] .name-row,
+:root[data-theme="halloween"] .lobby-rule,
+:root[data-theme="halloween"] .lobby-theme,
+:root[data-theme="halloween"] .lobby-colors { border-color: var(--h-line); }
+:root[data-theme="halloween"] .lobby-seat.is-ready { border-color: var(--h-line-strong); }
+:root[data-theme="halloween"] .theme-pick { border-color: var(--h-line-strong); background: rgba(8, 4, 14, .45); }
+:root[data-theme="halloween"] .theme-pick option { color: #171024; background: #F6F1E6; }
+:root[data-theme="halloween"] .lobby-link-row input { border-color: var(--h-line); background: rgba(8, 4, 14, .4); }
+:root[data-theme="halloween"] .lobby-count { border-color: var(--h-line); }
+
+/* Màn chờ (phòng chờ online, hộp bày bàn một máy): trăng tròn góc trên phải và
+   hai dải sương trôi ngang dưới chân hộp. Vẽ trên nền tối của lớp phủ, dưới
+   hộp thoại. */
+:root[data-theme="halloween"] .scrim:has(#lobby),
+:root[data-theme="halloween"] .scrim:has([data-theme-pick]) {
+  background:
+    radial-gradient(circle at 84% 16%, #F3E9C6 0 46px, rgba(243, 233, 198, .22) 50px, rgba(243, 233, 198, 0) 150px),
+    radial-gradient(ellipse at 50% 120%, #2C1A47 0%, rgba(14, 10, 22, .92) 60%);
+}
+:root[data-theme="halloween"] .scrim:has(#lobby)::before,
+:root[data-theme="halloween"] .scrim:has([data-theme-pick])::before,
+:root[data-theme="halloween"] .scrim:has(#lobby)::after,
+:root[data-theme="halloween"] .scrim:has([data-theme-pick])::after {
+  content: ""; position: absolute; left: -20%; right: -20%;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(198, 176, 234, .2), rgba(198, 176, 234, 0) 68%);
+  animation: fog-drift 26s linear infinite alternate;
+}
+:root[data-theme="halloween"] .scrim:has(#lobby)::before,
+:root[data-theme="halloween"] .scrim:has([data-theme-pick])::before { bottom: 2%; height: 30%; }
+:root[data-theme="halloween"] .scrim:has(#lobby)::after,
+:root[data-theme="halloween"] .scrim:has([data-theme-pick])::after {
+  bottom: 16%; height: 22%; animation-duration: 34s; animation-direction: alternate-reverse; opacity: .7;
+}
+:root[data-theme="halloween"] .scrim:has(#lobby) .modal,
+:root[data-theme="halloween"] .scrim:has([data-theme-pick]) .modal { z-index: 1; }
+@keyframes fog-drift {
+  from { transform: translateX(-12%); }
+  to   { transform: translateX(12%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="halloween"] .scrim:has(#lobby)::before,
+  :root[data-theme="halloween"] .scrim:has([data-theme-pick])::before,
+  :root[data-theme="halloween"] .scrim:has(#lobby)::after,
+  :root[data-theme="halloween"] .scrim:has([data-theme-pick])::after { animation: none; }
+}
+
+/* ------------------------------------------------- nhà ma trên ký hiệu nhà */
+:root[data-theme="halloween"] .gi-house,
+:root[data-theme="halloween"] .gi-hotel { color: #B79BE0; }

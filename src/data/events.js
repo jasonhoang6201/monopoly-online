@@ -55,8 +55,9 @@
  * chất Á Đông của bộ bài.
  *
  * ── Thẻ riêng của một chủ đề ───────────────────────────────────────────────
- * Thẻ mang `theme` (Bão Tuyết, Đường Đóng Băng — `theme: 'christmas'`) chỉ vào
- * chồng khi ván chơi đúng chủ đề ấy (`cardInTheme` trong `data/themes.js`).
+ * Thẻ mang `theme` (Bão Tuyết, Đường Đóng Băng — `theme: 'christmas'`; Xác
+ * Sống, Phù Thuỷ, Trăng Máu — `theme: 'halloween'`) chỉ vào chồng khi ván chơi
+ * đúng chủ đề ấy (`cardInTheme` trong `data/themes.js`).
  * Ván chủ đề mặc định giữ nguyên bộ thẻ cũ, không lệch tỉ lệ ra.
  *
  * Luật thực thi nằm ở `core/events.js` (phần thuần dữ liệu) và
@@ -344,6 +345,53 @@ export const EVENTS = [
     effect: (c) => [
       'Mỗi lần lắc xí ngầu đi, quân trượt thêm 1 hoặc 2 ô',
       'Trượt qua ô Bắt Đầu vẫn lãnh lương',
+      lasts(c),
+    ],
+  },
+  /* ---------------------------------------------- Riêng chủ đề Halloween */
+  {
+    id: 'xac-song', kind: 'bad', sigil: '☠', heavy: true, late: 'main', theme: 'halloween',
+    title: 'XÁC SỐNG TRÀN PHỐ',
+    text: `Nửa đêm, mộ ở nghĩa địa Massiges bật nắp. Một đám xác sống lê bước ra
+           phố, chiếm nhà người ta mà ở.`,
+    /**
+     * Không phá nhà như động đất: xác sống chặn **dòng tiền thuê** của cả khu.
+     * Chủ đất trả một khoản nhỏ (60% giá xây một căn cho mỗi ô của mình trong
+     * khu) thì giữ được, không trả thì ai đáp vào khu ấy cũng khỏi trả tiền
+     * thuê suốt `rounds` vòng. Có hạn vì cùng lý do với Mất Giấy Tờ: chặn
+     * mãi thì người bị chiếm không còn đường thắng.
+     */
+    exorciseRate: 0.6, rounds: 2,
+    effect: (c) => [
+      'Bốc thăm một khu màu đang có nhà. Cả khu bị xác sống kéo tới',
+      `Chủ đất được hỏi: trả ${Math.round(c.exorciseRate * 100)}% giá xây một căn cho mỗi ô của mình để mời thầy pháp`,
+      `Không trả thì ô ấy bị chiếm ${c.rounds} vòng: ai đáp vào cũng khỏi trả tiền thuê`,
+    ],
+  },
+  {
+    id: 'phu-thuy', kind: 'chaos', sigil: '☾', heavy: true, theme: 'halloween',
+    title: 'PHÙ THUỶ CƯỠI CHỔI',
+    text: `Mụ phù thuỷ bay ngang thành phố, lẩm bẩm câu chú, rồi hai tờ bằng
+           khoán tự bay sang nhà nhau.`,
+    /* Hai lô chênh giá không quá `priceGap` để không ai bị đổi một lô Catinat
+       lấy cái ao cá. Ép đất đổi chủ mà không cần ai gật đầu: đúng thứ bộ thẻ
+       sinh ra để phá thế bí. */
+    priceGap: 0.2,
+    effect: (c) => [
+      'Bốc thăm hai ô đất chưa có nhà của hai chủ khác nhau',
+      `Giá mua hai ô chênh nhau không quá ${Math.round(c.priceGap * 100)}%`,
+      'Hai ô đổi chủ cho nhau, không ai trả tiền. Ô đang thế chấp vẫn thế chấp',
+    ],
+  },
+  {
+    id: 'trang-mau', kind: 'chaos', sigil: '●', theme: 'halloween',
+    title: 'ĐÊM TRĂNG MÁU',
+    text: `Trăng đỏ như máu. Nhà nào thắp đèn thì khách kéo tới đông, đất trống
+           không ai dám bén mảng.`,
+    mult: 1.5, rounds: 2,
+    effect: (c) => [
+      `Tiền thuê ô đất có nhà ${pct(c.mult)}`,
+      'Ô đất chưa có nhà không thu tiền thuê',
       lasts(c),
     ],
   },

@@ -54,7 +54,7 @@ export function rankOf(kind, card) {
   if (KEEPABLE.has(card.type)) return 'hiem';  // thẻ cất túi, chờ đúng lúc mới nổ
   // Thẻ dắt quân đi chỗ khác đổi thế cờ nhiều hơn một khoản tiền lẻ
   if (card.type === 'move') return card.jail ? 'hiem' : 'quy';
-  if (card.type === 'repair' || card.type === 'collect' || card.type === 'skill' || card.type === 'gift') return 'quy';
+  if (['repair', 'collect', 'skill', 'gift', 'curse'].includes(card.type)) return 'quy';
   return Math.abs(card.amount ?? 0) >= 150 ? 'kha' : 'thuong';
 }
 
@@ -62,8 +62,9 @@ export function rankOf(kind, card) {
 export function shortLabel(kind, card) {
   if (kind === 'event') return card.title;
   switch (card.type) {
-    case 'collect':       return 'TIỀN MỪNG';
+    case 'collect':       return card.each ? 'CHO KẸO' : 'TIỀN MỪNG';
     case 'gift':          return 'QUÀ NOEL';
+    case 'curse':         return 'BỊ NGUYỀN';
     case 'repair':        return 'THUẾ NHÀ';
     case 'skill':         return `+${card.points} ĐIỂM KỸ NĂNG`;
     case 'jail-free':     return 'VÉ RA TÙ';

@@ -40,15 +40,21 @@ const JAIL = 10;
  *
  * @returns {{tile:number, steps:number}}
  */
-export function moveDest(card, from) {
+export function moveDest(card, from, st = null) {
   if (card.jail) return { tile: JAIL, steps: 0 };
   if (card.ahead) {
     const n = Math.min(card.ahead, 39);
     return { tile: (from + n) % 40, steps: n };
   }
+  /* 'free': lô đất chưa ai mua gần nhất phía trước. Hết đất trống thì về ô
+     Bắt Đầu, đi ngang là lãnh lương — thẻ vẫn có nghĩa ở cuối ván. */
+  const free = card.nearest === 'free' && st
+    ? BOARD.filter((t) => t.ownable && !st.owner.has(t.id) && t.id !== from).map((t) => t.id)
+    : [];
   const pool = card.nearest === 'station' ? STATION_TILES
     : card.nearest === 'utility' ? UTILITY_TILES
-      : [card.to ?? 0];
+      : card.nearest === 'free' ? (free.length ? free : [0])
+        : [card.to ?? 0];
   // Ô gần nhất phía trước; đứng đúng ô ấy rồi thì đi trọn một vòng
   const ahead = (id) => (((id - from) % 40) + 40) % 40 || 40;
   const tile = pool.reduce((a, b) => (ahead(b) < ahead(a) ? b : a));
@@ -80,6 +86,12 @@ export function othersOf(st, seat) {
 export function shareEach(st, seat, amount) {
   const others = othersOf(st, seat);
   return others.length ? Math.ceil(amount / others.length) : 0;
+}
+
+/** Mỗi người góp bao nhiêu cho một lá tiền mừng: `each` cố định, không thì chia đều `amount`. */
+export function collectEach(st, seat, card) {
+  if (card.each) return othersOf(st, seat).length ? card.each : 0;
+  return shareEach(st, seat, card.amount);
 }
 
 /** Hoá đơn thuế nhà cửa của một người: đếm nhà, đếm khách sạn rồi nhân đơn giá. */

@@ -397,6 +397,8 @@ export class Hud {
       const meta = el.querySelector('.pcard-meta');
       meta.innerHTML = bits.join(' · ')
         + (p.inJail ? ` <span class="pcard-jail">TÙ ${p.jailTurns}/3</span>` : '')
+        // Thẻ Bị Nguyền (Halloween): nhãn cạnh tên cho cả bàn biết ai đang không thu được thuê
+        + (st.isCursed?.(p.id) ? ' <span class="pcard-jail">BỊ NGUYỀN</span>' : '')
         + (p.cards?.length
           ? ` <span class="pcard-ticket" title="Thẻ đang giữ trong túi">TÚI THẺ${
             p.cards.length > 1 ? ` ×${p.cards.length}` : ''}</span>` : '')

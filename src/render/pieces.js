@@ -3,6 +3,7 @@
  * bắt sáng để có cảm giác khối 3D. Riêng xí ngầu dựng khối thật ở dice3d.js.
  */
 import { P } from './boardArt.js';
+import { drawSkeleton } from './halloweenArt.js';
 
 /* Vàng của quân cờ đứng riêng khỏi bảng màu bàn cờ: chủ đề Giáng Sinh đổi nét
    vàng của bàn sang xanh băng, nhưng vành đế và cổ quân vẫn là thếp vàng —
@@ -41,6 +42,8 @@ function canvas(w, h) {
  * @param {number} s cạnh texture
  */
 export function paintToken(css, s = 160) {
+  // Halloween: quân là bộ xương đội mũ phù thuỷ màu người chơi
+  if (P.theme === 'halloween') return paintSkeletonToken(css, s);
   const cv = canvas(s, s * 1.12);
   const ctx = cv.getContext('2d');
   const cx = s / 2;
@@ -188,6 +191,60 @@ function santaHat(ctx, cx, headY, headR, s) {
   ctx.arc(tip.x, tip.y, s * 0.048, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
+}
+
+/* ------------------------------------------------- quân bộ xương (Halloween) */
+
+/** Số khung hình bước đi của quân bộ xương. */
+export const WALK_FRAMES = 4;
+
+/**
+ * Quân bộ xương cho chủ đề Halloween, cùng khung `s × 1.12s` và cùng điểm
+ * chân (0.5, 0.86) với quân thường để `BoardScene` đặt quân không phải đổi gì.
+ *
+ * Bộ xương màu xương thì sáu quân như nhau, nên màu người chơi nằm ở hai chỗ
+ * to nhất: cả cái mũ phù thuỷ, và cái đế tròn dưới chân (giữ vành vàng như
+ * quân thường). Nét xương dày gấp rưỡi bộ xương trong nghĩa địa: quân trên
+ * bàn chỉ cao chừng 50 điểm ảnh, nét mảnh thì vỡ vụn.
+ *
+ * @param {object} [o] `frame` = khung bước đi 0…WALK_FRAMES−1 (bỏ trống là
+ *   đứng yên), `bow` 0…1 cúi chào
+ */
+export function paintSkeletonToken(css, s = 160, o = {}) {
+  const cv = canvas(s, s * 1.12);
+  const ctx = cv.getContext('2d');
+  const cx = s / 2;
+  const H = s * 1.12;
+  const baseY = H * 0.9;
+
+  // Bóng đổ và đế màu người chơi
+  ctx.save();
+  ctx.globalAlpha = 0.34;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(cx + s * 0.03, H * 0.935, s * 0.3, s * 0.075, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  const g = ctx.createLinearGradient(cx - s * 0.3, 0, cx + s * 0.3, 0);
+  g.addColorStop(0, shade(css, -0.45)); g.addColorStop(0.38, shade(css, 0.3)); g.addColorStop(1, shade(css, -0.12));
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(cx, baseY, s * 0.28, s * 0.085, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = TOKEN_GOLD;
+  ctx.lineWidth = s * 0.016;
+  ctx.stroke();
+
+  const walking = o.frame != null;
+  drawSkeleton(ctx, cx - s * 0.02, baseY - s * 0.01, s * 0.76, {
+    stand: !walking && !o.bow,
+    phase: walking ? (o.frame / WALK_FRAMES) * Math.PI * 2 : 0,
+    bow: o.bow ?? 0,
+    hat: css,
+    band: shade(css, -0.5),
+    lw: 1.5,
+  });
+  return cv;
 }
 
 /* ---------------------------------------------------------- đồng tiền xu */

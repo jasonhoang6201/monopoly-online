@@ -20,8 +20,43 @@ const RADIUS = 15;
 const OUT = 7;
 const COLORS = ['#FF4D55', '#4FD27F', '#FFCF4A', '#57B8FF', '#FF8AD0'];
 
+/**
+ * Mạng nhện góc và con dơi treo ngược — khung trang trí hộp thoại chủ đề
+ * Halloween. Hình tĩnh, đặt **ngoài** mép hộp (CSS `.spook-frame`), nên không
+ * bao giờ đè lên chữ trong hộp, cũng không cần đo lại khi hộp đổi cỡ.
+ */
+function spookSvg() {
+  const web = (flip) => {
+    const spokes = 6, rings = 4, R = 60;
+    const ang = Array.from({ length: spokes }, (_, i) => Math.PI + (i / (spokes - 1)) * (Math.PI / 2));
+    let d = '';
+    for (const a of ang) d += `M0 0L${(Math.cos(a) * R).toFixed(1)} ${(Math.sin(a) * R).toFixed(1)}`;
+    for (let k = 1; k <= rings; k++) {
+      const rr = (k / rings) * R * 0.9;
+      for (let i = 0; i < spokes - 1; i++) {
+        const a0 = ang[i], a1 = ang[i + 1], am = (a0 + a1) / 2;
+        d += `M${(Math.cos(a0) * rr).toFixed(1)} ${(Math.sin(a0) * rr).toFixed(1)}`
+          + `Q${(Math.cos(am) * rr * 0.86).toFixed(1)} ${(Math.sin(am) * rr * 0.86).toFixed(1)} `
+          + `${(Math.cos(a1) * rr).toFixed(1)} ${(Math.sin(a1) * rr).toFixed(1)}`;
+      }
+    }
+    return `<svg class="spook-web ${flip ? 'r' : 'l'}" viewBox="-62 -62 64 64"><path d="${d}"/></svg>`;
+  };
+  const bat = '<svg class="spook-bat" viewBox="0 0 64 64"><path d="M32 2v14" class="thread"/>'
+    + '<g transform="translate(0 64) scale(1 -1)"><path d="M28 30C22 21 12 21 3 26c4 2 6 6 6 10 3-3 7-3 9 0 2-3 6-3 10-2zM36 30c6-9 16-9 25-4-4 2-6 6-6 10-3-3-7-3-9 0-2-3-6-3-10-2z"/>'
+    + '<path d="M32 25c-4 0-5 3-5 7s2 6 5 6 5-2 5-6-1-7-5-7z"/><path d="M28.5 27l1-5 2.5 3 2.5-3 1 5z"/>'
+    + '<circle class="eye" cx="30" cy="30.5" r="1.2"/><circle class="eye" cx="34" cy="30.5" r="1.2"/></g></svg>';
+  return web(false) + web(true) + bat;
+}
+
 /** Gắn khung đèn vào một hộp thoại vừa dựng. */
 export function attachLedFrame(modal) {
+  const spook = document.createElement('div');
+  spook.className = 'spook-frame';
+  spook.setAttribute('aria-hidden', 'true');
+  spook.innerHTML = spookSvg();
+  modal.appendChild(spook);
+
   const frame = document.createElement('div');
   frame.className = 'led-frame';
   frame.setAttribute('aria-hidden', 'true');

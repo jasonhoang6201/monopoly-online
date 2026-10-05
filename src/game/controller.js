@@ -15,7 +15,7 @@ import {
 import {
   cardType, isKeepable, demolishLevels, usableCard, useReason, cardTargets, moveDest,
   demolishGroups, demolishPicks,
-  othersOf, shareEach, repairBill, seizePrice, resumePrice, giftShares,
+  othersOf, collectEach, repairBill, seizePrice, resumePrice, giftShares,
 } from '../core/cards.js';
 import { cardOf, CARD_KINDS, cardName, cardEffect, DECKS } from '../data/cards.js';
 import { inventoryModal } from '../ui/inventory.js';
@@ -36,7 +36,7 @@ import {
 } from '../ui/modals.js';
 import { raisePlan } from '../core/raisePlan.js';
 import {
-  bracePromptModal, firePromptModal, snowPromptModal, auctionBidModal, auctionResultModal, closeBidModal,
+  bracePromptModal, firePromptModal, snowPromptModal, zombiePromptModal, auctionBidModal, auctionResultModal, closeBidModal,
 } from '../ui/eventModals.js';
 import { pickTileOnBoard, litTiles } from '../ui/tilePicker.js';
 import { pickGroupOnBoard } from '../ui/groupPicker.js';
@@ -616,6 +616,10 @@ export class Game {
       sc.shake(0.012, 700);
     } else if (name === 'spot') {
       await sc.spotTiles(data.ids, data.ms);
+    } else if (name === 'zombies') {
+      sc.zombieMarch?.(data.ids);
+    } else if (name === 'witch') {
+      await sc.witchFly?.(data.a, data.b);
     } else if (name === 'tilefx') {
       // Không `await`: hoạt cảnh chạy song song với dòng thông báo theo sau
       sc.tileFx(data.kind, data.ids, data.lost ?? true);
@@ -722,6 +726,11 @@ export class Game {
       audio.sfx('turn');
       return litTiles(this.scene, data.lots.map((l) => l.id),
         () => snowPromptModal(this.state, this.net.mySeat, data.lots, ms));
+    }
+    if (name === 'ev-zombie') {
+      audio.sfx('turn');
+      return litTiles(this.scene, data.lots.map((l) => l.id),
+        () => zombiePromptModal(this.state, this.net.mySeat, data.lots, ms, data.rounds));
     }
     if (name === 'ev-pick') {
       audio.sfx('turn');
@@ -1511,6 +1520,20 @@ export class Game {
       return;
     }
 
+    /* Ba luật chặn tiền thuê của chủ đề Halloween: báo đúng lý do, đừng in
+       một dòng "trả 0$" cho người đáp xuống đọc mà không hiểu. */
+    const block = st.rentBlock(t.id);
+    if (block) {
+      const ownerName = st.players[ownerId].name;
+      const why = {
+        zombie: ['XÁC SỐNG CHIẾM ĐẤT', `Xác sống đang ở <b>${tileLabel(t.id)}</b>, <b>${ownerName}</b> không thu được tiền thuê.`],
+        curse: ['BỊ NGUYỀN', `<b>${ownerName}</b> đang bị nguyền, <b>${p.name}</b> khỏi trả tiền thuê ở <b>${tileLabel(t.id)}</b>.`],
+        'blood-moon': ['ĐÊM TRĂNG MÁU', `<b>${tileLabel(t.id)}</b> là đất trống, đêm trăng máu không ai thu tiền thuê.`],
+      }[block];
+      await this.bc.show(why[0], why[1], { ms: 2600 });
+      return;
+    }
+
     const owner = st.players[ownerId];
     const bill = this.skills.rentBill(p, t.id, dice);
     const rent = bill.total;
@@ -1555,6 +1578,7 @@ export class Game {
     switch (cardType(drawn.card)) {
       case 'collect': return this.cardCollect(p, kind, drawn.card, title, seed);
       case 'gift':    return this.cardGift(p, kind, drawn.card, title, seed);
+      case 'curse':   return this.cardCurse(p, kind, drawn.card, title, seed);
       case 'repair':  return this.cardRepair(p, kind, drawn.card, title, seed);
       case 'skill':   return this.cardSkill(p, kind, drawn.card, title, seed);
       case 'move':    return this.cardMove(p, kind, drawn.card, title, seed, dice);
@@ -1644,9 +1668,9 @@ export class Game {
    */
   async cardCollect(p, kind, card, title, seed) {
     const st = this.state;
-    const each = shareEach(st, p.id, card.amount);
+    const each = collectEach(st, p.id, card);
     await this.showFateCard(kind, card, {
-      amount: card.amount,
+      amount: card.amount ?? each * othersOf(st, p.id).length,
       note: `Mỗi người còn lại góp <b>${money(each)}</b>.`,
       label: 'Nhận tiền mừng',
       seed,
@@ -1686,6 +1710,30 @@ export class Game {
     }
   }
 
+  /**
+   * Bị nguyền (chủ đề Halloween): một vòng không thu được tiền thuê của ai.
+   *
+   * "Một vòng" đếm bằng số lượt như mọi hiệu ứng khác (`tickMods` chạy mỗi
+   * lần chuyển lượt): đủ số người còn sống thì lượt về lại người rút, lời
+   * nguyền hết đúng lúc ấy. Người khác không phải bấm gì.
+   */
+  async cardCurse(p, kind, card, title, seed) {
+    const st = this.state;
+    const turns = Math.max(1, st.alive().length);
+    await this.showFateCard(kind, card, {
+      note: '<b>1 vòng</b> không thu được tiền thuê nhà, đất của ai.',
+      label: 'Đành chịu',
+      seed,
+    });
+    st.addMod({ id: `bi-nguyen:${p.id}`, type: 'curse', seat: p.id, name: p.name, turns });
+    this.hud.refresh();
+    this.scene.refresh(st);
+    this.sync();
+    await this.bc.show(title,
+      `<b>${p.name}</b> bị nguyền: tới lượt sau của mình, ai đáp vào đất của
+       <b>${p.name}</b> cũng khỏi trả tiền thuê.`, { kind: 'bad', ms: 3200 });
+  }
+
   /** Thuế nhà cửa: tính đầu nhà, đầu khách sạn trên toàn bộ đất của mình. */
   async cardRepair(p, kind, card, title, seed) {
     const bill = repairBill(this.state, p.id, card);
@@ -1710,7 +1758,7 @@ export class Game {
    * thuê vẫn tính theo số vừa lắc, chứ không lắc lại một lần nữa.
    */
   async cardMove(p, kind, card, title, seed, dice) {
-    const dest = moveDest(card, p.pos);
+    const dest = moveDest(card, p.pos, this.state);
     await this.showFateCard(kind, card, {
       note: `Đi tới <b>${tileLabel(dest.tile)}</b>.`,
       label: 'Lên đường',
@@ -2958,6 +3006,7 @@ export class Game {
     await this.bc.show('HẠ MÀN',
       `<b>${winner.name}</b> ${why}, <b>thắng ván này!</b>`, { ms: 6000 });
     this.scene.celebrate(5200, winner.token.color);
+    this.scene.skeletonBow?.(winner.token.css);
     await wait(1600);
     // Ván đã hạ màn — quay về "màn hình chờ", nhạc nền nổi lại (bản Giáng Sinh
     // có riêng một bài cho lúc này)

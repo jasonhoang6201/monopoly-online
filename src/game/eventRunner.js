@@ -18,7 +18,7 @@ import { drawEvent, planEvent, autoRaise } from '../core/events.js';
 import { houseImmune } from '../core/skills.js';
 import { handoff } from '../ui/modal.js';
 import {
-  bracePromptModal, firePromptModal, snowPromptModal, auctionBidModal, auctionResultModal,
+  bracePromptModal, firePromptModal, snowPromptModal, zombiePromptModal, auctionBidModal, auctionResultModal,
 } from '../ui/eventModals.js';
 import { litTiles } from '../ui/tilePicker.js';
 import { audio } from '../audio/audio.js';
@@ -161,6 +161,13 @@ export class EventRunner {
         return plan.pairs.map((x) => `${who(x.from)} → ${who(x.to)}`).join(' · ');
       case 'quy-cong-phat-chan':
         return `Quỹ Công được bơm thêm ${money(plan.amount)}.`;
+      case 'xac-song':
+        return `Khu <b>${GROUPS[plan.group].name}</b>: xác sống kéo tới ${plan.tiles.length} ô đang có chủ.`;
+      case 'phu-thuy':
+        return `${who(plan.seatA)} giữ <b>${tileShortLabel(plan.a)}</b>, ${who(plan.seatB)} giữ
+                <b>${tileShortLabel(plan.b)}</b>: hai bằng khoán bay sang nhà nhau.`;
+      case 'trang-mau':
+        return 'Ô có nhà thu thêm <b>50%</b>, đất trống không thu gì.';
       default:
         return '';
     }
@@ -180,7 +187,10 @@ export class EventRunner {
       case 'bao-gia':
       case 'gioi-nghiem':
       case 'duong-dong-bang':
+      case 'trang-mau':
       case 'mo-duong':            return this.applyMod(card, plan);
+      case 'xac-song':            return this.zombies(card, plan);
+      case 'phu-thuy':            return this.witch(plan);
       case 'bao-tuyet':           return this.blizzard(card, plan);
       case 'dong-dat':            return this.quake(card, plan);
       case 'hoa-hoan':            return this.fire(card, plan);
@@ -261,6 +271,7 @@ export class EventRunner {
       build: 'Giá xây nhà tăng <b>50%</b>',
       'freeze-build': '<b>Cấm xây cất</b> trên toàn bàn',
       ice: 'Đường <b>đóng băng</b>: mỗi lần lắc đi, quân trượt thêm 1 hoặc 2 ô',
+      'blood-moon': 'Trăng máu: ô có nhà thu thêm <b>50%</b>, đất trống <b>không thu tiền thuê</b>',
       'group-rent': `Tiền thuê khu <b>${GROUPS[plan.mod.group]?.name ?? ''}</b> tăng <b>50%</b>`,
     }[plan.mod.type];
     await this.g.bc.show(card.title, `${what} ${rounds}.`,
@@ -450,6 +461,96 @@ export class EventRunner {
         { kind: 'bad', ms: 4600 });
       await this.g.spot(lots.map((l) => l.id), 1600);
     }
+  }
+
+  /**
+   * Xác sống tràn phố (chủ đề Halloween): cả khu bị kéo tới, mỗi chủ đất chọn
+   * trả tiền thầy pháp hay để xác sống ở lại. Hỏi theo chủ đất như động đất:
+   * một người có ba ô trong khu thì một hộp thoại, một khoản tiền.
+   *
+   * Ô bị chiếm mang hiệu ứng `zombie` có hạn; `BoardScene` đọc hiệu ứng ấy từ
+   * ảnh chụp để nhuộm xanh ô, nên máy nào vào lại giữa chừng cũng thấy.
+   */
+  async zombies(_card, plan) {
+    const st = this.state;
+    const ids = plan.tiles.map((l) => l.id);
+    this.g.netEmit('zombies', { ids });
+    this.g.scene.zombieMarch?.(ids);
+    audio.sfx('zombie');
+    await this.g.spot(ids);
+
+    const bySeat = new Map();
+    for (const lot of plan.tiles) {
+      if (st.owner.get(lot.id) !== lot.seat || st.players[lot.seat].bankrupt) continue;
+      if (!bySeat.has(lot.seat)) bySeat.set(lot.seat, []);
+      bySeat.get(lot.seat).push(lot);
+    }
+
+    const answers = await this.askMany([...bySeat].map(([seat, lots]) => ({
+      seat,
+      name: 'ev-zombie',
+      data: { lots, rounds: Math.ceil(plan.turns / Math.max(1, st.alive().length)) },
+      local: () => litTiles(this.g.scene, lots.map((l) => l.id),
+        () => zombiePromptModal(st, seat, lots, this.localMs,
+          Math.ceil(plan.turns / Math.max(1, st.alive().length)))),
+      fallback: null,
+      note: 'xác sống đang kéo tới đất của họ',
+    })));
+
+    const taken = [];
+    for (const [seat, lots] of bySeat) {
+      const p = st.players[seat];
+      const total = lots.reduce((sum, l) => sum + l.cost, 0);
+      // Chốt lại ở máy cầm lái: câu trả lời gửi từ xa không được tin suông
+      if (answers.get(seat) === 'pay' && p.money >= total) {
+        await this.g.bc.show('MỜI THẦY PHÁP',
+          `<b>${p.name}</b> trả <span class="down">${money(total)}</span>, xác sống rời
+           ${lots.map((l) => tileShortLabel(l.id)).join(', ')}.`);
+        await this.g.payBank(seat, total);
+        continue;
+      }
+      taken.push(...lots.map((l) => l.id));
+    }
+    if (taken.length === 0) return;
+
+    // Mỗi lần nổ một đợt riêng, như Mất Giấy Tờ: chung `id` thì đè mất đợt trước
+    st.addMod({ id: `xac-song:${st.eventsFired}`, type: 'zombie', tiles: taken, turns: plan.turns });
+    this.g.hud.refresh();
+    this.g.scene.refresh(st);
+    this.g.sync();
+    await this.g.bc.show('XÁC SỐNG CHIẾM ĐẤT',
+      `${taken.map((id) => `<b>${tileShortLabel(id)}</b>`).join(', ')} không thu được tiền thuê
+       trong <b>${Math.ceil(plan.turns / Math.max(1, st.alive().length))} vòng</b>.`,
+      { kind: 'bad', ms: 4600 });
+    await this.g.spot(taken, 2600);
+  }
+
+  /**
+   * Phù thuỷ cưỡi chổi (chủ đề Halloween): hai lô đất trống của hai người đổi
+   * chủ cho nhau, không ai phải bấm gì. Thế chấp đi theo ô: `mortgaged` ghi
+   * theo ô chứ không theo chủ, nên chỉ cần đổi `owner`.
+   */
+  async witch(plan) {
+    const st = this.state;
+    const { a, b, seatA, seatB } = plan;
+    if (st.owner.get(a) !== seatA || st.owner.get(b) !== seatB) return;
+    if (st.players[seatA].bankrupt || st.players[seatB].bankrupt) return;
+
+    await this.g.spot([a, b], 1400);
+    this.g.netEmit('witch', { a, b });
+    audio.sfx('witch');
+    await this.g.scene.witchFly?.(a, b);
+
+    st.transfer(a, seatB);
+    st.transfer(b, seatA);
+    this.g.hud.refresh();
+    this.g.scene.refresh(st);
+    this.g.sync();
+    const name = (seat) => `<b style="color:${st.players[seat].token.css}">${st.players[seat].name}</b>`;
+    await this.g.bc.show('PHÙ THUỶ CƯỠI CHỔI',
+      `${name(seatA)} nhận <b>${tileShortLabel(b)}</b>, ${name(seatB)} nhận <b>${tileShortLabel(a)}</b>.`,
+      { kind: 'trade', ms: 4600 });
+    await this.g.spot([a, b], 2200);
   }
 
   /** Mất giấy tờ: mỗi người tự chọn ô nào của mình chịu treo. */

@@ -139,6 +139,39 @@ export function snowPromptModal(state, playerId, lots, ms = 0) {
 }
 
 /**
+ * Xác sống tràn phố (chủ đề Halloween): trả tiền thầy pháp thì giữ được tiền
+ * thuê ở mấy ô của mình trong khu, để mặc thì mấy ô ấy không thu được gì suốt
+ * `rounds` vòng. Không mất nhà.
+ *
+ * @param {Array<{id:number, cost:number}>} lots
+ */
+export function zombiePromptModal(state, playerId, lots, ms = 0, rounds = 2) {
+  const p = state.players[playerId];
+  const total = lots.reduce((s, l) => s + l.cost, 0);
+  let ticker = 0;
+
+  const pr = openModal({
+    eyebrow: 'XÁC SỐNG TRÀN PHỐ',
+    title: 'Mời thầy pháp đuổi xác sống?',
+    sub: `Đuổi kịp thì đất vẫn thu tiền thuê. Để mặc thì <b>${rounds} vòng</b> không ai
+          phải trả tiền thuê ở mấy ô này. Nhà cửa không mất. Bạn đang có ${money(p.money)}.`,
+    body: `${lots.map((l) => tileRow(l.id, `Thầy pháp ${money(l.cost)}`)).join('')}
+      <div class="trade-summary">Đuổi xác sống tất cả: <b>${money(total)}</b></div>
+      ${PEEK_HINT}`,
+    dismissible: false,
+    buttons: [
+      { label: `Mời thầy pháp ${money(total)}`, value: 'pay', cls: 'btn-gold', disabled: p.money < total },
+      { label: 'Để xác sống ở lại', value: null, cls: 'btn-danger' },
+    ],
+    onMount: (body, close) => {
+      if (ms) ticker = attachTimer(body, ms, close, null, 'để quyết định. Hết giờ thì xác sống ở lại.');
+    },
+  });
+  pr.finally(() => clearInterval(ticker));
+  return pr;
+}
+
+/**
  * Hoả hoạn: trả tiền phu chữa cháy thì cả mấy ô đang cháy của mình giữ nguyên
  * nhà, để mặc thì mỗi ô mất nửa số nhà (đã tính sẵn trong `lose`).
  *

@@ -18,6 +18,8 @@ import { deedCard, deedGrid, rentLevels, priceItems, tileCardUrl } from './deed.
 import { PEEK_HINT, pickTilesOnBoard } from './tilePicker.js';
 import { tokenImage, elapsedLabel, gameElapsed } from './hud.js';
 import { buildGlyphs, buildLabel, houseSvg, hotelSvg, bankSvg, keySvg } from '../render/glyphs.js';
+import { P } from '../render/boardArt.js';
+import { paintSkeletonToken } from '../render/pieces.js';
 import { raisePlan } from '../core/raisePlan.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => (
@@ -221,7 +223,7 @@ export function buyModal(tileId, player) {
       : `Bạn chỉ có ${money(player.money)}, không đủ tiền mua.`,
     body: deedHtml(tileId),
     buttons: [
-      { label: `Mua ${money(t.price)}`, value: 'buy', cls: 'btn-gold', disabled: !afford },
+      { label: `Mua ${money(t.price)}`, value: 'buy', cls: 'btn-gold btn-buy', disabled: !afford },
       { label: 'Bỏ qua', value: 'skip', cls: 'btn-ghost' },
     ],
   });
@@ -1258,12 +1260,17 @@ export function finalRanking(state, winner) {
 
 export function winnerModal(state, winner) {
   const rank = finalRanking(state, winner);
-  return openModal({
+  // Halloween: thay vương miện bằng bộ xương đội mũ màu người thắng cúi chào
+  const spooky = P.theme === 'halloween';
+  let bowTimer = 0;
+  const pr = openModal({
     eyebrow: 'HẠ MÀN',
     title: `${esc(winner.name)} thắng ván này!`,
     sub: `Bảng xếp hạng · ván kéo dài ${elapsedLabel(gameElapsed(state))}`,
     dismissible: false, // Esc lỡ tay không nên khởi động ván mới
-    body: `<div class="crown">👑</div>
+    body: `${spooky
+      ? '<canvas class="crown win-skel" width="120" height="134" aria-hidden="true"></canvas>'
+      : '<div class="crown">👑</div>'}
       ${rank.map((p, i) => `
         <div class="arow" style="${p.id === winner.id ? 'border-color:var(--gold-light);background:rgba(200,160,72,.14)' : ''}">
           <span class="arow-chip" style="background:${p.token.css}"></span>
@@ -1276,7 +1283,25 @@ export function winnerModal(state, winner) {
           ${p.bankrupt ? '' : `<span class="arow-side" style="font-family:var(--serif);color:var(--gold-light)">${money(state.netWorth(p.id))}</span>`}
         </div>`).join('')}`,
     buttons: [{ label: 'Chơi ván mới', value: 'again', cls: 'btn-primary' }],
+    onMount: (body) => {
+      const cv = body.querySelector('.win-skel');
+      if (!cv) return;
+      // Ba khung: đứng, cúi nửa, cúi hẳn — chạy tới lui như người cúi chào
+      const frames = [0, 0.5, 1].map((b) => paintSkeletonToken(winner.token.css, 120, { bow: b }));
+      const seq = [0, 0, 0, 1, 2, 2, 2, 1];
+      const g = cv.getContext('2d');
+      let i = 0;
+      const draw = () => {
+        g.clearRect(0, 0, cv.width, cv.height);
+        g.drawImage(frames[seq[i % seq.length]], 0, 0);
+        i += 1;
+      };
+      draw();
+      if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) bowTimer = setInterval(draw, 180);
+    },
   });
+  pr.finally(() => clearInterval(bowTimer));
+  return pr;
 }
 
 export { handoff };
