@@ -6,7 +6,7 @@
  *   · mộc cầm (`xylo`): tiếng xương gõ — Saint-Saëns dùng chính nhạc cụ này
  *     cho tiếng xương trong Danse Macabre.
  *   · xương lạch cạch (`bones`), chuông nhà nguyện (`chapelBell`), theremin,
- *     organ, đàn dây kéo vĩ (`bowed`).
+ *     organ.
  *
  * Mọi hàm nhận `a` là bộ âm thanh (`audio.js`), `when` theo đồng hồ
  * AudioContext và `dest` là nút nhận (đường hiệu ứng hay đường nhạc).
@@ -139,39 +139,6 @@ export function organ(a, freqs, when, dur, gain, dest) {
     }
   }
   trem.start(when); trem.stop(when + dur + 0.05);
-}
-
-/**
- * Đàn dây kéo vĩ: sóng răng cưa qua bộ lọc thấp, lên chậm, có rung ngón —
- * cây vĩ cầm lên dây lệch (Mi giáng–La) mở đầu Danse Macabre.
- */
-export function bowed(a, freq, when, dur, gain, dest) {
-  const ctx = a.ctx;
-  const o = ctx.createOscillator();
-  o.type = 'sawtooth';
-  o.frequency.value = freq;
-  const lfo = ctx.createOscillator();
-  const lg = ctx.createGain();
-  lfo.frequency.value = 5.4;
-  lg.gain.value = freq * 0.006;
-  lfo.connect(lg).connect(o.frequency);
-  const lp = ctx.createBiquadFilter();
-  lp.type = 'lowpass';
-  lp.frequency.value = Math.min(2400, freq * 4);
-  lp.Q.value = 0.8;
-  const g = ctx.createGain();
-  g.gain.setValueAtTime(0.0001, when);
-  g.gain.exponentialRampToValueAtTime(gain, when + Math.min(0.08, dur * 0.3));
-  g.gain.setValueAtTime(gain, when + dur * 0.7);
-  g.gain.exponentialRampToValueAtTime(0.0001, when + dur);
-  o.connect(lp).connect(g).connect(dest);
-  if (a.reverb) {
-    const s = ctx.createGain();
-    s.gain.value = 0.3;
-    g.connect(s).connect(a.reverb);
-  }
-  o.start(when); lfo.start(when);
-  o.stop(when + dur + 0.05); lfo.stop(when + dur + 0.05);
 }
 
 /** Tiếng rên của xác sống: nhiễu trầm lọc dải quét xuống, lẫn một nốt sin trượt. */
