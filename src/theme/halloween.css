@@ -279,14 +279,91 @@
   0%, 100% { transform: rotate(-6deg); }
   50%      { transform: rotate(6deg); }
 }
+
+/* Xương treo dưới đáy hộp, ui/ledFrame.js bốc ngẫu nhiên hình và chỗ treo.
+   Ba lớp lồng nhau quay với chu kỳ 8s, 2.9s và một cú giật lúc hộp bật lên;
+   chu kỳ lệch nhau nên góc tổng không lặp đều như con lắc. */
+:root[data-theme="halloween"] .spook-bone {
+  position: absolute; top: 100%;
+  width: 64px;
+  transform-origin: 50% 0;
+  animation: bone-gio 8s ease-in-out infinite;
+}
+:root[data-theme="halloween"] .spook-bone.trai { left: 16%; }
+:root[data-theme="halloween"] .spook-bone.giua { left: calc(50% - 32px); }
+:root[data-theme="halloween"] .spook-bone.phai { right: 16%; }
+:root[data-theme="halloween"] .bone-giat {
+  transform-origin: 50% 0;
+  animation: bone-giat 2.6s cubic-bezier(.3, .6, .4, 1) .12s both;
+}
+:root[data-theme="halloween"] .bone-xoan {
+  transform-origin: 50% 0;
+  animation: bone-xoan 2.9s ease-in-out infinite alternate;
+}
+:root[data-theme="halloween"] .spook-bone svg { display: block; margin: 0 auto; overflow: visible; }
+:root[data-theme="halloween"] .spook-bone .thread { fill: none; stroke: #E2DAF0; stroke-opacity: .6; stroke-width: 1.2; }
+:root[data-theme="halloween"] .spook-bone .nut { stroke-opacity: .9; }
+:root[data-theme="halloween"] .spook-bone .vien { fill: #0B0712; stroke: #0B0712; stroke-width: 3; stroke-linejoin: round; }
+:root[data-theme="halloween"] .spook-bone .than { fill: #ECE6D6; }
+:root[data-theme="halloween"] .spook-bone .bong { fill: none; stroke: #CBC2B0; stroke-width: 1.6; stroke-linecap: round; }
+:root[data-theme="halloween"] .spook-bone .hoc { fill: #0B0712; }
+:root[data-theme="halloween"] .spook-bone .mat { fill: #FFB347; }
+:root[data-theme="halloween"] .spook-bone .rang { stroke: #0B0712; stroke-width: 1; }
+/* khúc xương xoay quanh sợi chỉ: scaleX thay cho góc quay 3D */
+:root[data-theme="halloween"] .spook-bone .lat {
+  transform-box: fill-box; transform-origin: 50% 50%;
+  animation: bone-lat 5.3s ease-in-out infinite alternate;
+}
+/* bộ xương vẽ bằng nét, không tô */
+:root[data-theme="halloween"] .spook-bone .chi { stroke-linecap: round; stroke-linejoin: round; }
+:root[data-theme="halloween"] .spook-bone .chi .vien { fill: none; stroke-width: 5.4; }
+:root[data-theme="halloween"] .spook-bone .chi .than { fill: none; stroke: #ECE6D6; stroke-width: 2.8; }
+:root[data-theme="halloween"] .spook-bone .lung {
+  transform-box: view-box;
+  animation: bone-lung 8s ease-in-out -.5s infinite;
+}
+:root[data-theme="halloween"] .spook-bone .tay-t { transform-origin: 22px 40px; }
+:root[data-theme="halloween"] .spook-bone .tay-p { transform-origin: 42px 40px; animation-direction: reverse; }
+:root[data-theme="halloween"] .spook-bone .chan-t { transform-origin: 28px 72px; animation-duration: 6.1s; }
+:root[data-theme="halloween"] .spook-bone .chan-p { transform-origin: 36px 72px; animation-duration: 6.1s; animation-direction: reverse; }
+@keyframes bone-gio {
+  0%   { transform: rotate(-3deg); }
+  14%  { transform: rotate(4deg); }
+  30%  { transform: rotate(-1.5deg); }
+  46%  { transform: rotate(7deg); }
+  60%  { transform: rotate(-4deg); }
+  76%  { transform: rotate(2.5deg); }
+  88%  { transform: rotate(-2deg); }
+  100% { transform: rotate(-3deg); }
+}
+@keyframes bone-xoan { from { transform: rotate(-2deg); } to { transform: rotate(2deg); } }
+@keyframes bone-giat {
+  0%   { transform: rotate(0); }
+  12%  { transform: rotate(16deg); }
+  30%  { transform: rotate(-10deg); }
+  50%  { transform: rotate(5deg); }
+  72%  { transform: rotate(-2deg); }
+  100% { transform: rotate(0); }
+}
+@keyframes bone-lat { from { transform: scaleX(1); } to { transform: scaleX(.78); } }
+@keyframes bone-lung {
+  0%, 100% { transform: rotate(3deg); }
+  25% { transform: rotate(-5deg); }
+  50% { transform: rotate(6deg); }
+  75% { transform: rotate(-2deg); }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  :root[data-theme="halloween"] .spook-bone,
+  :root[data-theme="halloween"] .spook-bone *,
   :root[data-theme="halloween"] .spook-bat,
   :root[data-theme="halloween"] .pcard-turn::before { animation: none; }
 }
-/* Màn hẹp: hộp gần chạm mép màn hình, dơi treo ngoài mép sẽ bị cắt — bỏ dơi,
-   mạng nhện thu nhỏ */
+/* Màn hẹp: hộp gần chạm mép màn hình, dơi và xương treo ngoài mép sẽ bị cắt —
+   bỏ cả hai, mạng nhện thu nhỏ */
 @media (max-width: 700px), (max-height: 480px) {
-  :root[data-theme="halloween"] .spook-bat { display: none; }
+  :root[data-theme="halloween"] .spook-bat,
+  :root[data-theme="halloween"] .spook-bone { display: none; }
   :root[data-theme="halloween"] .spook-web { width: 34px; height: 34px; top: -31px; }
   :root[data-theme="halloween"] .spook-web.l { left: -31px; }
   :root[data-theme="halloween"] .spook-web.r { right: -31px; }

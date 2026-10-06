@@ -46,7 +46,64 @@ function spookSvg() {
     + '<g transform="translate(0 64) scale(1 -1)"><path d="M28 30C22 21 12 21 3 26c4 2 6 6 6 10 3-3 7-3 9 0 2-3 6-3 10-2zM36 30c6-9 16-9 25-4-4 2-6 6-6 10-3-3-7-3-9 0-2-3-6-3-10-2z"/>'
     + '<path d="M32 25c-4 0-5 3-5 7s2 6 5 6 5-2 5-6-1-7-5-7z"/><path d="M28.5 27l1-5 2.5 3 2.5-3 1 5z"/>'
     + '<circle class="eye" cx="30" cy="30.5" r="1.2"/><circle class="eye" cx="34" cy="30.5" r="1.2"/></g></svg>';
-  return web(false) + web(true) + bat;
+  return web(false) + web(true) + bat + boneSvg();
+}
+
+/**
+ * Xương treo dưới đáy hộp: mỗi hộp bốc ngẫu nhiên một trong ba hình và một
+ * trong ba chỗ treo. Hình vẽ hai lớp, viền đen to bên dưới rồi thân màu xương
+ * đè lên, để chỗ các mảnh chồng nhau (đầu xương, thân xương) không lộ nét kẻ.
+ * Không dùng `<use>` + id vì nhiều hộp thoại có thể mở chồng nhau.
+ */
+function boneSvg() {
+  const twice = (shapes) => `<g class="vien">${shapes}</g><g class="than">${shapes}</g>`;
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+  // Khúc xương nằm ngang, buộc chỉ ngang thân
+  const khuc = () => {
+    const shapes = '<circle cx="12" cy="53.5" r="5"/><circle cx="12" cy="62.5" r="5"/>'
+      + '<circle cx="52" cy="53.5" r="5"/><circle cx="52" cy="62.5" r="5"/>'
+      + '<rect x="12" y="54" width="40" height="8" rx="2"/>';
+    return '<svg width="64" height="76" viewBox="0 0 64 76"><path class="thread" d="M32 0V54"/>'
+      + `<g class="lat">${twice(shapes)}`
+      + '<path class="bong" d="M16 61.2H48M9 66.5q3 1.6 6 0M49 66.5q3 1.6 6 0"/>'
+      + '<ellipse class="thread nut" cx="32" cy="58" rx="2" ry="5.2"/></g></svg>';
+  };
+
+  // Đầu lâu, hai xương bắt chéo phía sau
+  const dauLau = () => {
+    const bone = '<circle cx="-17" cy="-3.2" r="3.6"/><circle cx="-17" cy="3.2" r="3.6"/>'
+      + '<circle cx="17" cy="-3.2" r="3.6"/><circle cx="17" cy="3.2" r="3.6"/>'
+      + '<rect x="-17" y="-3" width="34" height="6"/>';
+    const cheo = (cls) => [32, -32]
+      .map((a) => `<g class="${cls}" transform="translate(32 58) rotate(${a})">${bone}</g>`).join('');
+    const so = '<circle cx="32" cy="44" r="12.5"/><rect x="25" y="49" width="14" height="11" rx="3"/>';
+    return '<svg width="64" height="80" viewBox="0 0 64 80"><path class="thread" d="M32 0V32"/>'
+      + cheo('vien') + cheo('than') + twice(so)
+      + '<ellipse class="hoc" cx="27.4" cy="45" rx="3.5" ry="4.2"/><ellipse class="hoc" cx="36.6" cy="45" rx="3.5" ry="4.2"/>'
+      + '<circle class="mat" cx="27.4" cy="45.6" r="1.1"/><circle class="mat" cx="36.6" cy="45.6" r="1.1"/>'
+      + '<path class="hoc" d="M32 49.5l-1.8 3.2h3.6z"/><path class="rang" d="M29 56v4M32 56v4M35 56v4"/>'
+      + '<path class="bong" d="M22.5 40q1.5-6 7-8"/></svg>';
+  };
+
+  // Bộ xương nhỏ treo cổ, tay chân lủng lẳng trễ nhịp so với thân
+  const boXuong = () => {
+    const chi = (cls, d) => `<g class="chi lung ${cls}"><path class="vien" d="${d}"/><path class="than" d="${d}"/></g>`;
+    const minh = 'M32 34V70M22 40H42M24 45Q32 41 40 45M24.5 51Q32 47 39.5 51M25.5 57Q32 53 38.5 57M25 70Q32 64 39 70Q32 76 25 70Z';
+    const so = '<circle cx="32" cy="26" r="8.5"/><rect x="27" y="30" width="10" height="7" rx="2"/>';
+    return '<svg width="54" height="100" viewBox="0 0 64 118"><path class="thread" d="M32 0V18"/>'
+      + chi('tay-t', 'M22 40L19 54L18 65') + chi('tay-p', 'M42 40L45 54L46 65')
+      + chi('chan-t', 'M28 72L27 90L27 106L23.5 108') + chi('chan-p', 'M36 72L37 90L37 106L40.5 108')
+      + `<g class="chi"><path class="vien" d="${minh}"/><path class="than" d="${minh}"/></g>`
+      + twice(so)
+      + '<ellipse class="hoc" cx="28.8" cy="26.5" rx="2.4" ry="2.9"/><ellipse class="hoc" cx="35.2" cy="26.5" rx="2.4" ry="2.9"/>'
+      + '<circle class="mat" cx="28.8" cy="27" r=".8"/><circle class="mat" cx="35.2" cy="27" r=".8"/>'
+      + '<path class="rang" d="M30 33v3.4M32 33v3.4M34 33v3.4"/></svg>';
+  };
+
+  const hinh = pick([khuc, dauLau, boXuong]);
+  const cho = pick(['trai', 'giua', 'phai']);
+  return `<div class="spook-bone ${cho}"><div class="bone-giat"><div class="bone-xoan">${hinh()}</div></div></div>`;
 }
 
 /** Gắn khung đèn vào một hộp thoại vừa dựng. */
