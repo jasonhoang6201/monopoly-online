@@ -121,6 +121,18 @@ export class Game {
      * lên ván đã bắt đầu.
      */
     this.rollOffTakeoverMs = 10000;
+    /**
+     * Người tới lượt vắng mặt bấy lâu thì trọng tài mới nhận cầm lái để bỏ qua
+     * lượt của họ.
+     *
+     * Giữa ván, ghế bị đánh dấu "mất kết nối" ngay khi presence của họ hụt một
+     * nhịp (supabase-js nối lại âm thầm, wifi chập chờn), không có hạn ân nào.
+     * Trước đây trọng tài bỏ lượt ngay lúc ấy: người kia vẫn đang ngồi chọn
+     * viên xí ngầu lắc lại, máy họ vẫn cầm lái, còn trọng tài đã trao lượt cho
+     * người kế và phát ảnh chụp, hai lượt chạy chồng lên nhau. Chờ quá hạn này
+     * thì nhịp chập chờn đã qua; người rớt thật thì bàn chỉ chờ thêm chừng ấy.
+     */
+    this.skipGraceMs = 12000;
     /** Hạn để trả lời một đề nghị giao dịch. */
     this.tradeMs = 45000;
     /**
@@ -300,6 +312,7 @@ export class Game {
     clearInterval(this.absentTimer);
     this.absentTimer = setInterval(() => {
       this.checkAbsent();
+      this.checkAbandonedTurn();
       this.checkClock();
       this.skills.reconcileLearn();
     }, 2000);
@@ -476,8 +489,24 @@ export class Game {
     if (!this.state) return false;
     const seat = this.state.turn;
     if (seat === this.net.mySeat) return true;
-    const abandoned = this.state.players[seat]?.bankrupt || !this.net.isSeatLive(seat);
+    /* Vắng chưa quá `skipGraceMs` thì chưa ai nhận cầm lái: máy người ấy có
+       thể vẫn đang chạy lượt, chỉ là presence hụt một nhịp. */
+    const abandoned = this.state.players[seat]?.bankrupt
+      || (!this.net.isSeatLive(seat) && this.net.awayFor(seat) >= this.skipGraceMs);
     return abandoned && this.net.isArbiter;
+  }
+
+  /**
+   * Nhịp canh: người tới lượt vừa vắng đủ `skipGraceMs` thì bày lại lượt để
+   * trọng tài nhận cầm lái và bỏ qua. Không có tin nào báo lúc hạn ân hết, nên
+   * phải xét bằng hẹn giờ, cùng lý do với `checkAbsent`.
+   */
+  checkAbandonedTurn() {
+    const st = this.state;
+    if (!this.net || !st || st.over || !st.order || this.busy) return;
+    if (this.net.linkLost || st.turn === this.net.mySeat) return;
+    if (st.players[st.turn]?.bankrupt) return;
+    if (this.isDriver()) this.beginTurn();
   }
 
   /** Ghế của mình trong ván (−1 khi chơi một máy). */

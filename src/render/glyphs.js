@@ -9,6 +9,8 @@
  * ⌂ tuỳ từng máy mà ra một dáng khác nhau, có máy còn không có sẵn.
  */
 
+import { HAUNTED_HOUSE, HAUNTED_CASTLE } from './halloweenArt.js';
+
 /** Khung toạ độ gốc của hai đường vẽ — cả hai đều 256 × 256. */
 export const GLYPH_BOX = 256;
 
@@ -38,17 +40,27 @@ export const KEY_PATH = 'M216.57,39.43A80,80,0,0,0,83.91,120.78L28.69,176A15.86,
    Bản HTML — dùng `currentColor` để nơi nào gọi thì nơi ấy định màu
    ================================================================== */
 
-/* `snow` là lớp tuyết trên mái: luôn có trong mã HTML, CSS chỉ cho hiện ở chủ
-   đề Giáng Sinh (`.gi-snow`). Nhờ vậy chuỗi HTML dựng sẵn không phải dựng lại
-   khi đổi chủ đề. */
-const svg = (d, cls, snow = '') => `<svg class="gi ${cls}" viewBox="0 0 ${GLYPH_BOX} ${GLYPH_BOX}"
-    xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><path d="${d}"/>${
-  snow ? `<path class="gi-snow" d="${snow}"/>` : ''}</svg>`;
+/* `snow` là lớp tuyết trên mái, `haunt` là nhà ma của chủ đề Halloween: cả hai
+   luôn có trong mã HTML, CSS chọn lớp nào hiện theo chủ đề (`.gi-snow`,
+   `.gi-haunt`). Nhờ vậy chuỗi HTML dựng sẵn không phải dựng lại khi đổi chủ đề. */
+const svg = (d, cls, snow = '', haunt = '') => `<svg class="${cls}" viewBox="0 0 ${GLYPH_BOX} ${GLYPH_BOX}"
+    xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false"><path class="gi-base" d="${d}"/>${
+  snow ? `<path class="gi-snow" d="${snow}"/>` : ''}${haunt}</svg>`;
 
-export const houseSvg = () => svg(HOUSE_PATH, 'gi-house', HOUSE_SNOW);
-export const hotelSvg = () => svg(HOTEL_PATH, 'gi-hotel', HOTEL_SNOW);
-export const bankSvg = () => svg(BANK_PATH, 'gi-bank');
-export const keySvg = () => svg(KEY_PATH, 'gi-key');
+/* Lớp nhà ma dựng từ đúng các lớp canvas của bảng nhà trên bàn cờ (khung 64,
+   phóng ×4 cho vừa khung 256). Màu ghi thẳng vào thuộc tính `fill`, nên không
+   ăn theo `currentColor` của chỗ gọi. */
+const hauntLayers = (layers) => `<g class="gi-haunt" transform="scale(${GLYPH_BOX / 64})" stroke-linejoin="round">${
+  layers.map(([d, c, st, lw]) => `<path d="${d}" fill="${c ?? 'none'}"${
+    st ? ` stroke="${st}" stroke-width="${lw ?? 1.2}"` : ''}/>`).join('')}</g>`;
+const HOUSE_HAUNT = hauntLayers(HAUNTED_HOUSE);
+const HOTEL_HAUNT = hauntLayers(HAUNTED_CASTLE);
+
+/** `cls` thay lớp mặc định — bảng giá thuê ở thẻ đất dùng lớp `ico` riêng. */
+export const houseSvg = (cls = 'gi gi-house') => svg(HOUSE_PATH, cls, HOUSE_SNOW, HOUSE_HAUNT);
+export const hotelSvg = (cls = 'gi gi-hotel') => svg(HOTEL_PATH, cls, HOTEL_SNOW, HOTEL_HAUNT);
+export const bankSvg = () => svg(BANK_PATH, 'gi gi-bank');
+export const keySvg = () => svg(KEY_PATH, 'gi gi-key');
 
 /**
  * Dãy ký hiệu cho mức xây dựng của một ô: 1…4 là bấy nhiêu căn nhà,

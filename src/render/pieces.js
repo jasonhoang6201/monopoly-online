@@ -235,8 +235,14 @@ export function paintSkeletonToken(css, s = 160, o = {}) {
   ctx.lineWidth = s * 0.016;
   ctx.stroke();
 
+  /* Bộ xương vẽ riêng ra một lớp rồi mới dán lên, để quanh nó có được hai
+     lớp tách nền: viền đen sát nét (xương trắng đứng trên ô sáng vẫn có mép)
+     rồi vành màu người chơi có quầng sáng (đứng trên ô tối vẫn nổi, và nhìn
+     cả thân quân là biết của ai chứ không chỉ cái mũ). Nét xương mảnh, thiếu
+     hai lớp này thì quân chìm vào mặt ô. */
+  const sk = canvas(s, s * 1.12);
   const walking = o.frame != null;
-  drawSkeleton(ctx, cx - s * 0.02, baseY - s * 0.01, s * 0.76, {
+  drawSkeleton(sk.getContext('2d'), cx - s * 0.02, baseY - s * 0.01, s * 0.76, {
     stand: !walking && !o.bow,
     phase: walking ? (o.frame / WALK_FRAMES) * Math.PI * 2 : 0,
     bow: o.bow ?? 0,
@@ -244,6 +250,33 @@ export function paintSkeletonToken(css, s = 160, o = {}) {
     band: shade(css, -0.5),
     lw: 1.5,
   });
+
+  // Hình bóng đặc của bộ xương, tô một màu — dùng cho viền và quầng
+  const sil = (color) => {
+    const c = canvas(s, s * 1.12);
+    const x = c.getContext('2d');
+    x.drawImage(sk, 0, 0);
+    x.globalCompositeOperation = 'source-in';
+    x.fillStyle = color;
+    x.fillRect(0, 0, c.width, c.height);
+    return c;
+  };
+
+  // Dán hình bóng lệch đều quanh tâm, bán kính `d`: ra một vành dày `d`
+  const ring = (img, d) => {
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      ctx.drawImage(img, Math.cos(a) * d, Math.sin(a) * d);
+    }
+  };
+  const halo = sil(css);
+  ctx.save();
+  ctx.shadowColor = css;
+  ctx.shadowBlur = s * 0.1;
+  ring(halo, s * 0.036);
+  ctx.restore();
+  ring(sil('#07040C'), Math.max(1.5, s * 0.016));
+  ctx.drawImage(sk, 0, 0);
   return cv;
 }
 

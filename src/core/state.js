@@ -15,39 +15,33 @@ import { has, param, roll, ownerRentMult, ownerRentFlat, houseImmune, credit } f
 
 /**
  * Bảng màu quân — quân cờ chỉ phân biệt bằng MÀU, không mang biểu tượng riêng.
- * Sắc lấy từ hộp sơn mài và men gốm: son, thếp vàng, ngọc, chàm, tím Huế…
  *
- * Sáu sắc đầu là bộ cũ, giữ nguyên thứ tự vì `#freeToken()` phát màu theo chỉ
- * số nhỏ nhất còn trống: bàn ít người vẫn ra đúng sáu màu ấy, mười hai sắc
- * thêm chỉ hiện ra cho ai muốn tự chọn. `key` đi vào ảnh chụp ván (serialize.js
- * dò lại màu theo key), nên đổi tên khoá cũ là làm hỏng ván đang lưu.
+ * Mỗi sắc một vùng riêng trên vòng màu, không có cặp đậm/nhạt của cùng một
+ * sắc: bảng cũ 18 màu có lam/thanh thiên/tím sim, ngọc bích/cổ vịt/men lam,
+ * son/rượu mận… đứng cạnh nhau trên bàn thì không ai phân biệt được quân của ai.
  *
- * Sắc độ rải đều vòng màu và không sắc nào rơi vào vùng trung tính: màu quân
- * còn bị pha loãng thành nước phủ trên ô đất, mà xám thì phủ tới đâu cũng chỉ
- * ra một vệt bẩn, không nói được đó là đất của ai. Trắng ngà đứng được vì nó
- * sáng hơn hẳn mặt giấy, không phải vì nó có sắc.
+ * Sáu sắc đầu là màu phát tự động (`#freeToken()` lấy chỉ số nhỏ nhất còn
+ * trống): đỏ, vàng, lục, lam, tím, cam — bàn sáu người vẫn ra sáu sắc cách xa
+ * nhau. `key` đi vào ảnh chụp ván (serialize.js dò lại màu theo key); key đã
+ * bỏ thì ảnh chụp cũ rơi về màu đầu bảng.
+ *
+ * Không sắc nào rơi vào vùng trung tính: màu quân còn bị pha loãng thành nước
+ * phủ trên ô đất, mà xám thì phủ tới đâu cũng chỉ ra một vệt bẩn. Trắng ngà
+ * đứng được vì nó sáng hơn hẳn mặt ô, không phải vì nó có sắc.
+ *
+ * Chủ đề có bàn tối (Halloween) ghi đè `color`/`css` bằng bản sáng hơn — xem
+ * `TOKEN_COLORS` trong theme/theme.js. `key` và thứ tự không đổi theo chủ đề.
  */
 export const TOKENS = [
-  // Bộ sáu gốc — thứ tự này là thứ tự phát màu tự động
-  { key: 'son',   name: 'Son đỏ',      color: 0xC0392B, css: '#C0392B' },
-  { key: 'kim',   name: 'Hoàng kim',   color: 0xD4A24C, css: '#D4A24C' },
-  { key: 'bich',  name: 'Ngọc bích',   color: 0x2E9E70, css: '#2E9E70' },
-  { key: 'lam',   name: 'Chàm lam',    color: 0x4A6FC4, css: '#4A6FC4' },
-  { key: 'tia',   name: 'Tím Huế',     color: 0x8B5AA8, css: '#8B5AA8' },
-  { key: 'men',   name: 'Men lam',     color: 0x2FB8C6, css: '#2FB8C6' },
-  // Mười hai sắc thêm, xếp theo vòng sắc độ để bảng chọn đọc thành dải màu
-  { key: 'cam',   name: 'Cam nung',    color: 0xE2743A, css: '#E2743A' },
-  { key: 'nghe',  name: 'Vàng nghệ',   color: 0xE8C233, css: '#E8C233' },
-  { key: 'ma',    name: 'Lục mạ',      color: 0x86B93C, css: '#86B93C' },
-  { key: 'reu',   name: 'Rêu đá',      color: 0x5E7F4B, css: '#5E7F4B' },
-  { key: 'vit',   name: 'Xanh cổ vịt', color: 0x1C8C82, css: '#1C8C82' },
-  { key: 'thien', name: 'Thanh thiên', color: 0x2A7FD4, css: '#2A7FD4' },
-  { key: 'sim',   name: 'Tím sim',     color: 0x6C55C0, css: '#6C55C0' },
-  { key: 'sen',   name: 'Hồng sen',    color: 0xE0699A, css: '#E0699A' },
-  { key: 'man',   name: 'Rượu mận',    color: 0x9E2F53, css: '#9E2F53' },
-  { key: 'nau',   name: 'Nâu đất',     color: 0x8A5A3B, css: '#8A5A3B' },
-  { key: 'khoi',  name: 'Xám khói',    color: 0x6E8091, css: '#6E8091' },
-  { key: 'nga',   name: 'Trắng ngà',   color: 0xE8DCC0, css: '#E8DCC0' },
+  { key: 'son',  name: 'Đỏ son',     color: 0xD23A2E, css: '#D23A2E' },
+  { key: 'kim',  name: 'Vàng',       color: 0xE8C12E, css: '#E8C12E' },
+  { key: 'bich', name: 'Xanh lá',    color: 0x3FA34D, css: '#3FA34D' },
+  { key: 'lam',  name: 'Xanh lam',   color: 0x3D6AD6, css: '#3D6AD6' },
+  { key: 'tia',  name: 'Tím',        color: 0x8A4FC9, css: '#8A4FC9' },
+  { key: 'cam',  name: 'Cam',        color: 0xEE7F2A, css: '#EE7F2A' },
+  { key: 'men',  name: 'Ngọc lam',   color: 0x23B5C4, css: '#23B5C4' },
+  { key: 'sen',  name: 'Hồng',       color: 0xE35A9C, css: '#E35A9C' },
+  { key: 'nga',  name: 'Trắng ngà',  color: 0xECE2CA, css: '#ECE2CA' },
 ];
 
 /**

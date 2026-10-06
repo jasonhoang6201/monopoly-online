@@ -17,19 +17,22 @@
   --lac:        #4A2C78;
   --lac-light:  #6B3FA0;
 
-  /* "Vàng" của bản gốc là màu nét viền và chữ nhấn: đổi sang tím hoa cà, xương */
+  /* "Vàng" của bản gốc là màu nét viền và chữ nhấn. Chữ không dùng tím hoa
+     cà: chữ cùng sắc với nền tím thì độ sáng hai bên sát nhau, khó đọc. Chữ
+     nhấn là trắng xương ngả vàng; tím chỉ còn ở nền và nét kẻ mảnh. */
   --gold-deep:  #6B3FA0;
-  --gold:       #B79BE0;
+  --gold:       #E6D9BC;
   --gold-light: #ECE6D6;
   --gold-pale:  #F6F1E6;
 
   --jade-deep:  #2C1A47;
   --jade:       #4A2C78;
-  --jade-light: #8C6BC0;
+  --jade-light: #C4BBA8;
 
-  --paper:      #ECE6D6;
-  --paper-warm: #D9CFEA;
-  --paper-deep: #B79BE0;
+  /* Ba nấc chữ trên nền tối: chính, phụ, mờ. Cùng một dải xám ấm, không sắc tím */
+  --paper:      #F4EFE3;
+  --paper-warm: #E4DDCE;
+  --paper-deep: #CBC2B0;
 
   --indigo-deep:#0E0A16;
   --indigo:     #171024;
@@ -117,7 +120,7 @@
   0%, 100% { transform: scaleY(1); }
   50%      { transform: scaleY(.9) translateY(.5px); }
 }
-:root[data-theme="halloween"] .pcard-meta { color: rgba(236, 230, 214, .62); }
+:root[data-theme="halloween"] .pcard-meta { color: rgba(244, 239, 227, .8); }
 :root[data-theme="halloween"] .pcard.is-bankrupt { filter: grayscale(1); }
 :root[data-theme="halloween"] #pop-card,
 :root[data-theme="halloween"] #pop-card::before {
@@ -198,7 +201,7 @@
   color: #F6F1E6;
 }
 :root[data-theme="halloween"] #actions .btn-ghost .btn-icon,
-:root[data-theme="halloween"] #actions .btn-jade .btn-icon { color: #B79BE0; }
+:root[data-theme="halloween"] #actions .btn-jade .btn-icon { color: #D8CFBD; }
 @media (hover: hover) {
   :root[data-theme="halloween"] .btn:hover:not(:disabled) {
     filter: brightness(1.14);
@@ -377,6 +380,15 @@
   :root[data-theme="halloween"] .scrim:has([data-theme-pick])::after { animation: none; }
 }
 
-/* ------------------------------------------------- nhà ma trên ký hiệu nhà */
-:root[data-theme="halloween"] .gi-house,
-:root[data-theme="halloween"] .gi-hotel { color: #B79BE0; }
+/* ------------------------------------------------- nhà ma trên ký hiệu nhà
+   Hộp thoại dùng đúng hình nhà ma / lâu đài ma của bảng nhà trên bàn cờ, thay
+   cho hình nhà Phosphor một màu. */
+:root[data-theme="halloween"] svg:has(> .gi-haunt) > .gi-base { display: none; }
+:root[data-theme="halloween"] .gi-haunt { display: inline; }
+/* Thân nhà tím than nằm trên nền hộp thoại cũng tối: viền sáng 1px quanh hình
+   để mép nhà tách khỏi nền. Hình nhiều chi tiết nên nhích cỡ lên một chút. */
+:root[data-theme="halloween"] svg:has(> .gi-haunt) {
+  height: 1.3em;
+  filter: drop-shadow(0 0 .6px #F4EFE3) drop-shadow(0 0 .6px #F4EFE3) drop-shadow(0 1px 2px rgba(0, 0, 0, .6));
+}
+:root[data-theme="halloween"] .ico:has(> .gi-haunt) { height: 16px; }

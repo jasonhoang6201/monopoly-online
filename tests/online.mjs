@@ -448,6 +448,35 @@ if (linkKind !== 'supabase') {
   await B.screenshot({ path: `${SHOT}/on-07-relinked.png` });
 }
 
+/* =========================== 8b · presence hụt một nhịp thì chưa bỏ lượt */
+
+console.log('\n▸ 8b. Người tới lượt hụt presence một nhịp — trọng tài chưa nhận cầm lái');
+/* Lỗi cũ: presence hụt một nhịp là trọng tài bỏ lượt ngay, trong khi máy người
+   ấy vẫn đang chạy lượt (chọn viên xí ngầu lắc lại) — hai lượt chồng nhau.
+   Kiểm thẳng `isDriver` ở máy không tới lượt, giả lập ghế kia vắng và máy này
+   là trọng tài. Chạy đồng bộ trong một lần `evaluate` nên nhịp canh không chen
+   vào được giữa lúc giả lập. */
+{
+  const watcher = (await A.evaluate(() => {
+    const c = window.__monopoly.controller;
+    return c.state.turn !== c.net.mySeat;
+  })) ? A : B;
+  const r = await watcher.evaluate(() => {
+    const c = window.__monopoly.controller;
+    const net = c.net;
+    Object.defineProperty(net, 'isArbiter', { get: () => true, configurable: true });
+    net.isSeatLive = () => false;
+    net.awayFor = () => 3000;
+    const brief = c.isDriver();
+    net.awayFor = () => c.skipGraceMs + 1;
+    const long = c.isDriver();
+    delete net.isArbiter; delete net.isSeatLive; delete net.awayFor;
+    return { brief, long };
+  });
+  ok(r.brief === false, 'vắng 3 giây: chưa ai nhận cầm lái lượt ấy');
+  ok(r.long === true, 'vắng quá hạn ân: trọng tài nhận cầm lái để bỏ lượt');
+}
+
 /* ================================================= 9 · rớt mạng rồi vào lại */
 
 console.log('\n▸ 9. Rớt mạng rồi vào lại — về đúng ghế cũ, tài sản nguyên vẹn');

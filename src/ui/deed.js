@@ -4,7 +4,7 @@
  */
 import { paintTileCard, P } from '../render/boardArt.js';
 import { isCorner } from '../render/geometry.js';
-import { houseSvg, hotelSvg, HOUSE_PATH, HOTEL_PATH } from '../render/glyphs.js';
+import { houseSvg, hotelSvg } from '../render/glyphs.js';
 import { BOARD, money, tileShortLabel } from '../data/board.js';
 
 const cache = new Map();
@@ -59,10 +59,8 @@ export function deedGrid(state, ids, o = {}) {
    Hình nhỏ dùng trong bảng giá thuê — vẽ bằng SVG cho sắc nét
    ------------------------------------------------------------ */
 /* Nhà và khách sạn dùng chung một bộ hình với bàn cờ và bảng quản lý tài sản */
-const SVG_HOUSE = `<svg class="ico ico-house" viewBox="0 0 256 256" aria-hidden="true">
-    <path d="${HOUSE_PATH}"/></svg>`;
-const SVG_HOTEL = `<svg class="ico ico-hotel" viewBox="0 0 256 256" aria-hidden="true">
-    <path d="${HOTEL_PATH}"/></svg>`;
+const SVG_HOUSE = houseSvg('ico ico-house');
+const SVG_HOTEL = hotelSvg('ico ico-hotel');
 const SVG_STATION = `<svg class="ico ico-station" viewBox="0 0 16 15" aria-hidden="true">
     <path d="M4 .9h8a2 2 0 0 1 2 2v6.4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2.9a2 2 0 0 1 2-2z"/>
     <rect class="win" x="4.1" y="3" width="7.8" height="3.1"/>

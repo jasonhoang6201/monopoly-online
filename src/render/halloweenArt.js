@@ -414,50 +414,51 @@ export function paintTombstone(name, round, css, w = 160) {
 /* ------------------------------------------------------ nhà ma, lâu đài */
 
 /**
- * Nhà ma: căn nhà gỗ mái nhọn nghiêng, cửa sổ vàng. Thay hình nhà ở bảng
- * nhà bật lên khi rê chuột (`BoardScene.showHousePlaque`).
+ * Nhà ma và lâu đài ma, khai thành lớp `[đường, màu tô, màu viền, nét]` trong
+ * khung 64 × 64. Một nguồn cho hai nơi: canvas của bảng nhà bật lên khi rê
+ * chuột trên bàn cờ (`paintHauntedHouse`/`paintHauntedCastle`) và ký hiệu nhà
+ * trong hộp thoại (`render/glyphs.js` dựng SVG từ cùng các lớp này), nên căn
+ * nhà trên bàn và trong hộp thoại là một hình.
  */
-export function paintHauntedHouse(s = 192) {
+const HOUSE_INK = '#1A1326';
+export const HAUNTED_HOUSE = [
+  ['M12 58V30l20-4 20 6v26z', '#4A3C5E', HOUSE_INK, 1.6],
+  ['M8 32L30 6l26 28-4 2L30 12 12 34z', '#2C1A47', HOUSE_INK, 1.6],
+  ['M40 14h6v10l-6-6z', '#2C1A47', HOUSE_INK, 1.2],
+  ['M18 36h9v9h-9zM37 37h9v9h-9z', GLOW, HOUSE_INK, 1.2],
+  ['M28 46h8v12h-8z', HOUSE_INK],
+  ['M22.5 36v9M18 40.5h9M41.5 37v9M37 41.5h9', null, HOUSE_INK, 1],
+];
+export const HAUNTED_CASTLE = [
+  ['M6 60V26h12v34zM46 60V26h12v34z', '#4A3C5E', HOUSE_INK, 1.4],
+  ['M16 60V34h32v26z', '#3D3150', HOUSE_INK, 1.4],
+  ['M4 27L12 6l8 21zM44 27l8-21 8 21z', '#2C1A47', HOUSE_INK, 1.4],
+  ['M16 35v-5h4v3h4v-3h4v3h4v-3h4v3h4v-3h4v5z', '#4A3C5E', HOUSE_INK, 1.2],
+  ['M12 6V0M52 6V0', null, HOUSE_INK, 1.2],
+  ['M12 0l8 3-8 3zM52 0l8 3-8 3z', PUMPKIN],
+  ['M10 34h4v6h-4zM50 34h4v6h-4zM22 40h5v6h-5zM37 40h5v6h-5z', GLOW, HOUSE_INK, 0.8],
+  ['M27 60V50q5-6 10 0v10z', HOUSE_INK],
+];
+
+function paintLayers(layers, s) {
   const cv = document.createElement('canvas');
   cv.width = s; cv.height = s;
   const g = cv.getContext('2d');
   g.scale(s / 64, s / 64);
   g.lineJoin = 'round';
-  const fill = (d, c, st, lw) => {
+  for (const [d, c, st, lw] of layers) {
     const p = path(d);
     if (c) { g.fillStyle = c; g.fill(p); }
     if (st) { g.strokeStyle = st; g.lineWidth = lw ?? 1.2; g.stroke(p); }
-  };
-  fill('M12 58V30l20-4 20 6v26z', '#4A3C5E', '#1A1326', 1.6);
-  fill('M8 32L30 6l26 28-4 2L30 12 12 34z', '#2C1A47', '#1A1326', 1.6);
-  fill('M40 14h6v10l-6-6z', '#2C1A47', '#1A1326', 1.2);
-  fill('M18 36h9v9h-9zM37 37h9v9h-9z', GLOW, '#1A1326', 1.2);
-  fill('M28 46h8v12h-8z', '#1A1326');
-  g.strokeStyle = '#1A1326'; g.lineWidth = 1;
-  g.beginPath(); g.moveTo(22.5, 36); g.lineTo(22.5, 45); g.moveTo(18, 40.5); g.lineTo(27, 40.5);
-  g.moveTo(41.5, 37); g.lineTo(41.5, 46); g.moveTo(37, 41.5); g.lineTo(46, 41.5); g.stroke();
+  }
   return cv;
 }
 
+/**
+ * Nhà ma: căn nhà gỗ mái nhọn nghiêng, cửa sổ vàng. Thay hình nhà ở bảng
+ * nhà bật lên khi rê chuột (`BoardScene.showHousePlaque`).
+ */
+export const paintHauntedHouse = (s = 192) => paintLayers(HAUNTED_HOUSE, s);
+
 /** Lâu đài ma: hai tháp chóp nhọn, cờ đuôi nheo cam, cửa sổ vàng. */
-export function paintHauntedCastle(s = 192) {
-  const cv = document.createElement('canvas');
-  cv.width = s; cv.height = s;
-  const g = cv.getContext('2d');
-  g.scale(s / 64, s / 64);
-  g.lineJoin = 'round';
-  const fill = (d, c, st, lw) => {
-    const p = path(d);
-    if (c) { g.fillStyle = c; g.fill(p); }
-    if (st) { g.strokeStyle = st; g.lineWidth = lw ?? 1.2; g.stroke(p); }
-  };
-  fill('M6 60V26h12v34zM46 60V26h12v34z', '#4A3C5E', '#1A1326', 1.4);
-  fill('M16 60V34h32v26z', '#3D3150', '#1A1326', 1.4);
-  fill('M4 27L12 6l8 21zM44 27l8-21 8 21z', '#2C1A47', '#1A1326', 1.4);
-  fill('M16 35v-5h4v3h4v-3h4v3h4v-3h4v3h4v-3h4v5z', '#4A3C5E', '#1A1326', 1.2);
-  fill('M12 6V0M52 6V0', null, '#1A1326', 1.2);
-  fill('M12 0l8 3-8 3zM52 0l8 3-8 3z', PUMPKIN);
-  fill('M10 34h4v6h-4zM50 34h4v6h-4zM22 40h5v6h-5zM37 40h5v6h-5z', GLOW, '#1A1326', 0.8);
-  fill('M27 60V50q5-6 10 0v10z', '#1A1326');
-  return cv;
-}
+export const paintHauntedCastle = (s = 192) => paintLayers(HAUNTED_CASTLE, s);

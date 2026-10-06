@@ -26,11 +26,13 @@ const DIE_LOOK = {
     face: [228, 244, 255], pipHi: [62, 104, 150], pipLo: [18, 40, 70], sheen: 0.5,
   },
   /* Halloween: quả bí ngô vuông. Thân cam sẫm, mặt cam có múi chạy dọc, chấm
-     là lỗ khắc có nến bên trong — tâm vàng sáng, viền tối. Mặt 1 và 4 cũng
-     khắc như các mặt khác, không còn chấm đỏ. */
+     là lỗ khắc: lòng lỗ nâu đen, mép lỗ một vành vàng sáng. Bản trước chấm
+     vàng trên mặt cam, hai màu cùng sáng nên khó đếm chấm; lòng tối trên mặt
+     cam thì tương phản theo độ sáng, vành vàng giữ chất bí ngô có nến. Mặt 1
+     và 4 cũng khắc như các mặt khác, không còn chấm đỏ. */
   halloween: {
     body: '#A8461A', edge: 'rgba(70,24,6,.7)', shadow: 'rgba(8,4,14,.55)',
-    face: [240, 128, 46], pipHi: [255, 240, 170], pipLo: [255, 150, 40], sheen: 0.18,
+    face: [240, 128, 46], pipHi: [74, 28, 8], pipLo: [18, 6, 2], sheen: 0.18,
     ribs: 'rgba(150,56,14,.55)', carved: true,
   },
 };
@@ -373,9 +375,9 @@ export function drawDie(cv, q) {
       const r = (val === 1 ? 0.20 : 0.148);
       // Lỗ khắc: viền tối quanh chấm sáng, như mặt bí ngô có nến bên trong
       if (look.carved) {
-        ctx.fillStyle = `rgba(70,22,4,${0.85 * dim})`;
+        ctx.fillStyle = `rgb(${Math.round(255 * dim)},${Math.round(226 * dim)},${Math.round(120 * dim)})`;
         ctx.beginPath();
-        ctx.arc(a, b, r * 1.22, 0, Math.PI * 2);
+        ctx.arc(a, b, r * 1.24, 0, Math.PI * 2);
         ctx.fill();
       }
       const rg = ctx.createRadialGradient(a - r * 0.3, b - r * 0.3, r * 0.08, a, b, r);

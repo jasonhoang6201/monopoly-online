@@ -168,7 +168,10 @@ function ownerTint(color) {
 function glowTint(color, v = 1) {
   const c = Phaser.Display.Color.ValueToColor(color);
   const { h, s } = Phaser.Display.Color.RGBToHSV(c.red, c.green, c.blue);
-  return Phaser.Display.Color.HSVToRGB(h, Phaser.Math.Clamp(s, 0.66, 0.95), v).color;
+  /* Trắng ngà gần như không có sắc: ép độ tươi lên 0,66 thì nó thành cam đất,
+     trùng với quân cam. Giữ nó trắng. */
+  const sat = s < 0.2 ? s : Phaser.Math.Clamp(s, 0.66, 0.95);
+  return Phaser.Display.Color.HSVToRGB(h, sat, v).color;
 }
 
 /**
@@ -371,7 +374,7 @@ export default class BoardScene extends Phaser.Scene {
    * phủ một lớp cố định.
    */
   ownTint(color) { return this.spooky ? glowTint(color, 0.86) : ownerTint(color); }
-  washOf(own) { return this.spooky ? 0.3 : OWNER_WASH(own); }
+  washOf(own) { return this.spooky ? 0.36 : OWNER_WASH(own); }
 
   /**
    * Đổi chủ đề: vẽ lại mọi texture có màu theo chủ đề (bàn cờ, nhà, xí ngầu,
@@ -1238,6 +1241,14 @@ export default class BoardScene extends Phaser.Scene {
       const wash = this.washOf(own) * dim;
       g.fillStyle(own, wash);
       g.fillRect(-sw / 2, -sh / 2, sw, sh);
+      /* Halloween: nước màu trên mặt ô xám than chỉ ra một sắc trầm, nên thêm
+         viền sáng màu chủ đất sát mép trong ô. Viền nằm trong ô, không lấn ô
+         bên cạnh, nên hai ô liền nhau của hai người vẫn tách rõ. */
+      if (this.spooky) {
+        const lw = Math.max(2, this.size * 0.0042);
+        g.lineStyle(lw, own, mort ? 0.45 : 0.95);
+        g.strokeRect(-sw / 2 + lw / 2 + 1, -sh / 2 + lw / 2 + 1, sw - lw - 2, sh - lw - 2);
+      }
       this.overlay.add(g);
 
       // Dải tên ô + sắc nhóm đất nổi lên trên nước màu
@@ -1860,11 +1871,13 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   /**
-   * Bia mộ người phá sản, mọc ở mép trong đúng ô họ ngã xuống.
+   * Bia mộ người phá sản, mọc trong ô họ ngã xuống, đúng chỗ quân của họ từng
+   * đứng (`tokenSpot` theo số ghế).
    *
-   * Bia đứng ngoài ô, trên mép lòng bàn cờ, chứ không đè lên mặt ô: mặt ô có
-   * tên đường và giá, bia mà đè lên thì che chữ. Chân bia chạm mép trong của
-   * ô (phía sau dây bí ngô) nên đọc ra vẫn là "mộ ở ô này".
+   * Bản trước dựng bia ngoài ô, trên mép lòng bàn cờ: ở ô góc hai cạnh gặp
+   * nhau nên bia của hai ô sát góc chồng lên nhau. Chỗ đứng của quân thì mỗi
+   * ghế một ô lưới riêng, không trùng với ghế khác và đã chừa chữ trên ô, nên
+   * bia đặt vào đó không đè quân nào, không che tên đất, ô góc cũng không vướng.
    *
    * Dựng từ ảnh chụp (`outPos`, `outRound`), nên máy nào vào lại giữa ván cũng
    * thấy đủ bia. Chỉ khi cùng một `state` vừa có thêm người phá sản thì bia
@@ -1873,39 +1886,34 @@ export default class BoardScene extends Phaser.Scene {
   syncTombs(state) {
     const fresh = this.tombState === state;
     this.tombState = state;
-    const groups = new Map();
-    for (const p of state.players) {
-      if (!p.bankrupt) continue;
-      const pos = p.outPos ?? p.pos;
-      if (!groups.has(pos)) groups.set(pos, []);
-      groups.get(pos).push(p);
-    }
     const keys = new Set();
-    for (const [pos, list] of groups) list.forEach((p, k) => keys.add(`${p.id}:${pos}:${k}:${list.length}`));
+    const dead = [];
+    state.players.forEach((p, seat) => {
+      if (!p.bankrupt) return;
+      const pos = p.outPos ?? p.pos;
+      const key = `${p.id}:${pos}`;
+      keys.add(key);
+      dead.push({ p, seat, pos, key });
+    });
     for (const [key, img] of this.tombs) {
       if (!keys.has(key)) { img.destroy(); this.tombs.delete(key); }
     }
 
-    const e = TEX / 12;
-    const tw = e * 0.78;
-    for (const [pos, list] of groups) {
-      const { h } = tileSize(pos, TEX);
-      const out = isCorner(pos) ? h * (Math.SQRT1_2 - 0.5) + e * 0.3 : e * 0.3;
-      const edge = tileEdgePoint(pos, TEX, out);
-      list.forEach((p, k) => {
-        const key = `${p.id}:${pos}:${k}:${list.length}`;
-        const off = (k - (list.length - 1) / 2) * tw * 1.05;
-        const at = this.toScreen(edge.x + Math.cos(edge.angle) * off, edge.y + Math.sin(edge.angle) * off);
-        const w = tw * this.scaleF;
-        let img = this.tombs.get(key);
-        const tex = `tomb-${p.id}-${p.outRound ?? 'x'}-${p.name}`;
-        if (!this.textures.exists(tex)) this.textures.addCanvas(tex, paintTombstone(p.name, p.outRound, p.token.css, 160));
-        if (img) { img.setPosition(at.x, at.y).setDisplaySize(w, w * 1.3); return; }
-        img = this.add.image(at.x, at.y, tex).setOrigin(0.5, 0.92).setRotation(edge.angle).setDisplaySize(w, w * 1.3);
-        this.tombLayer.add(img);
-        this.tombs.set(key, img);
-        if (fresh && !REDUCED_MOTION()) this.riseTomb(img);
-      });
+    /* Bia cao ngang thân quân: đủ nhìn ra là mộ, không lấn sang chỗ ghế bên.
+       Neo gần giữa bia (0,58) chứ không neo chân như quân: hàng ghế ngoài nằm
+       sát mép bàn cờ, neo chân thì bia ở hàng trên cùng thò ra khỏi bàn. */
+    const w = this.tokenSize() * 0.58;
+    for (const { p, seat, pos, key } of dead) {
+      const spot = tokenSpot(pos, seat, TEX);
+      const at = this.toScreen(spot.x, spot.y);
+      let img = this.tombs.get(key);
+      const tex = `tomb-${p.id}-${p.outRound ?? 'x'}-${p.name}`;
+      if (!this.textures.exists(tex)) this.textures.addCanvas(tex, paintTombstone(p.name, p.outRound, p.token.css, 160));
+      if (img) { img.setPosition(at.x, at.y).setDisplaySize(w, w * 1.3); continue; }
+      img = this.add.image(at.x, at.y, tex).setOrigin(0.5, 0.58).setDisplaySize(w, w * 1.3);
+      this.tombLayer.add(img);
+      this.tombs.set(key, img);
+      if (fresh && !REDUCED_MOTION()) this.riseTomb(img);
     }
   }
 

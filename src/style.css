@@ -1710,6 +1710,8 @@ html, body {
 .gi { width: auto; height: 1em; fill: currentColor; flex: none; display: block; }
 /* Tuyết trên mái chỉ hiện ở chủ đề Giáng Sinh — xem theme/christmas.css */
 .gi-snow { display: none; }
+/* Nhà ma chỉ hiện ở chủ đề Halloween — xem theme/halloween.css */
+.gi-haunt { display: none; }
 .gi-row {
   display: inline-flex; align-items: flex-end; gap: 2px;
   color: var(--jade-light);
