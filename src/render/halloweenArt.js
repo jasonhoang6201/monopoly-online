@@ -221,7 +221,8 @@ export function paintWebCorner(s = 128) {
  *   `phase` pha bước chân (radian), `stand` đứng yên hai chân thẳng,
  *   `dir` 1 nhìn sang phải, -1 sang trái, `hat` màu mũ phù thuỷ (null là đầu
  *   trần), `band` màu dải mũ, `bow` 0…1 cúi chào (gập người ra trước),
- *   `down` 0…1 ngã nằm, `lw` hệ số nét.
+ *   `down` 0…1 ngã nằm, `lw` hệ số nét, `pose` tư thế khớp cho điệu nhảy
+ *   (xem `src/render/dance.js`) — có `pose` thì bỏ qua `phase`/`stand`/`bow`.
  */
 export function drawSkeleton(g, x, y, s, o = {}) {
   const phase = o.phase ?? 0;
@@ -232,20 +233,33 @@ export function drawSkeleton(g, x, y, s, o = {}) {
   g.translate(x, y);
   if (down) g.rotate(-dir * down * Math.PI / 2);
   g.scale(dir, 1);
-  const bob = o.stand || down ? 0 : -Math.abs(Math.sin(phase)) * s * 0.025;
+  const P = o.pose;
+  const hip = [0, -s * 0.46];
+  // Chân: đùi lệch `a` khỏi phương thẳng đứng (dương là ra trước), cẳng gập
+  // thêm `kb` ở gối; `toe` là kiễng — bàn chân chúc mũi xuống đất thay vì nằm ngang
+  const legPts = (a, kb, toe) => {
+    const k = [hip[0] + Math.sin(a) * s * 0.23, hip[1] + Math.cos(a) * s * 0.23];
+    const f = [k[0] + Math.sin(a - kb) * s * 0.23, k[1] + Math.cos(a - kb) * s * 0.23];
+    const t = toe ? [f[0] + s * 0.04, f[1] + s * 0.045] : [f[0] + s * 0.06, f[1]];
+    return [k, f, t];
+  };
+  if (P?.lean) g.rotate(P.lean);
+  // Có tư thế thì hạ cả người cho điểm thấp nhất của hai chân chạm đất —
+  // gối gập hay kiễng đều làm hông cao thấp khác nhau
+  const bob = P ? -Math.max(...P.legs.map((l) => legPts(...l)[2][1]))
+    : o.stand || down ? 0 : -Math.abs(Math.sin(phase)) * s * 0.025;
   g.translate(0, bob);
   g.strokeStyle = BONE; g.fillStyle = BONE;
   g.lineCap = 'round'; g.lineJoin = 'round';
   g.lineWidth = Math.max(1.2, s * 0.042 * (o.lw ?? 1));
-  const hip = [0, -s * 0.46];
 
   const leg = (p, side) => {
-    let a, kb;
-    if (o.stand) { a = side * 0.09; kb = 0; }
+    let a, kb, toe = false;
+    if (P) [a, kb, toe] = P.legs[side < 0 ? 0 : 1];
+    else if (o.stand) { a = side * 0.09; kb = 0; }
     else { a = Math.sin(p) * 0.55; kb = Math.max(0, -Math.cos(p)) * 0.7; }
-    const k = [hip[0] + Math.sin(a) * s * 0.23, hip[1] + Math.cos(a) * s * 0.23];
-    const f = [k[0] + Math.sin(a - kb) * s * 0.23, k[1] + Math.cos(a - kb) * s * 0.23];
-    g.beginPath(); g.moveTo(...hip); g.lineTo(...k); g.lineTo(...f); g.lineTo(f[0] + s * 0.06, f[1]); g.stroke();
+    const [k, f, t] = legPts(a, kb, toe);
+    g.beginPath(); g.moveTo(...hip); g.lineTo(...k); g.lineTo(...f); g.lineTo(...t); g.stroke();
   };
 
   // Hai chân và chậu đứng yên; nửa trên gập quanh hông khi cúi chào
@@ -260,7 +274,8 @@ export function drawSkeleton(g, x, y, s, o = {}) {
   const sh = [s * 0.03, -s * 0.78];
   const arm = (p, side, back) => {
     let a, eb;
-    if (bow) {
+    if (P) [a, eb] = P.arms[back ? 0 : 1];
+    else if (bow) {
       // Cúi chào: tay trước vắt ngang bụng, tay sau duỗi ra sau
       a = back ? 0.9 : -0.2; eb = back ? 0.2 : -1.4;
     } else if (o.stand) { a = side * 0.12; eb = 0.25; }
@@ -277,7 +292,8 @@ export function drawSkeleton(g, x, y, s, o = {}) {
   }
   arm(phase, 1, false);
 
-  // Đầu lâu
+  // Đầu lâu (cùng mũ) nghiêng quanh cổ; âm là ngửa lên
+  if (P?.tilt) { g.translate(...sh); g.rotate(P.tilt); g.translate(-sh[0], -sh[1]); }
   const hx = sh[0] + s * 0.03, hy = sh[1] - s * 0.13, hr = s * 0.1;
   g.beginPath(); g.arc(hx, hy, hr, 0, Math.PI * 2); g.fill();
   g.fillRect(hx - hr * 0.55, hy + hr * 0.5, hr * 1.1, hr * 0.55);

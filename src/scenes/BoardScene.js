@@ -34,9 +34,12 @@ import {
   paintHauntedHouse, paintHauntedCastle, drawSkeleton,
 } from '../render/halloweenArt.js';
 import { graveLayout, pumpkinSpots, pumpkinSize } from '../render/halloweenDeco.js';
+import { MOVES, movePose, danceAt, STILL_AT } from '../render/dance.js';
 import { batSwarm } from '../ui/batSwarm.js';
 
 /* Người dùng xin bớt chuyển động thì ô đổi trạng thái ngay, không diễn */
+/** Ảnh khung nhảy của bộ xương nghĩa địa: bề rộng, bề cao, cỡ bộ xương, chỗ bàn chân (tỉ lệ bề cao). */
+const DANCE_S = 80, DANCE_W = 136, DANCE_H = 112, DANCE_FOOT = 0.94;
 const REDUCED_MOTION = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
 /* Khoảng thở quanh bàn cờ, tính bằng điểm ảnh CSS */
@@ -326,7 +329,7 @@ export default class BoardScene extends Phaser.Scene {
     this.flakes = [];
     this.events.on(Phaser.Scenes.Events.UPDATE, (time, delta) => this.tickXmas(time, delta / 1000));
 
-    /* Chủ đề Halloween: nghĩa địa giữa bàn có bộ xương đi, dơi bay, sương trôi,
+    /* Chủ đề Halloween: nghĩa địa giữa bàn có hàng bộ xương nhảy, dơi bay, sương trôi,
        trăng đổi đỏ lúc Trăng Máu (depth 0.5, cùng chỗ tuyết rơi). Bia mộ người
        phá sản mọc ở mép trong ô họ ngã xuống — depth 5.8, ngay dưới quân cờ.
        Rỗng ở chủ đề khác. */
@@ -1750,24 +1753,27 @@ export default class BoardScene extends Phaser.Scene {
       });
     }
 
-    // Bộ xương của người còn trụ — mũ màu người chơi, làn xa đi trước
+    /* Bộ xương của người còn trụ đứng một hàng ngang theo thứ tự ghế, nhảy
+       đồng loạt theo `danceAt`; người sau trễ người trước một nhịp ngắn nên
+       mỗi lần đổi dáng chạy thành làn sóng dọc hàng. Hàng trượt qua lại trong
+       hai đoạn moonwalk, `glide` là độ lệch tối đa để người đầu hàng không
+       chạm dây bí ngô. */
     const players = (this.state?.players ?? this.players ?? []).filter((p) => !p.bankrupt);
     this.walkKey = players.map((p) => p.token.key).join(',');
-    const byLane = players.map((p, i) => ({ p, lane: i % 3 })).sort((u, v) => u.lane - v.lane);
-    for (const { p, lane } of byLane) {
-      const keys = this.walkerFrames(p.token);
-      const img = this.add.image(0, 0, keys[0]).setOrigin(0.5, 0.95);
+    const span = L.walk[1] - L.walk[0];
+    const gap = L.size * Math.min(0.12, 0.6 / Math.max(1, players.length));
+    const row = gap * (players.length - 1);
+    this.danceGlide = Math.max(0, Math.min(L.size * 0.16, (span - row) / 2 - L.size * 0.05));
+    players.forEach((p, i) => {
+      const img = this.add.image(0, 0, this.danceFrames(p.token).moon[0]).setOrigin(0.5, DANCE_FOOT);
       this.graveLayer.add(img);
-      const span = L.walk[1] - L.walk[0];
       this.walkers.push({
-        img, keys, lane,
-        x: L.walk[0] + span * Math.random(),
-        dir: Math.random() < 0.5 ? -1 : 1,
-        speed: L.size * (0.022 + Math.random() * 0.012),
-        dist: 0,
-        h: L.size * (0.075 + lane * 0.02),
+        img, frames: this.danceFrames(p.token),
+        x: (L.walk[0] + L.walk[1]) / 2 - row / 2 + gap * i,
+        lag: i * 0.07,
+        h: L.size * 0.1,
       });
-    }
+    });
 
     for (let k = 0; k < 3; k++) {
       const img = this.add.image(0, 0, 'fog').setAlpha(0.55);
@@ -1777,20 +1783,29 @@ export default class BoardScene extends Phaser.Scene {
     this.tickSpooky(0, 0);
   }
 
-  /** Sáu khung bước của bộ xương nghĩa địa, mũ màu người chơi. */
-  walkerFrames(token) {
-    return Array.from({ length: 6 }, (_, k) => {
-      const key = `walk-${token.key}-${k}`;
-      if (!this.textures.exists(key)) {
-        const cv = document.createElement('canvas');
-        cv.width = 96; cv.height = 128;
-        drawSkeleton(cv.getContext('2d'), 46, 124, 96, {
-          phase: (k / 6) * Math.PI * 2, hat: token.css, lw: 1.2,
-        });
-        this.textures.addCanvas(key, cv);
-      }
-      return key;
-    });
+  /**
+   * Khung nhảy của bộ xương nghĩa địa, mũ màu người chơi: `{ moon: [key…], … }`.
+   * Bàn chân đứng giữa bề ngang ảnh để lật mặt và bóp ngang lúc xoay vẫn xoay
+   * quanh chân; ảnh rộng gấp rưỡi bề cao bộ xương vì dáng ngả 45° và đá chân
+   * chìa ra xa.
+   */
+  danceFrames(token) {
+    const out = {};
+    for (const [name, m] of Object.entries(MOVES)) {
+      out[name] = Array.from({ length: m.frames }, (_, k) => {
+        const key = `dance-${token.key}-${name}-${k}`;
+        if (!this.textures.exists(key)) {
+          const cv = document.createElement('canvas');
+          cv.width = DANCE_W; cv.height = DANCE_H;
+          drawSkeleton(cv.getContext('2d'), DANCE_W / 2, DANCE_H * DANCE_FOOT, DANCE_S, {
+            pose: movePose(name, k), hat: token.css, lw: 1.2,
+          });
+          this.textures.addCanvas(key, cv);
+        }
+        return key;
+      });
+    }
+    return out;
   }
 
   /** Số người còn trụ đổi thì dựng lại hàng bộ xương. */
@@ -1799,21 +1814,23 @@ export default class BoardScene extends Phaser.Scene {
     if (key !== this.walkKey) this.layoutSpooky();
   }
 
-  /** Mỗi khung hình: bộ xương đi qua đi lại, dơi bay, sương trôi, trăng máu thở. */
+  /** Mỗi khung hình: hàng bộ xương nhảy, dơi bay, sương trôi, trăng máu thở. */
   tickSpooky(time, dt) {
     if (!this.spooky || !this.walkers) return;
     const L = graveLayout(TEX);
     const still = REDUCED_MOTION();
     const step = still ? 0 : dt;
+    const sec = still ? STILL_AT : time / 1000;
+    // Vị trí cả hàng theo đồng hồ chung, không trễ, để hàng trượt thẳng tắp
+    const shift = danceAt(sec).glide * (this.danceGlide ?? 0);
     for (const w of this.walkers) {
-      w.x += w.dir * w.speed * step;
-      if (w.x > L.walk[1]) { w.x = L.walk[1]; w.dir = -1; }
-      if (w.x < L.walk[0]) { w.x = L.walk[0]; w.dir = 1; }
-      w.dist += w.speed * step;
-      const p = this.toScreen(w.x, L.lanes[w.lane]);
-      const hh = w.h * this.scaleF;
-      w.img.setTexture(w.keys[Math.floor(w.dist / (L.size * 0.012)) % w.keys.length])
-        .setFlipX(w.dir < 0).setPosition(p.x, p.y).setDisplaySize(hh * 0.75, hh);
+      const d = still ? danceAt(sec) : danceAt(sec - w.lag);
+      const p = this.toScreen(w.x + shift, L.lanes[1]);
+      const hh = w.h * this.scaleF * DANCE_H / DANCE_S;
+      const ww = hh * DANCE_W / DANCE_H;
+      w.img.setTexture(w.frames[d.move][d.k])
+        .setFlipX(d.sx < 0).setPosition(p.x, p.y)
+        .setDisplaySize(ww * Math.max(0.12, Math.abs(d.sx)), hh);
     }
     for (const b of this.bats) {
       b.x += b.sp * step;
