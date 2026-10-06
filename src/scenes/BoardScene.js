@@ -1244,14 +1244,9 @@ export default class BoardScene extends Phaser.Scene {
       const wash = this.washOf(own) * dim;
       g.fillStyle(own, wash);
       g.fillRect(-sw / 2, -sh / 2, sw, sh);
-      /* Halloween: nước màu trên mặt ô xám than chỉ ra một sắc trầm, nên thêm
-         viền sáng màu chủ đất sát mép trong ô. Viền nằm trong ô, không lấn ô
-         bên cạnh, nên hai ô liền nhau của hai người vẫn tách rõ. */
-      if (this.spooky) {
-        const lw = Math.max(2, this.size * 0.0042);
-        g.lineStyle(lw, own, mort ? 0.45 : 0.95);
-        g.strokeRect(-sw / 2 + lw / 2 + 1, -sh / 2 + lw / 2 + 1, sw - lw - 2, sh - lw - 2);
-      }
+      /* Không kẻ viền màu chủ đất quanh ô, kể cả ở Halloween: viền đậm bao
+         quanh từng ô làm cả bàn cờ rối mắt, Jason đã bỏ. Nước màu phủ mặt ô
+         là đủ để biết đất của ai. */
       this.overlay.add(g);
 
       // Dải tên ô + sắc nhóm đất nổi lên trên nước màu
