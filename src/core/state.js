@@ -474,26 +474,47 @@ export class GameState {
    * Đất đang thế chấp thì không thu tiền thuê.
    */
   rentFor(tileId, diceSum) {
-    const t = BOARD[tileId];
     const ownerId = this.owner.get(tileId);
     // Giấy tờ thất lạc thì chủ đất chưa đòi tiền ai được, y như đang thế chấp.
     if (ownerId === undefined || this.isMortgaged(tileId) || this.isFrozen(tileId)) return 0;
     if (this.rentBlock(tileId)) return 0;
+    return this.rentAt(tileId, diceSum);
+  }
 
-    /* Đêm Trăng Máu: ô có nhà thu thêm. Ô đất trống đã bị `rentBlock` chặn. */
-    const moon = this.hasMod('blood-moon') && t.type === 'property' ? this.modMult('blood-moon') : 1;
-    const k = this.rentMult(tileId) * ownerRentMult(this, tileId) * moon;
+  /**
+   * Giá thuê niêm yết của ô ở một mức xây dựng, đã nhân sự kiện đang chạy và
+   * kỹ năng của chủ đất. Không xét các luật chặn trọn ô (thế chấp, mất giấy
+   * tờ, xác sống, bị nguyền) — `rentFor` xét trước khi gọi tới đây.
+   *
+   * `at` giả định một mức khác mức đang có, cho bảng giá trong hộp thoại chi
+   * tiết ô: `houses` (0–5), `full` (đủ bộ màu), `count` (số bến / ô công ích
+   * chủ đang giữ). Bỏ trống thì đọc theo bàn cờ lúc này.
+   * @param {{houses?:number, full?:boolean, count?:number}} [at]
+   */
+  rentAt(tileId, diceSum, at = {}) {
+    const t = BOARD[tileId];
+    const ownerId = this.owner.get(tileId);
+    const houses = at.houses ?? this.housesOn(tileId);
+    const count = at.count
+      ?? (ownerId === undefined ? 1
+        : t.type === 'station' ? this.stationCount(ownerId) : this.utilityCount(ownerId));
+
+    let moon = 1;
+    if (this.hasMod('blood-moon') && t.type === 'property') {
+      // Đêm Trăng Máu: đất trống không ai thu, ô có nhà thu thêm.
+      if (houses === 0) return 0;
+      moon = this.modMult('blood-moon');
+    }
+    const k = this.rentMult(tileId) * ownerRentMult(this, tileId, { houses }) * moon;
     // Vé Tháng, Mặt Tiền cộng sau hệ số nhân — xem `ownerRentFlat`
-    const flat = Object.values(ownerRentFlat(this, tileId)).reduce((n, x) => n + x, 0);
+    const flat = Object.values(ownerRentFlat(this, tileId, { count })).reduce((n, x) => n + x, 0);
     let base = 0;
-    if (t.type === 'station') base = STATION_RENT[this.stationCount(ownerId)];
-    else if (t.type === 'utility') base = diceSum * UTILITY_MULT[this.utilityCount(ownerId)];
+    if (t.type === 'station') base = STATION_RENT[count];
+    else if (t.type === 'utility') base = diceSum * UTILITY_MULT[count];
     else if (t.type === 'property') {
-      const h = this.housesOn(tileId);
+      const full = at.full ?? (ownerId !== undefined && this.hasFullGroup(ownerId, t.color_group));
       // Đủ bộ màu mà chưa xây nhà → giá thuê gấp đôi.
-      base = h > 0
-        ? t.rents[h]
-        : (this.hasFullGroup(ownerId, t.color_group) ? t.rents[0] * 2 : t.rents[0]);
+      base = houses > 0 ? t.rents[houses] : (full ? t.rents[0] * 2 : t.rents[0]);
     } else return 0;
     return Math.round(base * k) + flat;
   }

@@ -1569,6 +1569,18 @@ html, body {
 }
 .rent-table .rr.now .rr-name { color: var(--gold-pale); }
 .rent-table .rr.now b { color: var(--gold-light); }
+/* Số in trên thẻ, gạch đi khi sự kiện hay kỹ năng đã đổi giá dòng này */
+.rent-table .rr-base {
+  margin-left: auto; padding-left: 8px;
+  font-size: 10.5px; color: var(--paper-deep); opacity: .6;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.rent-table .rr-base + b { margin-left: 0; padding-left: 6px; }
+.rent-factors {
+  margin-top: 9px;
+  font-size: 11px; line-height: 1.5; color: var(--paper-deep);
+}
+.rent-factors b { color: var(--gold-light); font-weight: 600; }
 
 /* Hình nhà / khách sạn / bến / công ích vẽ bằng SVG */
 .ico { height: 13px; width: auto; flex: none; }

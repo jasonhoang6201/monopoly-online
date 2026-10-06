@@ -5,7 +5,8 @@
 import { paintTileCard, P } from '../render/boardArt.js';
 import { isCorner } from '../render/geometry.js';
 import { houseSvg, hotelSvg } from '../render/glyphs.js';
-import { BOARD, money, tileShortLabel } from '../data/board.js';
+import { BOARD, STATION_RENT, UTILITY_MULT, money, tileShortLabel } from '../data/board.js';
+import { payerRent } from '../core/skills.js';
 
 const cache = new Map();
 
@@ -78,33 +79,66 @@ const repeat = (svg, n) => `<span class="ico-row">${svg.repeat(n)}</span>`;
 
 /**
  * Các mức giá thuê của một ô, kèm hình minh hoạ số nhà / khách sạn.
- * @returns {Array<{ico:string,label:string,value:string,now:boolean}>}
+ *
+ * Số in ra là số thực trả chứ không phải số in trên thẻ: đã nhân sự kiện
+ * đang chạy, kỹ năng của chủ đất, và nếu có `payer` thì cả kỹ năng của người
+ * đáp xuống (Vé Tháng, Sống Sót, phạt chậm của Chủ Nợ). In số gốc thì người
+ * xem đọc một đằng, đáp xuống bị thu một nẻo.
+ * @param {object} [payer] người sẽ trả tiền thuê; bỏ trống hoặc là chủ đất thì
+ *   chỉ tính phía chủ đất
+ * @returns {Array<{ico:string,label:string,value:string,now:boolean,base:string}>}
+ *   `base` là số in trên thẻ, để biết dòng nào đã bị đổi giá
  */
-export function rentLevels(state, tileId) {
+export function rentLevels(state, tileId, payer = null) {
   const t = BOARD[tileId];
   const rows = [];
   const cur = state?.housesOn(tileId) ?? 0;
   const owner = state?.ownerOf(tileId);
   const full = owner && t.type === 'property' && state.hasFullGroup(owner.id, t.color_group);
+  // Chưa có ván (màn chờ) thì không có gì để nhân, in số gốc
+  const pay = (at, dice = 7) => (state
+    ? payerRent(state, payer, tileId, state.rentAt(tileId, dice, at)) : null);
+  const cash = (at, base) => money(pay(at) ?? base);
 
   if (t.type === 'property') {
-    rows.push({ ico: repeat(SVG_DEED, 1), label: 'Đất trống', value: money(t.rents[0]), now: cur === 0 && !full });
-    rows.push({ ico: '<span class="ico-row"><span class="ico-set">★</span></span>', label: 'Đủ bộ màu', value: money(t.rents[0] * 2), now: cur === 0 && !!full });
+    rows.push({ ico: repeat(SVG_DEED, 1), label: 'Đất trống', base: money(t.rents[0]),
+      value: cash({ houses: 0, full: false }, t.rents[0]), now: cur === 0 && !full });
+    rows.push({ ico: '<span class="ico-row"><span class="ico-set">★</span></span>', label: 'Đủ bộ màu',
+      base: money(t.rents[0] * 2), value: cash({ houses: 0, full: true }, t.rents[0] * 2), now: cur === 0 && !!full });
     for (let i = 1; i <= 4; i++) {
-      rows.push({ ico: repeat(SVG_HOUSE, i), label: `${i} nhà`, value: money(t.rents[i]), now: cur === i });
+      rows.push({ ico: repeat(SVG_HOUSE, i), label: `${i} nhà`, base: money(t.rents[i]),
+        value: cash({ houses: i }, t.rents[i]), now: cur === i });
     }
-    rows.push({ ico: repeat(SVG_HOTEL, 1), label: 'Khách sạn', value: money(t.rents[5]), now: cur === 5 });
+    rows.push({ ico: repeat(SVG_HOTEL, 1), label: 'Khách sạn', base: money(t.rents[5]),
+      value: cash({ houses: 5 }, t.rents[5]), now: cur === 5 });
   } else if (t.type === 'station') {
     const n = owner ? state.stationCount(owner.id) : 0;
-    [25, 50, 100, 200].forEach((v, i) => rows.push({
-      ico: repeat(SVG_STATION, i + 1), label: `${i + 1} bến`, value: money(v), now: n === i + 1,
+    [1, 2, 3, 4].forEach((c) => rows.push({
+      ico: repeat(SVG_STATION, c), label: `${c} bến`, base: money(STATION_RENT[c]),
+      value: cash({ count: c }, STATION_RENT[c]), now: n === c,
     }));
   } else if (t.type === 'utility') {
     const n = owner ? state.utilityCount(owner.id) : 0;
-    rows.push({ ico: repeat(SVG_UTILITY, 1), label: '1 ô công ích', value: '4 × xí ngầu', now: n === 1 });
-    rows.push({ ico: repeat(SVG_UTILITY, 2), label: '2 ô công ích', value: '10 × xí ngầu', now: n === 2 });
+    [1, 2].forEach((c) => {
+      const base = `${UTILITY_MULT[c]} × xí ngầu`;
+      rows.push({
+        ico: repeat(SVG_UTILITY, c), label: c === 1 ? '1 ô công ích' : '2 ô công ích', base,
+        value: state ? utilityText(pay({ count: c }, 0), pay({ count: c }, 100)) : base,
+        now: n === c,
+      });
+    });
   }
   return rows;
+}
+
+/**
+ * Công ích thu theo xí ngầu nên không in được một con số. Lấy hai điểm (xí
+ * ngầu 0 và 100) rồi suy ra hệ số và phần cộng thẳng, thay vì chép lại công
+ * thức của `rentAt`: đổi luật ở đó thì chữ ở đây đổi theo.
+ */
+function utilityText(at0, at100) {
+  const k = Math.round((at100 - at0) / 10) / 10;
+  return `${String(k).replace('.', ',')} × xí ngầu${at0 > 0 ? ` + ${money(at0)}` : ''}`;
 }
 
 /** Các khoản tiền cố định của một ô (mua, thế chấp, chuộc, giá nhà). */

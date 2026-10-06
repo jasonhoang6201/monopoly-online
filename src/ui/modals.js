@@ -21,6 +21,8 @@ import { buildGlyphs, buildLabel, houseSvg, hotelSvg, bankSvg, keySvg } from '..
 import { P } from '../render/boardArt.js';
 import { paintSkeletonToken } from '../render/pieces.js';
 import { raisePlan } from '../core/raisePlan.js';
+import { has, param, skillById, ownerRentParts, ownerRentFlat, lateFee } from '../core/skills.js';
+import { modLabel } from '../core/events.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -988,15 +990,64 @@ const CORNER_NOTE = {
 };
 
 /**
+ * Những gì đang làm giá thuê của ô lệch khỏi số in trên thẻ, để người xem
+ * biết vì sao bảng giá không khớp thẻ: sự kiện toàn bàn, kỹ năng của chủ đất,
+ * kỹ năng của người trả. Đọc cùng các hàm mà `rentAt` / `payerRent` dùng,
+ * nên thứ gì được tính vào giá thì có tên ở đây.
+ */
+function rentFactors(state, tileId, payer) {
+  const t = BOARD[tileId];
+  const owner = state.ownerOf(tileId);
+  const out = [];
+  for (const m of state.mods) {
+    if (m.type === 'rent' || (m.type === 'group-rent' && m.group === t.color_group)
+      || (m.type === 'blood-moon' && t.type === 'property')) out.push(modLabel(m));
+  }
+  if (owner) {
+    for (const id of Object.keys(ownerRentParts(state, tileId))) {
+      out.push(id === 'heritage' ? 'Biển Di Sản' : skillById(id).name);
+    }
+    for (const [id, n] of Object.entries(ownerRentFlat(state, tileId))) {
+      if (n > 0) out.push(`${skillById(id).name} +${money(n)}`);
+    }
+  }
+  if (payer && payer.id !== owner?.id) {
+    // Cùng điều kiện với `payerRentMult`
+    if (t.type === 'station' && has(payer, 'dh1')) out.push(`${skillById('dh1').name} của bạn`);
+    if (has(payer, 'acX1') && payer.money < param(payer, 'acX1').under) out.push(`${skillById('acX1').name} của bạn`);
+    if (owner && lateFee(state, payer, tileId, 1000) > 0) out.push(`${skillById('dcX1').name}: bạn đang có ô thế chấp`);
+  }
+  return out;
+}
+
+/** Ô có chủ mà lúc này không thu được tiền thuê: lý do, in lên nhãn của bảng giá. */
+function rentStop(state, tileId) {
+  if (state.isMortgaged(tileId)) return 'Đang thế chấp · miễn thuê';
+  if (state.isFrozen(tileId)) return 'Mất giấy tờ · chưa thu thuê';
+  return {
+    zombie: 'Xác sống chiếm · không thu thuê',
+    curse: 'Chủ đất bị nguyền · không thu thuê',
+    'blood-moon': 'Trăng máu · đất trống không thu',
+  }[state.rentBlock(tileId)] ?? null;
+}
+
+/**
  * Hộp thoại thông tin chi tiết của một ô: thẻ đất, chủ sở hữu,
  * bảng giá thuê đầy đủ có đánh dấu mức đang áp dụng.
+ *
+ * @param {number} [viewerSeat] ghế người đang xem. Khác chủ đất thì bảng giá
+ *   tính luôn kỹ năng của người này, ra đúng số họ trả khi đáp xuống.
  */
-export function tileModal(state, tileId) {
+export function tileModal(state, tileId, viewerSeat = -1) {
   const t = BOARD[tileId];
   const owner = state.ownerOf(tileId);
   const houses = state.housesOn(tileId);
   const mortgaged = state.isMortgaged(tileId);
-  const rents = rentLevels(state, tileId);
+  const viewer = state.players[viewerSeat];
+  const payer = viewer && !viewer.bankrupt ? viewer : null;
+  const rents = rentLevels(state, tileId, payer);
+  const factors = t.ownable ? rentFactors(state, tileId, payer) : [];
+  const stop = owner ? rentStop(state, tileId) : null;
   const prices = priceItems(tileId);
 
   let status = '';
@@ -1021,19 +1072,20 @@ export function tileModal(state, tileId) {
   const rentCard = `
     <section class="info-card">
       <div class="info-card-head">
-        <span>Giá thuê theo mức xây dựng</span>
-        ${nowRent && owner && !mortgaged
-          ? `<span class="now-tag">Đang áp dụng · ${nowRent.value}</span>`
-          : mortgaged ? '<span class="now-tag warn">Đang thế chấp · miễn thuê</span>' : ''}
+        <span>${payer && owner && payer.id !== owner.id ? 'Bạn phải trả theo mức xây dựng' : 'Giá thuê theo mức xây dựng'}</span>
+        ${stop ? `<span class="now-tag warn">${stop}</span>`
+          : nowRent && owner ? `<span class="now-tag">Đang áp dụng · ${nowRent.value}</span>` : ''}
       </div>
       <div class="rent-table">
         ${rents.map((r) => `
           <div class="rr${r.now ? ' now' : ''}">
             <span class="rr-ico">${r.ico}</span>
             <span class="rr-name">${r.label}</span>
+            ${r.base !== r.value ? `<s class="rr-base">${r.base}</s>` : ''}
             <b>${r.value}</b>
           </div>`).join('')}
       </div>
+      ${factors.length ? `<div class="rent-factors">Đã tính: ${factors.map((f) => `<b>${esc(f)}</b>`).join(' · ')}</div>` : ''}
     </section>`;
 
   const costCard = `

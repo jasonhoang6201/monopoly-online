@@ -2991,14 +2991,15 @@ export class Game {
     // Bấm tiếp vào một thẻ đất trong bảng thì mở chi tiết ô đó
     if (res?.openTile != null) {
       await wait(120);
-      await tileModal(this.state, res.openTile);
+      await tileModal(this.state, res.openTile, this.memeSeat());
     }
   }
 
   /** Bấm vào một ô trên bàn cờ → thông tin chi tiết ô. */
   async showTile(tileId) {
     if (this.modalOpen() || !this.state) return;
-    await tileModal(this.state, tileId);
+    // Bảng giá tính cả kỹ năng của người xem, ra đúng số họ trả khi đáp xuống
+    await tileModal(this.state, tileId, this.memeSeat());
   }
 
   // ------------------------------------------------------------- kết thúc

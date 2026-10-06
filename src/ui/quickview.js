@@ -161,12 +161,10 @@ export class QuickView {
       const n = assumeOwners ?? (st?.ownerOf(id) ? st.utilityCount(st.ownerOf(id).id) : 1);
       return `${n >= 2 ? 10 : 4} × xí ngầu`;
     }
-    if (t.type === 'station') {
-      const n = assumeOwners ?? (st?.ownerOf(id) ? st.stationCount(st.ownerOf(id).id) : 1);
-      return money([0, 25, 50, 100, 200][Math.min(4, Math.max(1, n))]);
-    }
-    if (!st || !st.ownerOf(id)) return money(t.rents[0]);
-    return money(st.rentFor(id, 7));
+    // Đã có chủ: qua `rentFor` để nhân sự kiện và kỹ năng chủ đất, như lúc thu thật
+    if (st?.ownerOf(id) && assumeOwners == null) return money(st.rentFor(id, 7));
+    if (st) return money(st.rentAt(id, 7, { houses: 0, full: false, count: 1 }));
+    return money(t.type === 'station' ? 25 : t.rents[0]);
   }
 
   /** Ghi chú cuối bảng: luật của ô + ai đang đứng ở đó. */

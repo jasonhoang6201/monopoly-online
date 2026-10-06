@@ -471,8 +471,8 @@ export function colorsOwned(st, seat) {
  * Nhiều Màu và biển Di Sản của Phố Cổ. Kỹ năng của **người trả** (Vé Tháng)
  * tính riêng ở `payerRentMult`, vì cùng một ô mỗi người trả một giá.
  */
-export function ownerRentMult(st, tileId) {
-  return Object.values(ownerRentParts(st, tileId)).reduce((k, f) => k * f, 1);
+export function ownerRentMult(st, tileId, at = {}) {
+  return Object.values(ownerRentParts(st, tileId, at)).reduce((k, f) => k * f, 1);
 }
 
 /**
@@ -480,12 +480,16 @@ export function ownerRentMult(st, tileId) {
  * mang về cho chủ đất bao nhiêu trong một lần thu thuê (`rentGains`).
  * Biển Di Sản ghi dưới `heritage`: nó thuộc về ô đất, không phải kỹ năng
  * đang học, nên không tính vào tiến độ của ai.
+ *
+ * `at.houses` giả định mức nhà khác mức đang có: bảng giá thuê trong hộp thoại
+ * chi tiết ô in đủ mọi mức, mà Cơn Sốt Đất chỉ ăn đất trống, Nhà Lâu Năm chỉ
+ * ăn ô có nhà.
  */
-export function ownerRentParts(st, tileId) {
+export function ownerRentParts(st, tileId, at = {}) {
   const owner = st.ownerOf(tileId);
   const out = {};
   if (!owner) return out;
-  const houses = st.housesOn(tileId);
+  const houses = at.houses ?? st.housesOn(tileId);
   if (houses === 0 && has(owner, 'dcU')) out.dcU = param(owner, 'dcU').mult;
   if (houses > 0 && has(owner, 'ac2a')) {
     const { perLap, cap } = param(owner, 'ac2a');
@@ -502,13 +506,15 @@ export function ownerRentParts(st, tileId) {
  * Vé Tháng (mỗi bến/ga đang có) và Mặt Tiền (mỗi màu đất đang có). Cộng sau
  * mọi hệ số nhân — số này nhỏ, nhân lên cùng Cơn Sốt Đất thì người có cả hai
  * lời gấp đôi cho cùng một điểm.
+ *
+ * `at.count` giả định số bến chủ đang giữ, cho các dòng 1–4 bến của bảng giá.
  */
-export function ownerRentFlat(st, tileId) {
+export function ownerRentFlat(st, tileId, at = {}) {
   const owner = st.ownerOf(tileId);
   const out = {};
   if (!owner) return out;
   if (BOARD[tileId].type === 'station' && has(owner, 'dh1')) {
-    out.dh1 = param(owner, 'dh1').own * st.stationCount(owner.id);
+    out.dh1 = param(owner, 'dh1').own * (at.count ?? st.stationCount(owner.id));
   }
   if (has(owner, 'acV')) out.acV = param(owner, 'acV').per * colorsOwned(st, owner.id);
   return out;
@@ -539,6 +545,18 @@ export function payerRentMult(st, payer, tileId) {
   if (BOARD[tileId].type === 'station' && has(payer, 'dh1')) k *= param(payer, 'dh1').pay;
   if (has(payer, 'acX1') && payer.money < param(payer, 'acX1').under) k *= param(payer, 'acX1').pay;
   return k;
+}
+
+/**
+ * Số người `payer` thực trả khi tiền thuê niêm yết của ô là `rent`: hệ số của
+ * người trả bớt trước, rồi cộng phạt chậm của Chủ Nợ. Cùng thứ tự với
+ * `rentBill` bên controller, nhưng không ghi tiến độ kỹ năng nên giao diện gọi
+ * được để báo giá. Tiền mặt (Sống Sót) đọc theo lúc gọi.
+ */
+export function payerRent(st, payer, tileId, rent) {
+  if (!payer || st.ownerOf(tileId)?.id === payer.id) return rent;
+  const due = Math.round(rent * payerRentMult(st, payer, tileId));
+  return due + lateFee(st, payer, tileId, due);
 }
 
 /**
