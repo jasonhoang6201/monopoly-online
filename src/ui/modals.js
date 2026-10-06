@@ -313,18 +313,16 @@ export function manageModal(state, playerId, onChange, need = 0) {
         const utils = props.filter((id) => BOARD[id].type === 'utility');
         if (stations.length) groups.push({ label: 'Bến · Nhà ga', hex: '#27418C', ids: stations });
         if (utils.length) groups.push({ label: 'Công ích', hex: '#2E6B52', ids: utils });
-        /* Đang xoay tiền: nhóm có ô nằm trong gợi ý lên đầu bảng, khỏi phải
-           cuộn xuống tìm (bộ màu đắt nhất, chỗ hay có nhà để bán, nằm cuối). */
-        if (hints.size) {
-          const lit = (g) => (g.ids.some((id) => hints.has(id)) ? 0 : 1);
-          groups.sort((a, b) => lit(a) - lit(b));
-        }
+        /* Nhóm giữ nguyên thứ tự bàn cờ cả lúc xoay tiền: ô trong gợi ý đã có
+           kim tuyến, và nút "theo gợi ý" ở đầu bảng bấm hộ được cả loạt, nên
+           không cần đảo nhóm lên đầu — đảo thì ô đổi chỗ sau mỗi cú bấm. */
 
         /* Một lưới hai cột duy nhất cho cả bảng: tiêu đề nhóm màu chiếm trọn
            bề ngang, các ô đất trong nhóm rải thành thẻ hai cột phía dưới.
            Xếp thế thì hai nhóm liền nhau không bị so le, mà mỗi nhóm vẫn
            đứng thành một khối riêng. */
         host.innerHTML = `${plan ? debtPanelHtml(p.money, need, plan, { compact: true }) : ''}
+          ${hints.size ? planApplyBtnHtml(plan) : ''}
           <div class="mg-grid">${groups.map((g) => `
             <div class="asset-group-head">
               <span class="swatch" style="background:${g.hex}"></span>${esc(g.label)}
@@ -335,17 +333,32 @@ export function manageModal(state, playerId, onChange, need = 0) {
 
         host.querySelectorAll('[data-act]').forEach((btn) => {
           btn.addEventListener('click', () => {
-            const id = +btn.dataset.tile;
-            const act = btn.dataset.act;
-            let res;
-            if (act === 'build') res = state.build(playerId, id);
-            else if (act === 'sell') res = state.sellHouse(playerId, id);
-            else if (act === 'mortgage') res = state.mortgage(playerId, id);
-            else if (act === 'redeem') res = state.redeem(playerId, id);
-            onChange?.(act, id, res);
+            run(btn.dataset.act, +btn.dataset.tile);
             render();
           });
         });
+
+        /* Làm hết các bước của gợi ý theo đúng thứ tự `raisePlan` đã thử trên
+           bản sao: bán sạch nhà một bộ thì đất bộ ấy mới cầm được, đảo thứ tự
+           là luật chặn. Mỗi bước vẫn qua
+           `run` như một cú bấm tay, nên bản online ghi đủ từng thao tác. Một
+           bước bị luật chặn thì dừng, phần còn lại để gợi ý tính lại. */
+        host.querySelector('[data-plan-apply]')?.addEventListener('click', () => {
+          for (const s of plan.steps) {
+            if (!run(s.act, s.id)?.ok) break;
+          }
+          render();
+        });
+      };
+
+      const run = (act, id) => {
+        let res;
+        if (act === 'build') res = state.build(playerId, id);
+        else if (act === 'sell') res = state.sellHouse(playerId, id);
+        else if (act === 'mortgage') res = state.mortgage(playerId, id);
+        else if (act === 'redeem') res = state.redeem(playerId, id);
+        onChange?.(act, id, res);
+        return res;
       };
 
       render();
@@ -482,6 +495,16 @@ export function planHints(plan) {
     out.set(s.id, h);
   }
   return out;
+}
+
+/** Nút làm theo cả gợi ý một lần, sáng kim tuyến giống các thẻ trong gợi ý. */
+function planApplyBtnHtml(plan) {
+  const sells = plan.steps.some((s) => s.act === 'sell');
+  const pawns = plan.steps.some((s) => s.act === 'mortgage');
+  const label = sells && pawns ? 'Bán nhà & cầm cố theo gợi ý'
+    : sells ? 'Bán nhà theo gợi ý' : 'Cầm cố theo gợi ý';
+  return `<button class="btn plan-apply" data-plan-apply>
+      <span class="plan-apply-ico">✦</span>${label}<b>+${money(plan.gain)}</b></button>`;
 }
 
 /** Một dòng gợi ý: "Thế chấp [A] [B] · Bán 2 căn ở [C] → +$N". */
