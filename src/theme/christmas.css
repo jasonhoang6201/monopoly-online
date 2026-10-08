@@ -211,7 +211,8 @@
 }
 
 /* ------------------------------------------------------------ hộp thoại */
-:root[data-theme="christmas"] .scrim.show { background: rgba(15, 34, 56, .55); }
+/* `:not(.stashed)`: xem chú thích cùng chỗ trong halloween.css */
+:root[data-theme="christmas"] .scrim.show:not(.stashed) { background: rgba(15, 34, 56, .55); }
 :root[data-theme="christmas"] .modal {
   background:
     linear-gradient(165deg, rgba(255, 255, 255, .06), transparent 42%),

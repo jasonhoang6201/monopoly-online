@@ -558,7 +558,7 @@ const fees = await run(`
   await c.executeTrade({ give: [1], get: [3], giveMoney: 0, getMoney: 0 }, a, b);
   return { broke, cut: broker.money - m1, swapped: s.owner.get(1) === b.id && s.owner.get(3) === a.id };
 `);
-check(fees.broke === 48, `Môi Giới level 2: người khác mua lô 400$ → +12% = 48$ (được ${fees.broke})`);
+check(fees.broke === 72, `Môi Giới level 2: người khác mua lô 400$ → +18% = 72$ (được ${fees.broke})`);
 check(fees.swapped && fees.cut === 30, `Cò Đất level 2: hai người khác đổi 2 lô 60$ → +25% = 30$ (được ${fees.cut})`);
 
 /* ------------------------------------------------ 4c. Chuyến Tàu Xuyên Việt */
@@ -836,16 +836,16 @@ check(treeShape.every((b) => b.rows === '1342' && !b.feats && !b.orphan && b.ult
 await reset();
 const pick = await run(`
   const me = s.current, a = s.players[(s.turn + 1) % 3], b = s.players[(s.turn + 2) % 3];
-  me.pos = 12; a.pos = 12; b.pos = 12; a.money = 1000; b.money = 2000;
-  const r0 = Math.random; Math.random = () => 0;          // trúng 40%, rút đáy khoảng 6%
+  me.pos = 12; a.pos = 12; b.pos = 12; a.money = 1000; b.money = 1500;
+  const r0 = Math.random; Math.random = () => 0;          // trúng 60%, rút đáy khoảng 10%
   me.skills = ['dhX1'];
   const m0 = me.money, b0 = b.money;
   await c.skills.landed(me);
   Math.random = r0;
   return { got: me.money - m0, lost: b0 - b.money, use: me.skillUse.dhX1 };
 `);
-check(pick.got === 120 && pick.lost === 120 && pick.use.gain === 120,
-  `Hai Ngón level 1: lấy 6% (đáy khoảng 6–12%) của người giàu nhất (2000$ → 120$), ghi vào tiến độ (${JSON.stringify(pick)})`);
+check(pick.got === 150 && pick.lost === 150 && pick.use.gain === 150,
+  `Hai Ngón level 1: lấy 10% (đáy khoảng 10–18%) của người giàu nhất (1500$ → 150$), ghi vào tiến độ (${JSON.stringify(pick)})`);
 
 await reset();
 const alone = await run(`
@@ -966,7 +966,7 @@ await reset();
 const buy = await run(`
   const { BOARD } = await import('/src/data/board.js');
   const me = s.current;
-  const locked = K.skillState({ ...me, skills: ['dc1'] }, 'dcX2');
+  const locked = K.skillState({ ...me, skills: ['dcS1'] }, 'dcX2');
   me.pos = 39;
   window.__buyGo = c.resolveOwnable(me, BOARD[39], { a: 1, b: 2, sum: 3 });
   return { locked };
@@ -982,7 +982,7 @@ const buy2 = await run(`
   return { back: me.money - m0, price: BOARD[39].price, use: me.skillUse.dcX2,
            owner: s.owner.get(39) === me.id };
 `);
-check(buy.locked !== 'locked' && buy2.owner, `Khách Sộp học được ngay sau Môi Giới; mua ô trống qua hộp Mua (${JSON.stringify(buy2)})`);
+check(buy.locked !== 'locked' && buy2.owner, `Khách Sộp học được ngay sau Nhặt Hàng Thừa; mua ô trống qua hộp Mua (${JSON.stringify(buy2)})`);
 check(buy2.back === Math.round(buy2.price * 0.18) && buy2.use.gain === buy2.back,
   `Khách Sộp level 2: hoàn 18% giá mua, ghi vào tiến độ (${buy2.back})`);
 

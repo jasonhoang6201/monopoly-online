@@ -416,13 +416,15 @@ export const SKILLS = [
        người đáng móc. `cap` chặn khi đối thủ ôm vài nghìn tiền mặt. Tính cả
        lúc người khác dừng lên ô mình đang đứng: chỉ tính lúc mình dừng thì
        mỗi lượt chưa tới 0,1 lần đứng chung ô, ô cấp 3 này đáng chưa tới 1$
-       mỗi lượt (tests/balance.mjs). */
+       mỗi lượt (tests/balance.mjs). Đứng chung ô vẫn hiếm, nên tỉ lệ và % lấy
+       đặt cao: bản 40% × 6–12% chỉ được ~4,6$/lượt, thấp nhất tầng 3, ít ai
+       đủ tiền kỹ năng để lên level. */
     levels: [
-      { chance: 0.4, pct: [0.06, 0.12], cap: 150 },
-      { chance: 0.5, pct: 0.1, cap: 250 },
-      { chance: 0.6, pct: 0.14, cap: 400 },
+      { chance: 0.6, pct: [0.1, 0.18], cap: 200 },
+      { chance: 0.7, pct: 0.16, cap: 300 },
+      { chance: 0.8, pct: 0.22, cap: 450 },
     ],
-    grow: { by: 'gain', at: [100, 250] },
+    grow: { by: 'gain', at: [80, 200] },
     short: 'Đứng chung ô với người khác thì có lúc móc được tiền của họ.',
     effect: 'Mỗi lần bạn dừng ở ô đang có người khác đứng, hoặc người khác dừng lên ô bạn đang đứng: {%chance} khả năng lấy {%pct} tiền mặt của người đó (bạn dừng thì lấy của người giàu nhất ở ô), tối đa {$cap}.',
     lvText: '{%chance} khả năng lấy {%pct}, tối đa {$cap}',
@@ -608,17 +610,26 @@ export const SKILLS = [
 
   /* ============================================ Nhà Đầu Cơ */
   {
-    id: 'dc1', branch: 'dauco', tier: 1, kind: 'passive', span: 'forever', icon: 'broker',
-    name: 'Môi Giới',
-    levels: [{ rate: [0.05, 0.15] }, { rate: 0.12 }, { rate: 0.18 }],
-    grow: { by: 'gain', at: [100, 250] },
-    short: 'Người khác mua đất thì bạn nhận hoa hồng.',
-    effect: 'Mỗi khi người chơi khác mua đất, bến/ga hay công ty từ ngân hàng (kể cả qua đấu giá), bạn nhận hoa hồng {%rate} giá gốc. Ngân hàng trả, người mua không mất thêm.',
-    lvText: 'Hoa hồng {%rate} giá đất',
+    id: 'dcS1', branch: 'dauco', tier: 1, kind: 'active', once: true, icon: 'basket',
+    name: 'Nhặt Hàng Thừa',
+    /* Bấm để dùng trong lượt của mình, không phải hộp hỏi chen vào lúc người
+       khác vừa bỏ qua ô: không ai phải đứng chờ, và hai người cùng học kỹ năng
+       này thì ai tới lượt trước người đó mua. */
+    uses: 'Reset mỗi khi qua ô Bắt Đầu',
+    when: 'trong lượt của bạn, khi có ô người khác dừng mà không mua',
+    levels: [
+      { price: 0.8, charges: 1, cooldown: 1 },
+      { price: 0.75, charges: 1, cooldown: 1 },
+      { price: 0.7, charges: 2, cooldown: 1 },
+    ],
+    grow: { by: 'uses', at: [1, 2], say: 'Nhặt {n} ô' },
+    short: 'Mua ô người khác dừng mà không mua, ở đâu cũng được.',
+    effect: 'Dùng Nhặt Hàng Thừa: những ô chưa có chủ mà người khác đã dừng chân nhưng không mua sẽ sáng trên bàn cờ; chọn một ô để mua với {%price} giá gốc, dù quân bạn đang ở đâu.',
+    lvText: 'Mua {%price} giá, dùng {charges} lần giữa hai lần qua',
   },
   {
     id: 'dc2a', branch: 'dauco', tier: 2, slot: 'a', kind: 'passive', span: 'forever', icon: 'swap',
-    requires: ['dc1'],
+    requires: ['dcS1'],
     name: 'Cò Đất',
     levels: [{ rate: [0.15, 0.25], cap: 150 }, { rate: 0.25, cap: 250 }, { rate: 0.3, cap: 400 }],
     grow: { by: 'gain', at: [60, 180] },
@@ -628,7 +639,7 @@ export const SKILLS = [
   },
   {
     id: 'dc2b', branch: 'dauco', tier: 2, slot: 'b', kind: 'passive', span: 'forever', icon: 'bricks',
-    requires: ['dc1'],
+    requires: ['dcS1'],
     name: 'Thầu Vật Liệu',
     levels: [{ build: [10, 30], sell: [5, 15] }, { build: 25, sell: 15 }, { build: 40, sell: 20 }],
     grow: { by: 'gain', at: [60, 180] },
@@ -696,7 +707,7 @@ export const SKILLS = [
   },
   {
     id: 'dcX2', branch: 'dauco', tier: 2, slot: 'c', kind: 'passive', span: 'forever', icon: 'receipt',
-    requires: ['dc1'],
+    requires: ['dcS1'],
     name: 'Khách Sộp',
     levels: [{ back: [0.1, 0.2] }, { back: 0.18 }, { back: 0.25 }],
     grow: { by: 'lands', at: [5, 7] },
@@ -705,23 +716,16 @@ export const SKILLS = [
     lvText: 'Hoàn {%back} giá mua',
   },
   {
-    id: 'dcS1', branch: 'dauco', tier: 3, slot: 'c', kind: 'active', once: true, icon: 'basket',
+    id: 'dc1', branch: 'dauco', tier: 3, slot: 'c', kind: 'passive', span: 'forever', icon: 'broker',
     requires: ['dc2b'],
-    name: 'Nhặt Hàng Thừa',
-    /* Bấm để dùng trong lượt của mình, không phải hộp hỏi chen vào lúc người
-       khác vừa bỏ qua ô: không ai phải đứng chờ, và hai người cùng học kỹ năng
-       này thì ai tới lượt trước người đó mua. */
-    uses: 'Reset mỗi khi qua ô Bắt Đầu',
-    when: 'trong lượt của bạn, khi có ô người khác dừng mà không mua',
-    levels: [
-      { price: 0.8, charges: 1, cooldown: 1 },
-      { price: 0.75, charges: 1, cooldown: 1 },
-      { price: 0.7, charges: 2, cooldown: 1 },
-    ],
-    grow: { by: 'uses', at: [1, 2], say: 'Nhặt {n} ô' },
-    short: 'Mua ô người khác dừng mà không mua, ở đâu cũng được.',
-    effect: 'Dùng Nhặt Hàng Thừa: những ô chưa có chủ mà người khác đã dừng chân nhưng không mua sẽ sáng trên bàn cờ; chọn một ô để mua với {%price} giá gốc, dù quân bạn đang ở đâu.',
-    lvText: 'Mua {%price} giá, dùng {charges} lần giữa hai lần qua',
+    name: 'Môi Giới',
+    /* Ô gốc cũ, dời xuống nhánh phụ 2 điểm nên hoa hồng nâng lên (5–15/12/18%
+       thành 10–20/18/25%) cho đáng hai điểm. */
+    levels: [{ rate: [0.1, 0.2] }, { rate: 0.18 }, { rate: 0.25 }],
+    grow: { by: 'gain', at: [100, 250] },
+    short: 'Người khác mua đất thì bạn nhận hoa hồng.',
+    effect: 'Mỗi khi người chơi khác mua đất, bến/ga hay công ty từ ngân hàng (kể cả qua đấu giá), bạn nhận hoa hồng {%rate} giá gốc. Ngân hàng trả, người mua không mất thêm.',
+    lvText: 'Hoa hồng {%rate} giá đất',
   },
   {
     id: 'dcS2', branch: 'dauco', tier: 3, slot: 'd', kind: 'active', icon: 'handshake',
@@ -865,13 +869,13 @@ export const BUILDS = [
   },
   {
     name: 'Địa Chủ Lấn Đất',
-    skills: ['dc1', 'dc2a', 'dc3', 'acX2', 'ac1'],
-    note: 'Môi Giới và Cò Đất kiếm tiền từ người khác, đủ vốn Thâu Tóm ô còn thiếu của bộ màu rồi xây ngay với Mái Ấm.',
+    skills: ['dcS1', 'dc2a', 'dc3', 'acX2', 'ac1'],
+    note: 'Nhặt Hàng Thừa gom ô người khác bỏ, Cò Đất kiếm tiền từ người khác, đủ vốn Thâu Tóm ô còn thiếu của bộ màu rồi xây ngay với Mái Ấm.',
   },
   {
     name: 'Cò Mồi Sài Thành',
-    skills: ['dc1', 'dc2a', 'dc2b', 'dc3', 'dcU'],
-    note: 'Học hết nhánh Đầu Cơ: người khác mua đất, đổi đất, xây nhà đều ra tiền cho bạn; gom càng nhiều đất lẻ thì Cơn Sốt Đất càng lời.',
+    skills: ['dcS1', 'dc2a', 'dc2b', 'dc3', 'dcU'],
+    note: 'Học thẳng nhánh Đầu Cơ: ô người khác bỏ thì nhặt rẻ, người khác đổi đất, xây nhà đều ra tiền cho bạn; gom càng nhiều đất lẻ thì Cơn Sốt Đất càng lời.',
   },
   {
     name: 'Thợ Cả Tích Cóp',

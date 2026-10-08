@@ -39,7 +39,8 @@ const { BOARD, STATION_RENT, UTILITY_MULT, GO_SALARY, GO_LANDING_MULT, JAIL_FINE
 /* ================================================================ 1. mô phỏng di chuyển */
 
 const die = () => 1 + Math.floor(Math.random() * 6);
-const decks = { chance: C.CHANCE, chest: C.CHEST };
+// Mô hình chạy chủ đề mặc định: bỏ thẻ riêng của Halloween / Giáng Sinh
+const decks = { chance: C.CHANCE.filter((c) => !c.theme), chest: C.CHEST.filter((c) => !c.theme) };
 const NEAREST = { station: [5, 15, 25, 35], utility: [12, 28] };
 
 const f = new Float64Array(40);      // dừng ở ô t, mỗi lượt

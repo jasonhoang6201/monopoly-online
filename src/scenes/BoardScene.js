@@ -2239,13 +2239,16 @@ export default class BoardScene extends Phaser.Scene {
     /* Trên nền đã tối, nước vàng phủ mặt ô chỉ cần mỏng — đủ để ô chọn được ngả
        ấm hơn ô thường, không đủ để lấp mất nước màu chủ đất hay tên đất. Ô đang
        chờ xác nhận (`focus`) dày tay hơn cho khỏi lẫn với phần còn lại. */
-    const color = o.color ?? 0xC8A048;
+    const color = o.color ?? (this.spooky ? 0xE6D9BC : 0xC8A048);
+    /* Ô Halloween nền gần đen: nước vàng 14% trên đó gần như không đổi màu,
+       ô sáng lẫn với ô bị phủ tối. Dùng màu xương, dày tay hơn. */
+    const tint = this.spooky ? 0.26 : 0.14;
     const marks = ids.map((id) => {
       const focus = id === o.focus;
       const on = selSet.has(id);
       const base = focus || on ? 1 : 0.9;
-      const r = this.add.rectangle(0, 0, 1, 1, on ? 0x4E9576 : color, focus || on ? 0.34 : 0.14)
-        .setStrokeStyle(Math.max(2, this.size * 0.005),
+      const r = this.add.rectangle(0, 0, 1, 1, on ? 0x4E9576 : color, focus || on ? 0.34 : tint)
+        .setStrokeStyle(Math.max(2, this.size * (this.spooky ? 0.007 : 0.005)),
           on ? 0xBFF0D8 : 0xFFE9B0, base)
         // Đặt đúng độ sáng của nhịp ngay lúc dựng, không chờ `onUpdate` khung sau
         .setAlpha(this.markPulse(base));
