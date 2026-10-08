@@ -42,7 +42,7 @@ function canvas(w, h) {
  * @param {number} s cạnh texture
  */
 export function paintToken(css, s = 160) {
-  // Halloween: quân là bộ xương đội mũ phù thuỷ màu người chơi
+  // Halloween: quân là bộ xương đầu trần, màu người chơi nằm ở quầng và đế
   if (P.theme === 'halloween') return paintSkeletonToken(css, s);
   const cv = canvas(s, s * 1.12);
   const ctx = cv.getContext('2d');
@@ -202,9 +202,9 @@ export const WALK_FRAMES = 4;
  * Quân bộ xương cho chủ đề Halloween, cùng khung `s × 1.12s` và cùng điểm
  * chân (0.5, 0.86) với quân thường để `BoardScene` đặt quân không phải đổi gì.
  *
- * Bộ xương màu xương thì sáu quân như nhau, nên màu người chơi nằm ở hai chỗ
- * to nhất: cả cái mũ phù thuỷ, và cái đế tròn dưới chân (giữ vành vàng như
- * quân thường). Nét xương dày gấp rưỡi bộ xương trong nghĩa địa: quân trên
+ * Bộ xương màu xương thì sáu quân như nhau, nên màu người chơi nằm ở quầng
+ * sáng ôm quanh thân và cái đế tròn dưới chân (giữ vành vàng như quân
+ * thường). Quầng đã đủ để nhận quân nên quân không đội mũ phù thuỷ nữa. Nét xương dày gấp rưỡi bộ xương trong nghĩa địa: quân trên
  * bàn chỉ cao chừng 50 điểm ảnh, nét mảnh thì vỡ vụn.
  *
  * @param {object} [o] `frame` = khung bước đi 0…WALK_FRAMES−1 (bỏ trống là
@@ -238,7 +238,7 @@ export function paintSkeletonToken(css, s = 160, o = {}) {
   /* Bộ xương vẽ riêng ra một lớp rồi mới dán lên, để quanh nó có được hai
      lớp tách nền: viền đen sát nét (xương trắng đứng trên ô sáng vẫn có mép)
      rồi vành màu người chơi có quầng sáng (đứng trên ô tối vẫn nổi, và nhìn
-     cả thân quân là biết của ai chứ không chỉ cái mũ). Nét xương mảnh, thiếu
+     cả thân quân là biết của ai). Nét xương mảnh, thiếu
      hai lớp này thì quân chìm vào mặt ô. */
   const sk = canvas(s, s * 1.12);
   const walking = o.frame != null;
@@ -246,8 +246,6 @@ export function paintSkeletonToken(css, s = 160, o = {}) {
     stand: !walking && !o.bow,
     phase: walking ? (o.frame / WALK_FRAMES) * Math.PI * 2 : 0,
     bow: o.bow ?? 0,
-    hat: css,
-    band: shade(css, -0.5),
     lw: 1.5,
   });
 

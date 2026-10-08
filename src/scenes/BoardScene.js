@@ -2034,7 +2034,7 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   /**
-   * Màn thắng Halloween: bộ xương đội mũ màu người thắng đứng giữa nghĩa địa,
+   * Màn thắng Halloween: bộ xương có quầng màu người thắng đứng giữa nghĩa địa,
    * cúi chào ba lần trong lúc pháo hoa nổ, rồi lui đi.
    */
   skeletonBow(css) {
