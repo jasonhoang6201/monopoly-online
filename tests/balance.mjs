@@ -225,7 +225,7 @@ const EV = {
   cn2a: () => P.go * prm('cn2a').bonus,
   cn2b: () => {
     const tax = f[4] * 200 + f[38] * 100;
-    const cards = P.chance * badCost(C.CHANCE, 7).p * badCost(C.CHANCE, 7).cost * 0.6 + P.chest * badCost(C.CHEST, 17).p * badCost(C.CHEST, 17).cost * 0.6;
+    const cards = P.chance * badCost(decks.chance, 7).p * badCost(decks.chance, 7).cost * 0.6 + P.chest * badCost(decks.chest, 17).p * badCost(decks.chest, 17).cost * 0.6;
     return (tax + cards) * (1 - prm('cn2b').pay);
   },
   cn3: () => P.go * Math.min(prm('cn3').cap, prm('cn3').perLap * LAPS_MID),
@@ -234,8 +234,8 @@ const EV = {
   cnS1: () => {
     const good = (deck) => deck.filter((c) => (c.type ?? 'bank') === 'bank' && c.amount > 0);
     const gv = (deck) => good(deck).reduce((n, c) => n + c.amount, 0) / deck.length;
-    return prm('cnS1').chance * (P.chance * badCost(C.CHANCE, 7).p * badCost(C.CHANCE, 7).cost + P.chest * badCost(C.CHEST, 17).p * badCost(C.CHEST, 17).cost)
-      + prm('cnS1').bonus * (P.chance * gv(C.CHANCE) + P.chest * gv(C.CHEST));
+    return prm('cnS1').chance * (P.chance * badCost(decks.chance, 7).p * badCost(decks.chance, 7).cost + P.chest * badCost(decks.chest, 17).p * badCost(decks.chest, 17).cost)
+      + prm('cnS1').bonus * (P.chance * gv(decks.chance) + P.chest * gv(decks.chest));
   },
   cnS2: () => {  // * mỗi lượt ngồi yên cuối ván né được R_OUT, mất phần lương tương ứng
     const q = prm('cnS2');
@@ -273,7 +273,7 @@ const EV = {
   dd3: () => perLapDodge(DODGE.reroll, prm('dd3').charges, prm('dd3').cooldown),
   ddX2: () => 0.5 * 100 * prm('ddX2').back,
   ddX1: () => Math.max(0, (15 / 36) * 100 * prm('ddX1').payout - (21 / 36) * 100 - (0.5 * 100 * prm('dd2a').payout - 50)),
-  ddS1: () => { const q = prm('ddS1'); return P.chance * bestOf(C.CHANCE, q.draw, 7) + (q.chest ? P.chest * bestOf(C.CHEST, q.draw, 17) : 0); },
+  ddS1: () => { const q = prm('ddS1'); return P.chance * bestOf(decks.chance, q.draw, 7) + (q.chest ? P.chest * bestOf(decks.chest, q.draw, 17) : 0); },
   ddS2: () => P.go * GO_SALARY * (prm('ddS2').win * 2 + (1 - prm('ddS2').win) * 0.5 - 1),
   ddU: () => { const q = prm('ddU'); return (0.5 * OPP * CASH * q.win - 0.5 * OPP * CASH * q.lose) / (q.cooldown * LAP); },
   ddV: () => OPP * P.rolls * prm('ddV').ev,

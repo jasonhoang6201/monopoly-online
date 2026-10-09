@@ -3698,3 +3698,142 @@ html, body {
   .btn:hover:not(:disabled) { filter: none; }
   .rchip:hover { box-shadow: none; }
 }
+
+/* ------------------------------------------------------------
+   Chat phòng online (ui/chat.js)
+   Đứng trên lớp hộp thoại (#modal-root z 50): phòng chờ là một hộp thoại,
+   và đang có hộp mua đất mở dở thì vẫn phải nhắn được.
+   ------------------------------------------------------------ */
+#chat-btn {
+  position: fixed;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: max(14px, env(safe-area-inset-bottom));
+  z-index: 56;
+  width: 44px; height: 44px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 19px; line-height: 1;
+  background: linear-gradient(180deg, rgba(74, 36, 26, .94), rgba(48, 21, 15, .97));
+  border: 1px solid var(--gold-deep);
+  color: var(--gold-light);
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  transition: transform .2s var(--ease-out-back), border-color .2s;
+}
+#chat-btn[hidden] { display: none; }
+#chat-btn:hover, #chat-btn.on { transform: scale(1.06); border-color: var(--gold-light); }
+#chat-btn:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
+.chat-badge {
+  position: absolute; top: -4px; right: -4px;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 9px;
+  display: grid; place-items: center;
+  font-size: 10.5px; font-weight: 700; line-height: 1;
+  background: #C0392B; color: #fff;
+  border: 1.5px solid rgba(18, 9, 6, .9);
+}
+.chat-badge[hidden] { display: none; }
+
+/* Trích đoạn tin mới, nằm bên trái nút lúc khung đang đóng */
+#chat-peek {
+  position: fixed;
+  right: calc(max(14px, env(safe-area-inset-right)) + 54px);
+  bottom: calc(max(14px, env(safe-area-inset-bottom)) + 4px);
+  z-index: 56;
+  max-width: min(320px, calc(100vw - 90px));
+  padding: 8px 12px;
+  border-radius: 12px 12px 4px 12px;
+  background: linear-gradient(180deg, rgba(36, 17, 12, .97), rgba(18, 9, 6, .98));
+  border: 1px solid var(--gold-deep);
+  box-shadow: var(--shadow-lg);
+  color: var(--paper);
+  font-size: 13px; line-height: 1.35;
+  cursor: pointer;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  animation: meme-pop-in .18s var(--ease-out-back) both;
+}
+#chat-peek[hidden] { display: none; }
+#chat-peek b, .chat-msg b { font-weight: 700; margin-right: 6px; }
+
+#chat-dock {
+  position: fixed;
+  right: max(14px, env(safe-area-inset-right));
+  bottom: calc(max(14px, env(safe-area-inset-bottom)) + 54px);
+  z-index: 56;
+  width: min(320px, calc(100vw - 28px));
+  height: min(380px, calc(100vh - 100px));
+  display: flex; flex-direction: column;
+  border-radius: 12px;
+  background:
+    linear-gradient(165deg, rgba(239, 226, 198, .05), transparent 46%),
+    linear-gradient(180deg, rgba(36, 17, 12, .97), rgba(18, 9, 6, .98));
+  border: 1px solid var(--gold-deep);
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 225, 170, .14);
+  color: var(--paper);
+  overflow: hidden;
+  animation: meme-pop-in .18s var(--ease-out-back) both;
+}
+#chat-dock[hidden] { display: none; }
+.chat-head {
+  flex: none;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px 8px 14px;
+  border-bottom: 1px solid rgba(200, 160, 72, .2);
+  font-size: 11px; letter-spacing: .14em; color: var(--gold);
+}
+.chat-x {
+  border: 0; background: transparent; color: var(--paper-deep);
+  font-size: 13px; cursor: pointer; padding: 4px 6px; border-radius: 6px;
+}
+.chat-x:hover { color: var(--gold-light); background: rgba(200, 160, 72, .14); }
+.chat-list {
+  flex: 1; min-height: 0;
+  margin: 0; padding: 8px 12px;
+  list-style: none;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 6px;
+  font-size: 13px; line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.chat-list:empty::before {
+  content: "Chưa ai nói gì. Tin nhắn không được lưu lại — vào sau là không thấy.";
+  margin: auto; text-align: center; font-size: 12px; opacity: .55;
+}
+.chat-msg.mine span { color: var(--gold-pale); }
+.chat-form {
+  flex: none;
+  display: flex; gap: 6px;
+  padding: 8px;
+  border-top: 1px solid rgba(200, 160, 72, .2);
+}
+.chat-input {
+  flex: 1; min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(200, 160, 72, .35);
+  background: rgba(0, 0, 0, .3);
+  color: var(--paper);
+  font: inherit; font-size: 14px;
+}
+.chat-input:focus { outline: none; border-color: var(--gold-light); }
+.chat-send {
+  flex: none; width: 38px;
+  border-radius: 8px;
+  border: 1px solid var(--gold-deep);
+  background: linear-gradient(180deg, #B98A34, #8A6A22);
+  color: var(--ink);
+  font-size: 15px; cursor: pointer;
+}
+.chat-send:hover { filter: brightness(1.1); }
+.chat-note {
+  flex: none;
+  padding: 0 10px 8px;
+  font-size: 11.5px; color: #F0A08A;
+}
+.chat-note[hidden] { display: none; }
+
+/* Điện thoại nằm ngang: màn thấp, nút nhỏ lại cho đỡ đè góc bàn cờ */
+@media (max-height: 500px) {
+  #chat-btn { width: 36px; height: 36px; font-size: 16px; }
+  #chat-dock { bottom: calc(max(10px, env(safe-area-inset-bottom)) + 46px); height: calc(100vh - 70px); }
+  #chat-peek { right: calc(max(14px, env(safe-area-inset-right)) + 46px); }
+}

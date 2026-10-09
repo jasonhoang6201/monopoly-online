@@ -36,7 +36,11 @@ mục **Đưa lên mạng** trong [`ONLINE.md`](ONLINE.md).
 
 ## Cách chơi
 
-**2–6 người** luân phiên trên **cùng một máy** (hot-seat). Mỗi người khởi đầu 1.500$.
+**2–6 người**, mỗi người khởi đầu 1.500$. Màn mở đầu cho chọn hai kiểu:
+
+- **Mở phòng online** — mỗi người một máy, ai có đường mời là vào được. Kiến trúc
+  xem [`ONLINE.md`](ONLINE.md).
+- **Chơi trên một máy** — cả bàn ngồi quanh, chuyền máy cho nhau theo lượt (hot-seat).
 
 ### Điều khiển
 
@@ -320,17 +324,29 @@ assets/board-info.json     dữ liệu 40 ô (có sẵn từ trước)
 src/
   data/board.js            bảng giá thuê đầy đủ, giá thế chấp, nhãn hiển thị
   data/cards.js            bộ thẻ Cơ Hội + Khí Vận
-  core/state.js            trạng thái ván + toàn bộ luật (thuần dữ liệu, không phụ thuộc UI)
-  render/                  hình hoạ: hình học bàn cờ, hoa văn, biểu tượng, quân cờ
+  data/events.js           bộ thẻ Thời Cuộc
+  data/skills.js           cây kỹ năng: nhánh, bậc, chi phí
+  data/themes.js           danh sách chủ đề và luật lọc thẻ theo chủ đề
+  core/state.js            trạng thái ván + luật gốc (thuần dữ liệu, không phụ thuộc UI)
+  core/serialize.js        trạng thái ván ↔ ảnh chụp JSON phát cho các máy khác
+  core/events.js           luật thẻ Thời Cuộc: thanh áp lực, kế hoạch sự kiện, cấn nợ tự động
+  core/skills.js           luật học kỹ năng
+  core/cards.js            luật thẻ giữ trong túi
+  core/raisePlan.js        gợi ý xoay tiền khi thiếu nợ
+  render/                  hình hoạ: hình học bàn cờ, hoa văn, biểu tượng, quân cờ, trang trí theo mùa
   scenes/BoardScene.js     Phaser: bàn cờ, quân, xí ngầu, hiệu ứng
   ui/hud.js                thẻ người chơi, thông báo giữa bàn
   ui/quickview.js          bảng xem nhanh ô đang rê chuột
   ui/modals.js             các hộp thoại (mua, quản lý, giao dịch, chi tiết ô…)
   ui/caseOpen.js           băng chuyền bóc thẻ: dải thẻ trôi rồi hãm lại ở thẻ trúng
+  ui/skillTree.js          bảng cây kỹ năng
+  ui/lobby.js              phòng chờ, chọn nấc Thời Cuộc và chủ đề
   game/controller.js       điều phối lượt chơi, nối luật ↔ hình ảnh ↔ giao diện
-  audio/audio.js           nhạc và âm thanh tổng hợp
-  net/supabase.js          nối Supabase Realtime (chỉ có ở bản online)
-  net/room.js              phòng chơi: presence, ý định ↔ trạng thái
+  game/eventRunner.js      thi hành thẻ Thời Cuộc, hỏi nhiều người cùng lúc
+  game/skillPlay.js        phần kỹ năng phải hỏi người chơi hoặc có hoạt cảnh
+  theme/                   đổi chủ đề (Halloween, Giáng sinh)
+  audio/                   nhạc và âm thanh tổng hợp, kèm bộ theo mùa
+  net/                     phòng, phiên, đường truyền, danh tính — xem ONLINE.md
 ```
 
 Bàn cờ và quân cờ vẽ bằng Phaser (canvas); HUD và các hộp thoại là HTML phủ lên trên

@@ -327,7 +327,7 @@ for (let step = 0; played < TURNS; step++) {
   } else if (Date.now() - lastMove > 90000) {
     fails.push(`kẹt ở lượt ${inv.turnNo}`);
     console.log('  ✗ ván đứng yên 90 giây:', JSON.stringify(await diagnose()));
-    await page.screenshot({ path: 'test-result-skills-play-stuck.png' }).catch(() => {});
+    await page.screenshot({ path: 'test-result/skills-play-stuck.png' }).catch(() => {});
     break;
   }
 

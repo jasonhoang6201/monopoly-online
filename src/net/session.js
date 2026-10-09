@@ -14,6 +14,7 @@ import { me, reclaimSeat, holdSeat, dropSeat, lastSeat } from './identity.js';
 import { openModal } from '../ui/modal.js';
 import { lobbyModal, kickedModal, fullModal } from '../ui/lobby.js';
 import { audio } from '../audio/audio.js';
+import { chatDock } from '../ui/chat.js';
 
 const homeUrl = () => `${window.location.origin}${window.location.pathname}`;
 
@@ -137,6 +138,8 @@ export async function startSession(controller) {
 
     misses = 0;
     showCodeInUrl(code);
+    // Chat mở từ phòng chờ, theo luôn vào ván — cùng một phòng, cùng một khung
+    chatDock().attach(room);
 
     // Ván đang chạy và mình vẫn còn ghế → vào lại đúng chỗ cũ.
     if (room.phase === 'playing') {

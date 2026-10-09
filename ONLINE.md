@@ -145,6 +145,22 @@ gửi về danh sách thao tác đã bấm, còn ván gốc thì người cầm 
 thao tác qua đúng cửa luật của `GameState` (`applyRaiseActs`). Hết giờ hay rớt
 mạng thì ngân hàng cấn nợ hộ (`autoCover`), y như nấc cấn nợ của thẻ Thời Cuộc.
 
+## Chat
+
+Nút 💬 ở góc phải dưới, có từ lúc vào phòng chờ tới hết ván (`src/ui/chat.js`).
+Tin đi thẳng qua đường truyền của phòng — tin `chat` mang `{ id, text }` —
+**không lưu ở đâu**: không vào ảnh chụp ván, không vào Supabase. Ai vào sau hay
+bấm F5 thì thấy khung trống.
+
+- Tên và màu người nói tra từ **sổ ghế ở máy nhận**, không lấy từ tin gửi tới,
+  nên không ai mạo tên người khác được. Người ngoài sổ ghế nói thì bỏ qua.
+- Nội dung luôn thoát HTML trước khi vẽ; cắt ở 200 ký tự.
+- Hạn mức 5 tin / 6 giây ở máy gửi, 8 tin / 6 giây ở máy nhận (chặn máy sửa mã).
+- Khung đứng **trên** lớp hộp thoại, nên ngồi phòng chờ hay đang mở hộp mua đất
+  vẫn nhắn được. Vì thế hộp thoại bỏ qua Enter/Esc gõ từ ô nhập nằm ngoài nó —
+  không thì Enter gửi tin cũng bấm luôn nút "Mua".
+- Enter (lúc không có hộp thoại) mở khung; Esc trong ô gõ đóng khung.
+
 ## Hai đường truyền
 
 | | Nối được gì | Khi nào dùng |
@@ -163,7 +179,7 @@ dòng cảnh báo rõ khi đang chạy đường nội bộ.
 | `src/net/transport.js` | Hai đường truyền cùng một giao diện; `makeTransport()` tự chọn. |
 | `src/net/room.js` | Sổ ghế, sức chứa, sẵn sàng, mời ra (phòng chờ), trọng tài, hỏi–đáp. `makeRoomCode()`, `inviteLink()`. |
 | `src/net/session.js` | Chọn chế độ → mở/vào phòng → phòng chờ → trao ván cho controller; cả đường vào lại giữa ván. |
-| `src/net/identity.js` | `id` theo tab (sessionStorage) nên hai tab là hai người chơi; `name` theo máy. |
+| `src/net/identity.js` | `id` theo tab (sessionStorage) nên hai tab là hai người chơi; `name` theo máy; phiếu giữ ghế (localStorage) để tab mới nhận lại ghế giữa ván. |
 | `src/core/serialize.js` | `GameState` ↔ JSON: `Map`, `Set`, `Deck` không tự qua được `JSON.stringify`. |
 | `src/ui/lobby.js` | Phòng chờ, chọn nấc thẻ Thời Cuộc, các hộp thoại bị mời ra / phòng đầy. |
 | `src/core/events.js` | Luật thẻ Thời Cuộc: thanh áp lực, rút thẻ, **kế hoạch** của mỗi sự kiện, cấn nợ tự động. Thuần dữ liệu như `state.js`. |
@@ -186,7 +202,11 @@ sự kiện. Nấc luật đi kèm sổ ghế (`room.options`) và nằm trong �
 (`snapshot.settings`), nên người vào lại giữa ván chơi đúng bộ luật của bàn.
 
 Vì `id` nằm trong sessionStorage nên **bấm F5 hay rớt mạng rồi vào lại thì về
-đúng ghế cũ**, còn đóng hẳn tab rồi mở tab mới thì thành người lạ — coi như bỏ ván.
+đúng ghế cũ**. Đóng hẳn tab rồi mở tab mới thì `identity.js` nhận lại ghế qua
+*phiếu giữ ghế* lưu ở localStorage theo mã phòng — chỉ khi ván đã khai cuộc và
+không tab nào cùng máy đang cầm id ấy (hỏi qua BroadcastChannel), nên hai tab
+cùng máy vẫn là hai người. Màn chọn chế độ cũng hiện nút *Vào lại phòng …* cho
+ván dở gần nhất.
 
 ## Dựng dự án Supabase
 
@@ -283,10 +303,8 @@ vì mở thêm một tab thật. Hộp thoại `fullModal` vì thế chưa đư�
 - **Ván sống lại sau khi tắt hết máy.** Trạng thái chỉ nằm trong bộ nhớ các máy
   đang mở; người cuối cùng đóng tab là ván mất. Muốn giữ thì cần bảng Postgres
   `rooms(code, snapshot jsonb, updated_at)`, trọng tài ghi sau mỗi lượt.
-- **Đóng hẳn tab rồi quay lại.** `id` nằm trong sessionStorage nên tab mới là
-  người lạ, không nhận lại ghế cũ. Muốn chữa thì phải cấp thêm một vé đổi ghế
-  lưu ở localStorage theo mã phòng — nhưng như thế hai tab trên cùng một máy sẽ
-  giành nhau một ghế, nên chưa làm.
+- **Quay lại từ máy khác.** Phiếu giữ ghế nằm trong localStorage, nên đổi trình
+  duyệt hay đổi máy thì thành người lạ, không nhận lại ghế cũ.
 - **Chống gian lận.** Máy nào tới lượt thì tự gieo xí ngầu, nên người sửa mã
   trong trình duyệt có thể ăn gian. Đủ cho ván chơi giữa bạn bè; muốn chặt thì
   phải đưa luật lên Edge Function. Lưu ý: seed xí ngầu **không** chữa được —
