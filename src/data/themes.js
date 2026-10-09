@@ -25,6 +25,11 @@ export const THEMES = {
     name: 'Halloween · Nghĩa Địa Đô Thành',
     desc: 'Bàn cờ đen tím, nghĩa địa giữa bàn, quân là bộ xương, đèn bí ngô, nhạc Danse Macabre, thêm ba sự kiện và thẻ Bị Nguyền.',
   },
+  tet: {
+    key: 'tet',
+    name: 'Tết · Xuân Sài Gòn',
+    desc: 'Mai vàng, đào hồng, đèn lồng giữa bàn, hoa rơi, tiền bay thành bao lì xì, qua ô Bắt Đầu nổ pháo, nhạc đàn tranh. Luật giữ nguyên.',
+  },
 };
 
 export const DEFAULT_THEME = 'default';

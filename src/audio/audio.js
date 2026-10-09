@@ -23,6 +23,8 @@
 import { SONGS, PLAYLISTS, scheduleSongBar, barSeconds } from './xmasSongs.js';
 import { XMAS_SFX } from './xmasSfx.js';
 import { HALLOWEEN_SFX } from './halloweenSfx.js';
+import { TET_SFX } from './tetSfx.js';
+import { TET_SONGS, TET_PLAYLISTS, scheduleTetBar, tetBarSeconds } from './tetSongs.js';
 import {
   HALLOWEEN_SONGS, HALLOWEEN_PLAYLISTS, scheduleSpookyBar, spookyBarSeconds,
 } from './halloweenSongs.js';
@@ -119,7 +121,7 @@ export class Audio {
     this.started = false;
     /** Đang ở màn hình chờ — nơi duy nhất được phép có nhạc nền. */
     this.menuMode = false;
-    /** Chủ đề đang chơi: 'default' (ghi-ta phòng trà), 'christmas' hay 'halloween'. */
+    /** Chủ đề đang chơi: 'default' (ghi-ta phòng trà), 'christmas', 'halloween' hay 'tet'. */
     this.theme = 'default';
     /** 'menu' = màn chờ, 'win' = màn hạ màn — bản Giáng Sinh mỗi chỗ một bài. */
     this.mode = 'menu';
@@ -521,7 +523,7 @@ export class Audio {
    * thì từ tiếng kế tiếp.
    */
   setTheme(theme) {
-    const next = theme === 'christmas' || theme === 'halloween' ? theme : 'default';
+    const next = ['christmas', 'halloween', 'tet'].includes(theme) ? theme : 'default';
     if (next === this.theme) return;
     this.theme = next;
     if (this.started) this.restartSong();
@@ -573,6 +575,7 @@ export class Audio {
     const lookahead = 1.2;
     if (this.theme === 'christmas') { this.scheduleXmas(lookahead); return; }
     if (this.theme === 'halloween') { this.scheduleSpooky(lookahead); return; }
+    if (this.theme === 'tet') { this.scheduleTet(lookahead); return; }
 
     while (this.nextBarTime < this.ctx.currentTime + lookahead) {
       this.scheduleBar(this.nextBarTime);
@@ -627,8 +630,29 @@ export class Audio {
     }
   }
 
+  /** Lập lịch nhạc Tết: cùng cách với nhạc Giáng Sinh, mỗi chế độ một bài. */
+  scheduleTet(lookahead) {
+    const list = TET_PLAYLISTS[this.mode] ?? TET_PLAYLISTS.menu;
+    while (this.nextBarTime < this.ctx.currentTime + lookahead) {
+      const song = TET_SONGS[list[this.listIdx % list.length]];
+      if (this.songBar >= song.bars.length) {
+        this.nextBarTime += tetBarSeconds(song);
+        this.songBar = 0;
+        this.listIdx = (this.listIdx + 1) % list.length;
+        continue;
+      }
+      scheduleTetBar(this, song, this.songBar, this.nextBarTime);
+      this.nextBarTime += tetBarSeconds(song);
+      this.songBar += 1;
+    }
+  }
+
   /** Tên bài đang chơi — tiện cho việc kiểm thử. */
   get songName() {
+    if (this.theme === 'tet') {
+      const list = TET_PLAYLISTS[this.mode] ?? TET_PLAYLISTS.menu;
+      return TET_SONGS[list[this.listIdx % list.length]].name;
+    }
     if (this.theme === 'halloween') {
       const list = HALLOWEEN_PLAYLISTS[this.mode] ?? HALLOWEEN_PLAYLISTS.menu;
       return HALLOWEEN_SONGS[list[this.listIdx % list.length]].name;
@@ -746,7 +770,8 @@ export class Audio {
     /* Chủ đề Giáng Sinh thay tiếng nào có bản riêng; tiếng nào không có (pháo
        hoa, đất rung, lửa…) vẫn dùng bản gốc. */
     const own = this.theme === 'christmas' ? XMAS_SFX[name]
-      : this.theme === 'halloween' ? HALLOWEEN_SFX[name] : null;
+      : this.theme === 'halloween' ? HALLOWEEN_SFX[name]
+        : this.theme === 'tet' ? TET_SFX[name] : null;
     if (own) { own(this, t, opts); return; }
     (this.SFX[name] ?? this.SFX.click).call(this, t, opts);
   }

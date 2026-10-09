@@ -419,3 +419,40 @@ export function auctionResultModal(state, tileId, rows, o) {
     buttons: [{ label: 'Đã rõ', value: true, cls: 'btn-gold' }],
   });
 }
+
+/**
+ * Hội đồng hồn ma: người đã phá sản chọn một trong hai lá Thời Cuộc sắp nổ.
+ *
+ * Không có nút "bỏ qua" — hết giờ thì phiếu của người ấy không tính, hai lá
+ * vẫn do những phiếu còn lại (hoặc bốc thăm) quyết. Bản một máy thì cả hội
+ * đồng ngồi chung một màn hình nên chỉ hỏi một lần, `names` liệt kê họ.
+ *
+ * @param {object} a thẻ thứ nhất
+ * @param {object} b thẻ thứ hai
+ * @param {string[]} names tên các hồn ma đang bỏ phiếu
+ * @returns {Promise<?string>} id thẻ được chọn, `null` nếu hết giờ
+ */
+export function ghostVoteModal(a, b, names, ms = 0) {
+  let ticker = 0;
+  const pr = openModal({
+    eyebrow: 'HỘI ĐỒNG HỒN MA',
+    title: 'Chọn tai hoạ cho người sống',
+    sub: `${names.map((n) => `<b>${esc(n)}</b>`).join(', ')} đã phá sản, nhưng vẫn còn quyền phán:
+          lá nào sẽ nổ cho cả bàn?`,
+    wide: true,
+    dismissible: false,
+    body: `<div class="ghost-pick">
+        <button type="button" class="ghost-card" data-id="${esc(a.id)}">${eventCardBody(a)}</button>
+        <button type="button" class="ghost-card" data-id="${esc(b.id)}">${eventCardBody(b)}</button>
+      </div>`,
+    buttons: [],
+    onMount: (body, close) => {
+      for (const btn of body.querySelectorAll('.ghost-card')) {
+        btn.addEventListener('click', () => close(btn.dataset.id));
+      }
+      if (ms) ticker = attachTimer(body, ms, close, null, 'để bỏ phiếu. Hết giờ thì phiếu này không tính.');
+    },
+  });
+  pr.finally(() => clearInterval(ticker));
+  return pr;
+}

@@ -225,6 +225,8 @@ html, body {
   cursor: pointer;
 }
 .snd-row:hover { background: rgba(200, 160, 72, .14); }
+.snd-row:disabled { opacity: .45; cursor: default; }
+.snd-row:disabled:hover { background: none; }
 .snd-row:focus-visible { outline: 2px solid var(--gold-light); outline-offset: -2px; }
 .snd-ico { width: 16px; text-align: center; color: var(--gold-light); }
 .snd-name { flex: 1; white-space: nowrap; }
@@ -2843,6 +2845,8 @@ html, body {
 #meme-btn[hidden] { display: none; }
 /* Nút cây kỹ năng: hình gốc cây, huy hiệu số điểm chưa tiêu ở góc */
 #skill-btn[hidden] { display: none; }
+/* `.icon-btn` đặt display: grid, đè mất thuộc tính hidden — nút ám quẻ chỉ hiện cho hồn ma */
+#hex-btn[hidden] { display: none; }
 #skill-btn .sk-ico { width: 60%; height: 60%; }
 #skill-btn.has-pts { border-color: var(--gold-light); box-shadow: var(--shadow-md), 0 0 10px rgba(232, 190, 90, .55); }
 .skill-btn-n {
@@ -3837,3 +3841,220 @@ html, body {
   #chat-dock { bottom: calc(max(10px, env(safe-area-inset-bottom)) + 46px); height: calc(100vh - 70px); }
   #chat-peek { right: calc(max(14px, env(safe-area-inset-right)) + 46px); }
 }
+
+/* ------------------------------------------------------------
+   Bình luận viên — một dòng chữ nổi ở góc dưới lòng bàn cờ
+   (ui/commentator.js). Góc trái, né xí ngầu đứng giữa và thanh
+   nút hành động ở tâm bàn.
+   ------------------------------------------------------------ */
+#commentator {
+  position: absolute;
+  left: 15.5%; bottom: 15.5%;
+  max-width: 36%;
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 8px 12px 8px 8px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, rgba(23, 17, 12, .92), rgba(16, 12, 8, .95));
+  border: 1px solid rgba(200, 160, 72, .38);
+  box-shadow: var(--shadow-md);
+  color: var(--paper);
+  font-family: var(--sans);
+  font-size: clamp(11px, 1.15vmin, 14px);
+  line-height: 1.38;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(8px) scale(.96);
+  transition: opacity .28s var(--ease-soft), transform .28s var(--ease-soft);
+}
+#commentator.show { opacity: 1; transform: none; animation: blv-pop .42s var(--ease-out-back); }
+/* Câu lớn (cú thuê đau, phá sản, oan gia): viền đỏ son, mic rung */
+#commentator.hot { border-color: #E0503C; box-shadow: 0 0 0 1px rgba(224, 80, 60, .4), var(--shadow-md); }
+#commentator.hot .blv-mic { animation: blv-shout .5s ease-in-out 3; }
+.blv-mic {
+  flex: none;
+  display: grid; place-items: center;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #A93425, #5E140E);
+  font-size: 14px;
+}
+.blv-text b { font-weight: 700; }
+@keyframes blv-pop { from { transform: translateY(10px) scale(.9); } }
+@keyframes blv-shout { 50% { transform: rotate(-14deg) scale(1.15); } }
+
+/* Dải đen điện ảnh lúc quay chậm (BoardScene.cinematic) */
+#cine-bars { position: fixed; inset: 0; pointer-events: none; z-index: 30; }
+#cine-bars i {
+  position: absolute; left: 0; right: 0; height: 9vh;
+  background: #000;
+  transition: transform .38s var(--ease-soft);
+}
+#cine-bars i:first-child { top: 0; transform: translateY(-100%); }
+#cine-bars i:last-child { bottom: 0; transform: translateY(100%); }
+#cine-bars.on i { transform: none; }
+
+/* Oan gia: kiếm chéo cạnh tên, thẻ nhỏ viền đỏ */
+.rival-badge {
+  display: inline-block;
+  margin-left: 5px;
+  color: #FF7A66;
+  font-size: .9em;
+  text-shadow: 0 0 6px rgba(255, 90, 70, .6);
+  animation: rival-throb 1.6s ease-in-out infinite;
+}
+.rchip.is-rival { border-color: rgba(255, 110, 90, .7); }
+.rchip.is-rival .rchip-name::after { content: ' ⚔'; color: #FF7A66; }
+@keyframes rival-throb { 50% { opacity: .55; } }
+
+@media (prefers-reduced-motion: reduce) {
+  #commentator.show, #commentator.hot .blv-mic, .rival-badge { animation: none; }
+}
+
+/* ------------------------------------------------------------
+   Lễ trao giải ở màn hạ màn (ui/modals.js · winnerModal)
+   ------------------------------------------------------------ */
+.awards-head {
+  margin: 16px 0 8px;
+  font-family: var(--display);
+  font-size: 15px; letter-spacing: .04em;
+  color: var(--gold-light);
+}
+.awards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+.award {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "icon title" "icon who" "note note";
+  column-gap: 8px; row-gap: 1px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: linear-gradient(160deg, rgba(200, 160, 72, .14), rgba(200, 160, 72, .04));
+  border: 1px solid rgba(200, 160, 72, .28);
+  animation: award-in .5s var(--ease-out-back) both;
+  animation-delay: var(--d, 0ms);
+}
+.award-icon { grid-area: icon; font-size: 24px; line-height: 1; align-self: center; }
+.award-title { grid-area: title; font-family: var(--display); font-size: 13.5px; color: var(--gold-pale); }
+.award-who { grid-area: who; font-size: 12.5px; }
+.award-note { grid-area: note; margin-top: 4px; font-size: 11.5px; color: rgba(239, 226, 198, .72); }
+@keyframes award-in { from { opacity: 0; transform: translateY(10px) scale(.9); } }
+.worth-chart { display: block; width: 100%; height: auto; }
+.worth-chart .wc-grid { stroke: rgba(200, 160, 72, .18); stroke-width: 1; stroke-dasharray: 3 4; }
+@media (prefers-reduced-motion: reduce) { .award { animation: none; } }
+
+/* Hội đồng hồn ma — hai lá Thời Cuộc đặt cạnh nhau, bấm thẳng vào lá để chọn */
+.ghost-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ghost-card {
+  all: unset;
+  display: block;
+  cursor: pointer;
+  border-radius: 14px;
+  transition: transform .2s var(--ease-out-back), box-shadow .2s;
+}
+.ghost-card:hover, .ghost-card:focus-visible {
+  transform: translateY(-4px) rotate(-.6deg);
+  box-shadow: 0 0 0 2px #B9A6FF, 0 10px 30px rgba(140, 110, 255, .35);
+}
+.ghost-card .fate-card { margin: 0; height: 100%; }
+@media (max-width: 640px) { .ghost-pick { grid-template-columns: 1fr; } }
+
+/* ------------------------------------------------------------
+   Ám quẻ của hồn ma (ui/hexes.js) — bảng chọn cạnh nút meme, và
+   dấu bám theo quân cờ người bị ám
+   ------------------------------------------------------------ */
+#hex-pop {
+  position: absolute; right: -2px; bottom: 40px;
+  width: min(268px, calc(var(--rail) - 22px));
+  padding: 10px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(34, 22, 52, .97), rgba(16, 10, 26, .98));
+  border: 1px solid #7E68C8;
+  box-shadow: var(--shadow-lg), 0 0 24px rgba(140, 110, 255, .25);
+  color: var(--paper);
+  font-family: var(--sans);
+  z-index: 6;
+  animation: meme-pop-in .18s var(--ease-out-back) both;
+}
+#hex-pop[hidden] { display: none; }
+.hex-head { font-family: var(--display); font-size: 14px; color: #D9CCFF; margin-bottom: 7px; }
+.hex-kinds { display: flex; gap: 6px; margin-bottom: 8px; }
+.hex-kind {
+  flex: 1; padding: 5px 0;
+  border-radius: 8px; border: 1px solid rgba(185, 166, 255, .3);
+  background: rgba(185, 166, 255, .08);
+  font-size: 20px; cursor: pointer;
+}
+.hex-kind.on { border-color: #B9A6FF; background: rgba(185, 166, 255, .26); }
+.hex-targets { display: flex; flex-wrap: wrap; gap: 6px; }
+.hex-target {
+  flex: 1 1 40%;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(185, 166, 255, .3);
+  border-left: 3px solid var(--pc);
+  background: rgba(255, 255, 255, .05);
+  color: var(--paper);
+  font: 600 12.5px var(--sans);
+  cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.hex-target:hover:not(:disabled) { background: rgba(185, 166, 255, .2); }
+.hex-target:disabled { opacity: .45; cursor: default; }
+.hex-note { margin-top: 7px; font-size: 11.5px; color: rgba(217, 204, 255, .7); }
+
+.hex-mark {
+  position: fixed;
+  transform: translate(-50%, -92%);
+  line-height: 1;
+  pointer-events: none;
+  z-index: 8;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .55));
+  transition: opacity .28s;
+}
+.hex-mark.pop { animation: hex-drop .5s var(--ease-out-back); }
+.hex-mark.out { opacity: 0; }
+.hex-mark[data-kind="clown"] { animation: hex-drop .5s var(--ease-out-back), hex-wobble 1.1s ease-in-out .5s infinite; }
+.hex-mark[data-kind="cloud"] { animation: hex-drop .5s var(--ease-out-back), hex-float 2.2s ease-in-out .5s infinite; }
+.hex-mark[data-kind="snail"] { transform: translate(10%, -40%); animation: hex-drop .5s var(--ease-out-back), hex-crawl 1.6s ease-in-out .5s infinite; }
+.hex-mark[data-kind="poop"] { animation: hex-drop .5s var(--ease-out-back), hex-wobble 1.6s ease-in-out .5s infinite; }
+@keyframes hex-drop { from { opacity: 0; margin-top: -40px; } }
+@keyframes hex-wobble { 50% { rotate: 12deg; } }
+@keyframes hex-float { 50% { margin-top: -6px; } }
+@keyframes hex-crawl { 50% { margin-left: 6px; } }
+@media (prefers-reduced-motion: reduce) { .hex-mark, .hex-mark[data-kind] { animation: none; } }
+
+/* Chữ lớn giữa bàn lúc quay chậm — nằm trên thanh nút, không bắt cú bấm */
+.cine-caption {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  width: 90%;
+  text-align: center;
+  pointer-events: none;
+  animation: cine-slam .36s var(--ease-out-back) both, cine-drift 2.1s linear .36s both;
+  transition: opacity .32s;
+}
+.cine-caption.out { opacity: 0; }
+.cine-big {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(34px, 8.5vmin, 96px);
+  line-height: 1;
+  color: var(--cine, #FFD27A);
+  -webkit-text-stroke: 2px #120A06;
+  paint-order: stroke fill;
+  text-shadow: 0 6px 24px rgba(0, 0, 0, .75), 0 0 40px rgba(255, 170, 60, .35);
+}
+.cine-sub {
+  margin-top: 10px;
+  font: 700 clamp(13px, 2.6vmin, 24px) var(--sans);
+  color: #F6EBD2;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, .9);
+}
+@keyframes cine-slam { from { opacity: 0; transform: translate(-50%, -50%) scale(2.4); } }
+@keyframes cine-drift { to { transform: translate(-50%, -50%) scale(.92); } }
+@media (prefers-reduced-motion: reduce) { .cine-caption { animation: none; } }
+#board-hud.cine #actions, #board-hud.cine .tile-pick { opacity: .12; transition: opacity .25s; }

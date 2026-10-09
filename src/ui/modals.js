@@ -23,6 +23,7 @@ import { paintSkeletonToken } from '../render/pieces.js';
 import { raisePlan } from '../core/raisePlan.js';
 import { has, param, skillById, ownerRentParts, ownerRentFlat, lateFee } from '../core/skills.js';
 import { modLabel } from '../core/events.js';
+import { awards } from '../core/chronicle.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -1333,6 +1334,53 @@ export function finalRanking(state, winner) {
   return [winner, ...alive, ...out];
 }
 
+/**
+ * Lễ trao giải: mỗi danh hiệu một tấm thẻ, tên người nhận đúng màu quân,
+ * kèm con số thật lấy từ biên niên ván — buồn cười mà không bịa.
+ */
+function awardsHtml(state) {
+  const list = awards(state);
+  if (!list.length) return '';
+  const who = (seat) => {
+    const p = state.players[seat];
+    return `<b style="color:${p.token.css}">${esc(p.name)}</b>`;
+  };
+  return `
+    <div class="awards-head">Lễ trao giải</div>
+    <div class="awards">
+      ${list.map((a, i) => `
+        <div class="award" style="--d:${i * 90}ms">
+          <span class="award-icon" aria-hidden="true">${a.icon}</span>
+          <span class="award-title">${esc(a.title)}</span>
+          <span class="award-who">${(a.seats ?? [a.seat]).map(who).join(' ⚔ ')}</span>
+          <span class="award-note">${esc(a.note)}</span>
+        </div>`).join('')}
+    </div>`;
+}
+
+/**
+ * Đường tổng tài sản của từng người qua các vòng — xem lại ván đã lên voi
+ * xuống chó thế nào. SVG thuần, màu đường là màu quân.
+ */
+function worthChartHtml(state) {
+  const rows = state.chron?.worth ?? [];
+  if (rows.length < 2) return '';
+  const W = 320, H = 130, PAD = 6;
+  const max = Math.max(1, ...rows.flatMap((r) => r.w));
+  const x = (i) => PAD + (i / (rows.length - 1)) * (W - PAD * 2);
+  const y = (v) => H - PAD - (v / max) * (H - PAD * 2);
+  const lines = state.players.map((p) => {
+    const pts = rows.map((r, i) => `${x(i).toFixed(1)},${y(r.w[p.id] ?? 0).toFixed(1)}`).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${p.token.css}" stroke-width="2.2"
+      stroke-linejoin="round" stroke-linecap="round"><title>${esc(p.name)}</title></polyline>`;
+  }).join('');
+  const grid = [0.25, 0.5, 0.75].map((k) => `<line x1="${PAD}" x2="${W - PAD}" y1="${y(max * k)}" y2="${y(max * k)}" class="wc-grid"/>`).join('');
+  return `
+    <div class="awards-head">Đường tài sản · ${rows.length} mốc, cao nhất ${money(max)}</div>
+    <svg class="worth-chart" viewBox="0 0 ${W} ${H}" role="img"
+         aria-label="Tổng tài sản từng người qua các vòng">${grid}${lines}</svg>`;
+}
+
 export function winnerModal(state, winner) {
   const rank = finalRanking(state, winner);
   // Halloween: thay vương miện bằng bộ xương đội mũ màu người thắng cúi chào
@@ -1356,7 +1404,9 @@ export function winnerModal(state, winner) {
               : `${state.propertiesOf(p.id).length} ô đất · tiền mặt ${money(p.money)}`}</span>
           </span>
           ${p.bankrupt ? '' : `<span class="arow-side" style="font-family:var(--serif);color:var(--gold-light)">${money(state.netWorth(p.id))}</span>`}
-        </div>`).join('')}`,
+        </div>`).join('')}
+      ${awardsHtml(state)}
+      ${worthChartHtml(state)}`,
     buttons: [{ label: 'Chơi ván mới', value: 'again', cls: 'btn-primary' }],
     onMount: (body) => {
       const cv = body.querySelector('.win-skel');

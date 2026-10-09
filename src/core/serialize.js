@@ -81,6 +81,9 @@ export function snapshot(st) {
     rolled: st.rolled,
     startedAt: st.startedAt,
     endedAt: st.endedAt,
+    /* Biên niên ván (`core/chronicle.js`): toàn số và mảng lồng nhau, chép
+       qua JSON là sạch. Đi kèm để bảng danh hiệu ở máy nào cũng như nhau. */
+    chron: JSON.parse(JSON.stringify(st.chron)),
   };
 }
 
@@ -168,6 +171,8 @@ export function applySnapshot(st, snap) {
   st.startedAt = snap.startedAt ?? st.startedAt;
   if ('endedAt' in snap) st.endedAt = snap.endedAt;
   if (snap.eventTally) st.eventTally = { ...snap.eventTally };
+  // Ảnh chụp cũ chưa có biên niên thì giữ sổ trắng đang có
+  if (snap.chron) st.chron = JSON.parse(JSON.stringify(snap.chron));
   if (snap.eventPile) st.eventPile = [...snap.eventPile];
   else if (snap.eventPiles) st.eventPile = [...(snap.eventPiles[1] ?? []), ...(snap.eventPiles[2] ?? [])];
   return st;

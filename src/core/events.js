@@ -309,6 +309,14 @@ export function usable(st, card) {
 export function drawEvent(st, fresh = false) {
   const urgent = fresh ? null : latePriority(st);
   if (urgent) return urgent;
+  return drawFromPile(st, fresh);
+}
+
+/**
+ * Rút một lá từ chồng, bỏ qua lá không dùng được — phần "rút chồng" của
+ * `drawEvent`, không có lượt thử thẻ ưu tiên cuối ván.
+ */
+function drawFromPile(st, fresh = false) {
   if (fresh || !st.eventPile || st.eventPile.length === 0) {
     st.eventPile = shuffledIds(EVENTS.filter((e) => cardInTheme(e, st.settings?.theme)));
   }
@@ -327,8 +335,39 @@ export function drawEvent(st, fresh = false) {
   /* Chồng chỉ xáo lại khi rỗng, mà thẻ bị gạt thì quay về chồng: còn toàn
      thẻ không rút được (Giới Nghiêm ở pha cuối, Ân Xá khi không ai ngồi tù)
      thì chồng không bao giờ rỗng và sự kiện tắt hẳn. Xáo lại cả bộ, thử lần nữa. */
-  if (!chosen && !fresh) return drawEvent(st, true);
+  if (!chosen && !fresh) return drawFromPile(st, true);
   return chosen;
+}
+
+/**
+ * Hai lá cho Hội đồng hồn ma chọn (người đã phá sản bỏ phiếu xem lá nào nổ).
+ *
+ * Cả hai lá đều rút **đúng luật cũ** — cùng bộ lọc `usable`, cùng luật gạt
+ * thẻ cuối ván — nên hồn ma chỉ chọn giữa hai lá đằng nào cũng có thể ra, chứ
+ * không với tới lá mà luật đang giấu. Lá thua quay lại chồng (`returnEvent`),
+ * thành phần chồng bài không đổi.
+ *
+ * Thẻ ưu tiên cuối ván (đấu giá, thuế) thì không bày cho chọn: nó không đi qua
+ * chồng, mà tỉ lệ ra của nó là thứ giữ cho cuối ván có đường kết thúc.
+ *
+ * @returns {{a:?object, b:?object}} `b` là `null` khi không bày được lá thứ hai
+ */
+export function drawEventPair(st) {
+  const urgent = latePriority(st);
+  if (urgent) return { a: urgent, b: null };
+  const a = drawFromPile(st);
+  if (!a) return { a: null, b: null };
+  const b = drawFromPile(st);
+  // Chồng vừa xáo lại cả bộ thì lá thứ hai có thể trùng lá đầu
+  if (b && b.id === a.id) { returnEvent(st, b); return { a, b: null }; }
+  return { a, b };
+}
+
+/** Trả một lá về chồng, chen vào chỗ ngẫu nhiên. */
+export function returnEvent(st, card) {
+  if (!card) return;
+  const pile = st.eventPile ?? (st.eventPile = []);
+  pile.splice(Math.floor(Math.random() * (pile.length + 1)), 0, card.id);
 }
 
 function shuffledIds(deck) { return shuffle(deck.map((e) => e.id)); }

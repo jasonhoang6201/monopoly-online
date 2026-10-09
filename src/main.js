@@ -7,6 +7,7 @@ import BoardScene from './scenes/BoardScene.js';
 import { Game } from './game/controller.js';
 import { startSession } from './net/session.js';
 import { audio } from './audio/audio.js';
+import { commentator } from './ui/commentator.js';
 import { loadLacBird } from './render/motifs.js';
 import { loadArtwork } from './render/artwork.js';
 import { initSidePanel } from './ui/sidepanel.js';
@@ -154,6 +155,7 @@ function wireSoundMenu($) {
   const pop = $('sound-pop');
   const music = $('music-toggle');
   const sfx = $('sfx-toggle');
+  const voice = $('voice-toggle');
 
   const setOpen = (on) => {
     pop.hidden = !on;
@@ -164,6 +166,13 @@ function wireSoundMenu($) {
   const sync = () => {
     music.setAttribute('aria-checked', String(audio.musicOn));
     sfx.setAttribute('aria-checked', String(audio.sfxOn));
+    /* Máy không có giọng tiếng Việt thì nút mờ đi: bật cũng chẳng nghe được gì,
+       chữ của bình luận viên thì vẫn hiện như thường. */
+    voice.setAttribute('aria-checked', String(commentator.voiceOn && commentator.canSpeak));
+    voice.disabled = !commentator.canSpeak;
+    voice.title = commentator.canSpeak
+      ? 'Bình luận viên đọc thành tiếng'
+      : 'Máy này chưa có giọng đọc tiếng Việt — bình luận chỉ hiện chữ';
     const mute = !audio.musicOn && !audio.sfxOn;
     btn.textContent = mute ? '🔇' : '🔊';
     btn.classList.toggle('off', mute);
@@ -172,6 +181,8 @@ function wireSoundMenu($) {
   btn.addEventListener('click', () => setOpen(pop.hidden));
   music.addEventListener('click', () => { audio.toggleMusic(); sync(); });
   sfx.addEventListener('click', () => { audio.toggleSfx(); sync(); });
+  voice.addEventListener('click', () => { commentator.toggleVoice(); sync(); });
+  commentator.onVoices = sync;
   /* Nghe ở pha capture: nút meme chặn lan truyền cú bấm của nó, nghe ở pha
      nổi bọt thì bấm từ bảng âm thanh sang nút meme không đóng được bảng này. */
   document.addEventListener('click', (e) => {

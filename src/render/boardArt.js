@@ -15,6 +15,7 @@ import { drawXmasIcon } from './xmasArt.js';
 import { drawXmasDeco } from './xmasDeco.js';
 import { drawHalloweenIcon } from './halloweenArt.js';
 import { drawGraveyard, drawHalloweenDeco } from './halloweenDeco.js';
+import { drawTetScene } from './tetArt.js';
 
 export const P = {
   lacDeep:  '#450D09',
@@ -253,6 +254,8 @@ function drawInner(ctx, S) {
   // Giáng Sinh: Nhà thờ Đức Bà, cây thông, đồi tuyết đè lên mặt trống đồng
   // (trống vẫn còn, nét xanh băng chìm phía sau — vẫn là bàn cờ Sài Gòn)
   if (P.theme === 'christmas') drawWinterScene(ctx, x, y, size);
+  // Tết: mai đào, đèn lồng, câu đối, bánh chưng — trống đồng vẫn chìm phía sau
+  if (P.theme === 'tet') drawTetScene(ctx, x, y, size);
 
   // Lòng bàn cờ để trống hẳn: chỉ còn trống đồng, chim Lạc và tấm biển tên.
   // Hai lưng bài Cơ Hội / Khí Vận đã bỏ — chỗ ấy nay là bảng nút hành động.
