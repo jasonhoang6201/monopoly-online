@@ -17,7 +17,8 @@
     "test:mobile": "node tests/mobile.mjs",
     "test:theme": "node tests/theme.mjs && node tests/halloween.mjs",
     "sim": "node tests/gamesim.mjs",
-    "sim:skills": "node tests/gamesim.mjs --skills 3000 --check 4"
+    "sim:skills": "node tests/gamesim.mjs --skills 3000 --check 4",
+    "test:telemetry": "node tests/telemetry.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
