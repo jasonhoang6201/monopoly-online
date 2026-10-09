@@ -216,6 +216,11 @@ export function openModal(o) {
 
   function onKey(e) {
     if (settled || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    /* Đang gõ ở ô nhập nằm **ngoài** hộp thoại (khung chat) thì phím là của ô
+       ấy. Hộp này nghe ở pha bắt sự kiện trên `window`, chạy trước mọi người
+       nghe khác — không chặn ở đây thì Enter gửi tin nhắn cũng bấm luôn nút
+       "Mua" của hộp thoại đang mở. */
+    if (isTyping(e.target) && !scrim.contains(e.target)) return;
     /* Chỉ modal trên cùng mới nhận phím — bỏ qua modal đang chạy hiệu ứng đóng,
        và cả modal đang nấp sau bàn cờ (`stash`): lúc ấy phím thuộc về phiên
        chọn ô, Esc mà rơi vào đây thì huỷ luôn cả đề nghị đang dựng dở. */

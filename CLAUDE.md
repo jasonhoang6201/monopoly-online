@@ -4,8 +4,8 @@ Hướng dẫn cho Claude Code khi làm việc trong repo này.
 
 ## Dự án
 
-`/Users/jasonhoang/Desktop/monopoly-online` — Cờ Tỷ Phú Sài Gòn · Gia Định, bản
-nhiều máy chạy trên Supabase Realtime. Đây là một dự án npm duy nhất; `npm` chạy
+Cờ Tỷ Phú Sài Gòn · Gia Định, bản nhiều máy chạy trên Supabase Realtime (vẫn
+giữ chế độ chơi chung một máy). Đây là một dự án npm duy nhất; `npm` chạy
 thẳng ở gốc repo.
 
 | Lệnh | Việc | Cổng |
@@ -24,19 +24,28 @@ thẳng ở gốc repo.
 
 ```
 src/
-  data/board.js          40 ô, giá thuê, giá thế chấp
-  data/cards.js          bộ thẻ Cơ Hội + Khí Vận
-  core/state.js          GameState + toàn bộ luật — thuần dữ liệu, không đụng Phaser/DOM
+  data/                  dữ liệu tĩnh: 40 ô, thẻ Cơ Hội/Khí Vận, thẻ Thời Cuộc,
+                         kỹ năng, meme, chủ đề
+  core/state.js          GameState + luật gốc — thuần dữ liệu, không đụng Phaser/DOM
+  core/serialize.js      GameState ↔ ảnh chụp JSON phát cho các máy khác
+  core/events.js         luật thẻ Thời Cuộc: thanh áp lực, kế hoạch sự kiện, cấn nợ
+  core/skills.js         luật học kỹ năng
+  core/cards.js          luật thẻ giữ trong túi
+  core/raisePlan.js      gợi ý xoay tiền khi thiếu nợ
   game/controller.js     điều phối lượt chơi, nối luật ↔ hình ảnh ↔ giao diện
+  game/eventRunner.js    thi hành thẻ Thời Cuộc, hỏi nhiều người cùng lúc
+  game/skillPlay.js      phần kỹ năng phải hỏi người chơi hoặc có hoạt cảnh
   scenes/BoardScene.js   Phaser: bàn cờ, quân, xí ngầu
-  render/                hình học bàn cờ, hoa văn, biểu tượng, quân cờ
-  ui/                    HUD, hộp thoại, bảng xem nhanh (HTML phủ lên canvas)
-  audio/audio.js         nhạc và hiệu ứng tổng hợp bằng Web Audio
-  net/                   Supabase Realtime: phòng, phiên, đường truyền
+  render/                hình học bàn cờ, hoa văn, biểu tượng, quân cờ, trang trí theo mùa
+  ui/                    HUD, hộp thoại, bảng xem nhanh, cây kỹ năng (HTML phủ lên canvas)
+  theme/                 đổi chủ đề (Halloween, Giáng sinh): biến CSS + báo dựng lại hình
+  audio/                 nhạc và hiệu ứng tổng hợp bằng Web Audio, kèm bộ theo mùa
+  net/                   Supabase Realtime: phòng, phiên, đường truyền, danh tính
 ```
 
-`core/state.js` không phụ thuộc UI — đây là chỗ tuần tự hoá trạng thái để phát
-cho các máy khác, và cũng là chỗ chạy được dưới Node trong các bài kiểm thử.
+Mọi thứ trong `core/` không phụ thuộc UI — `serialize.js` tuần tự hoá trạng
+thái để phát cho các máy khác, và cả thư mục chạy được dưới Node trong các bài
+kiểm thử.
 
 ## Ràng buộc
 

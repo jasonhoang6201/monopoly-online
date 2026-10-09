@@ -113,7 +113,7 @@ export class Room {
     this.on = {
       room: () => {}, kicked: () => {}, full: () => {}, closed: () => {},
       start: () => {}, sync: () => {}, ev: () => {}, bc: () => {}, ask: null,
-      link: () => {},
+      link: () => {}, chat: () => {},
     };
 
     /** Hỏi–đáp đang chờ trả lời: rid → resolve */
@@ -249,6 +249,7 @@ export class Room {
     tp.on('sync', (m) => this.on.sync(m));
     tp.on('ev', (m) => this.on.ev(m));
     tp.on('bc', (m) => this.on.bc(m));
+    tp.on('chat', (m) => this.on.chat(m));
     tp.on('ask', (m) => this.#onAsk(m));
     tp.on('reply', (m) => {
       const done = this.pending.get(m.rid);
@@ -600,6 +601,11 @@ export class Room {
   publishSync(snap) { return this.tp.send('sync', { snapshot: snap }); }
   emit(name, data) { return this.tp.send('ev', { name, data }); }
   say(title, html, o) { return this.tp.send('bc', { title, html, o }); }
+  /**
+   * Tin nhắn chat. Chỉ gửi id người nói, không gửi tên: tên lấy từ sổ ghế ở
+   * máy nhận, để không ai tự xưng tên người khác được.
+   */
+  chat(text) { return this.tp.send('chat', { id: this.me.id, text }); }
 
   /**
    * Hỏi một người chơi khác và **chờ họ trả lời** — dùng cho giao dịch: bên A

@@ -361,3 +361,34 @@
   stroke: #8FB4D0;
   stroke-width: 6;
 }
+
+/* ------------------------------------------------- chat phòng online */
+/* Cùng nền với hộp thoại: khung chat hay nằm cạnh một hộp đang mở, khác màu
+   là thấy ngay hai mảnh rời nhau. */
+:root[data-theme="christmas"] #chat-btn {
+  background: var(--x-glass);
+  border-color: var(--x-line-strong);
+  color: #F4FAFF;
+}
+:root[data-theme="christmas"] #chat-btn:hover,
+:root[data-theme="christmas"] #chat-btn.on { border-color: #FFFFFF; }
+:root[data-theme="christmas"] .chat-badge { border-color: #0F2238; }
+:root[data-theme="christmas"] #chat-peek,
+:root[data-theme="christmas"] #chat-dock {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, .06), transparent 42%),
+    linear-gradient(180deg, #1C3A5E 0%, #10243D 100%);
+  border-color: var(--x-line-strong);
+}
+:root[data-theme="christmas"] #chat-dock { box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, .14); }
+:root[data-theme="christmas"] .chat-head,
+:root[data-theme="christmas"] .chat-form { border-color: var(--x-line); }
+:root[data-theme="christmas"] .chat-x:hover { background: rgba(156, 199, 230, .16); }
+:root[data-theme="christmas"] .chat-input { border-color: var(--x-line); background: rgba(5, 15, 28, .35); }
+:root[data-theme="christmas"] .chat-input:focus { border-color: var(--gold-light); }
+:root[data-theme="christmas"] .chat-send {
+  background: var(--x-ice);
+  border-color: #FFFFFF;
+  color: var(--x-ice-ink);
+}
+:root[data-theme="christmas"] .chat-note { color: var(--x-rose); }
