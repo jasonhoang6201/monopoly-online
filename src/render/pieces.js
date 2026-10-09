@@ -4,6 +4,7 @@
  */
 import { P } from './boardArt.js';
 import { drawSkeleton } from './halloweenArt.js';
+import { blossom, MAI } from './tetArt.js';
 
 /* Vàng của quân cờ đứng riêng khỏi bảng màu bàn cờ: chủ đề Giáng Sinh đổi nét
    vàng của bàn sang xanh băng, nhưng vành đế và cổ quân vẫn là thếp vàng —
@@ -137,6 +138,11 @@ export function paintToken(css, s = 160) {
 
   // Chỏm vàng nhỏ trên đỉnh cho quân cờ có chỗ kết
   const tipY = headY - headR * 0.92;
+  // Tết: chỏm là một bông mai vàng cài trên đầu quân
+  if (P.theme === 'tet') {
+    blossom(ctx, cx, tipY, s * 0.075, MAI, 0.3);
+    return cv;
+  }
   const tg = ctx.createRadialGradient(
     cx - s * 0.012, tipY - s * 0.012, s * 0.004, cx, tipY, s * 0.042,
   );

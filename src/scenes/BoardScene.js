@@ -36,6 +36,7 @@ import {
 import { graveLayout, pumpkinSpots, pumpkinSize } from '../render/halloweenDeco.js';
 import { MOVES, movePose, danceAt, STILL_AT } from '../render/dance.js';
 import { batSwarm } from '../ui/batSwarm.js';
+import { paintPetal, paintLixi } from '../render/tetArt.js';
 
 /* Người dùng xin bớt chuyển động thì ô đổi trạng thái ngay, không diễn */
 /** Ảnh khung nhảy của bộ xương nghĩa địa: bề rộng, bề cao, cỡ bộ xương, chỗ bàn chân (tỉ lệ bề cao). */
@@ -229,6 +230,10 @@ export default class BoardScene extends Phaser.Scene {
     this.textures.addCanvas('edge-glow', paintEdgeGlow(512, 256));
     this.textures.addCanvas('edge-spill', paintEdgeSpill(512, 512));
     this.textures.addCanvas('coin', paintCoin(96));
+    // Tết: hoa mai, hoa đào rơi trên bàn; tiền bay thành bao lì xì
+    this.textures.addCanvas('petal-mai', paintPetal(40, 'mai'));
+    this.textures.addCanvas('petal-dao', paintPetal(40, 'dao'));
+    this.textures.addCanvas('lixi', paintLixi(64));
 
     this.bg = this.add.graphics().setDepth(-10);
     this.board = this.add.image(0, 0, 'board').setOrigin(0.5).setDepth(0);
@@ -359,6 +364,9 @@ export default class BoardScene extends Phaser.Scene {
   /** Đang chơi chủ đề Halloween. */
   get spooky() { return P.theme === 'halloween'; }
 
+  /** Đang chơi chủ đề Tết. */
+  get tet() { return P.theme === 'tet'; }
+
   /** Hình nhà và khách sạn của bảng nhà bật lên khi rê chuột, theo chủ đề. */
   paintHouseTextures() {
     for (const key of ['house', 'hotel']) if (this.textures.exists(key)) this.textures.remove(key);
@@ -413,17 +421,20 @@ export default class BoardScene extends Phaser.Scene {
   layoutXmas() {
     this.snowLayer.removeAll(true);
     this.flakes = [];
-    if (!this.xmas) return;
+    if (!this.xmas && !this.tet) return;
 
     /* Tuyết rơi trên mặt bàn: thưa và chậm, chỉ để có không khí. Người dùng
        xin bớt chuyển động thì không có. */
     if (REDUCED_MOTION()) return;
     const W = this.scale.width, H = this.scale.height;
-    const n = Math.round(Math.min(90, (W * H) / (px(1) * px(1)) / 14000));
+    // Tết: hoa rơi thưa hơn tuyết và to hơn — cánh hoa đông quá thì rối mắt
+    const n = Math.round(Math.min(this.tet ? 34 : 90, (W * H) / (px(1) * px(1)) / (this.tet ? 30000 : 14000)));
     for (let i = 0; i < n; i++) {
-      const img = this.add.image(Math.random() * W, Math.random() * H, 'snowflake');
+      const key = !this.tet ? 'snowflake' : i % 2 ? 'petal-mai' : 'petal-dao';
+      const img = this.add.image(Math.random() * W, Math.random() * H, key);
       const k = 0.4 + Math.random() * 0.6;          // gần to và nhanh, xa nhỏ và chậm
-      img.setDisplaySize(px(3 + 5 * k), px(3 + 5 * k)).setAlpha(0.45 + 0.4 * k);
+      const d = this.tet ? 7 + 9 * k : 3 + 5 * k;
+      img.setDisplaySize(px(d), px(d)).setAlpha(0.45 + 0.4 * k);
       this.snowLayer.add(img);
       this.flakes.push({ img, k, ph: Math.random() * Math.PI * 2 });
     }
@@ -438,6 +449,8 @@ export default class BoardScene extends Phaser.Scene {
         f.ph += dt * (0.6 + f.k);
         f.img.y += fall * (0.5 + f.k) * dt;
         f.img.x += Math.sin(f.ph) * drift * dt;
+        // Cánh hoa xoay chậm khi rơi; bông tuyết tròn xoay hay không cũng vậy
+        if (this.tet) f.img.rotation += dt * (0.4 + f.k);
         if (f.img.y > H + 8) { f.img.y = -8; f.img.x = Math.random() * W; }
       }
     }
@@ -487,6 +500,11 @@ export default class BoardScene extends Phaser.Scene {
       this.bg.fillStyle(0x0A1628, 1).fillRect(0, 0, W, H);
       this.bg.fillStyle(0x15305A, 0.6).fillCircle(c.x, c.y, this.size * 0.78);
       this.bg.fillStyle(0x3D6FA3, 0.16).fillCircle(c.x, c.y, this.size * 0.55);
+    } else if (this.tet) {
+      // Đỏ thẫm như giấy pháo, vầng sáng vàng kim quanh bàn như ánh đèn lồng
+      this.bg.fillStyle(0x2A0504, 1).fillRect(0, 0, W, H);
+      this.bg.fillStyle(0x6E120C, 0.6).fillCircle(c.x, c.y, this.size * 0.78);
+      this.bg.fillStyle(0xE3B341, 0.12).fillCircle(c.x, c.y, this.size * 0.55);
     } else if (this.spooky) {
       this.bg.fillStyle(0x0E0A16, 1).fillRect(0, 0, W, H);
       this.bg.fillStyle(0x2C1A47, 0.6).fillCircle(c.x, c.y, this.size * 0.78);
@@ -840,6 +858,8 @@ export default class BoardScene extends Phaser.Scene {
           onComplete: () => {
             // Halloween: qua ô Bắt Đầu thì đàn dơi vụt ra khắp màn hình
             if (this.spooky && dir > 0 && pos === 0) this.batsFromGo();
+            // Tết: qua ô Bắt Đầu thì pháo nổ, pháo hoa bung trên ô
+            if (this.tet && dir > 0 && pos === 0) this.crackersFromGo();
             if (onPass) onPass(pos, i === n);
             step();
           },
@@ -1948,6 +1968,30 @@ export default class BoardScene extends Phaser.Scene {
   }
 
   /** Qua ô Bắt Đầu: đàn dơi bay ra từ ô ấy, phủ cả màn hình. */
+  /** Tết: một tràng pháo đỏ nổ tung quanh ô Bắt Đầu, kèm pháo hoa. */
+  crackersFromGo() {
+    const c = tileCenter(0, TEX);
+    const sc = this.toScreen(c.x, c.y);
+    const r = this.size * 0.06;
+    for (let i = 0; i < 16; i++) {
+      this.time.delayedCall(i * 55, () => {
+        const a = Math.random() * Math.PI * 2;
+        const x = sc.x + Math.cos(a) * r * Math.random();
+        const y = sc.y + Math.sin(a) * r * Math.random();
+        const bit = this.add.rectangle(x, y, this.size * 0.008, this.size * 0.02, 0xD42A1E).setDepth(58);
+        this.flash(x, y, 0xFFD27A, 0.35);
+        this.tweens.add({
+          targets: bit,
+          x: x + Math.cos(a) * r * 1.6, y: y + Math.sin(a) * r * 1.6 - this.size * 0.03,
+          angle: (Math.random() - 0.5) * 540, alpha: 0,
+          duration: 700, ease: 'Cubic.easeOut',
+          onComplete: () => bit.destroy(),
+        });
+      });
+    }
+    this.fireworks(sc.x, sc.y - this.size * 0.05, 0xE3B341, 1);
+  }
+
   batsFromGo() {
     const c = tileCenter(0, TEX);
     const sc = this.toScreen(c.x, c.y);
@@ -2589,8 +2633,9 @@ export default class BoardScene extends Phaser.Scene {
     return new Promise((resolve) => {
       for (let i = 0; i < n; i++) {
         const delay = i * 42;
-        const coin = this.add.image(a.x, a.y, 'coin').setDepth(45);
-        coin.setDisplaySize(coinSize, coinSize);
+        // Tết: tiền bay thành bao lì xì (ảnh dọc, cao hơn đồng xu)
+        const coin = this.add.image(a.x, a.y, this.tet ? 'lixi' : 'coin').setDepth(45);
+        coin.setDisplaySize(coinSize, coinSize * (this.tet ? 1.4 : 1));
         coin.setAlpha(0);
 
         const midX = (a.x + b.x) / 2 + (Math.random() - 0.5) * this.size * 0.10;
@@ -2675,6 +2720,77 @@ export default class BoardScene extends Phaser.Scene {
     for (let i = 0; i < Math.floor(duration / every); i++) {
       this.time.delayedCall(i * every, () => this.fireworks(c.x, c.y - this.size * 0.08, tint, 1));
     }
+  }
+
+  /**
+   * Khoảnh khắc quay chậm: hai dải đen điện ảnh trượt vào, cả bàn tối đi
+   * chừa đúng ô vừa xảy chuyện, một dòng chữ lớn bung ra giữa bàn, tiền rơi
+   * như mưa. Chỉ là phần diễn — không đụng ván, máy nào cũng tự diễn lấy.
+   *
+   * Không zoom camera: lớp phủ HTML (thanh nút, thông báo) neo theo toạ độ
+   * bàn cờ, camera phóng to thì chúng lệch khỏi chỗ.
+   *
+   * @param {{tile?:number, text:string, sub?:string, tint?:string, rain?:boolean}} o
+   * @returns {Promise<void>} xong khi dải đen đã rút
+   */
+  cinematic(o) {
+    const HOLD = 2100;
+    const bars = document.getElementById('cine-bars') ?? (() => {
+      const el = document.createElement('div');
+      el.id = 'cine-bars';
+      el.setAttribute('aria-hidden', 'true');
+      el.innerHTML = '<i></i><i></i>';
+      document.body.appendChild(el);
+      return el;
+    })();
+    bars.classList.add('on');
+
+    if (o.tile != null) this.spotTiles([o.tile], HOLD);
+    this.cameras.main.shake(420, 0.006);
+    audio.sfx('thud');
+
+    /* Chữ lớn dựng bằng HTML trong lớp phủ bàn cờ, không vẽ trên canvas:
+       canvas nằm dưới thanh nút hành động, chữ giữa bàn sẽ bị nó che mất. */
+    const hud = document.getElementById('board-hud');
+    const cap = document.createElement('div');
+    cap.className = 'cine-caption';
+    cap.innerHTML = `<div class="cine-big"></div>${o.sub ? '<div class="cine-sub"></div>' : ''}`;
+    cap.querySelector('.cine-big').textContent = o.text;
+    if (o.sub) cap.querySelector('.cine-sub').textContent = o.sub;
+    if (o.tint) cap.style.setProperty('--cine', o.tint);
+    hud?.appendChild(cap);
+    // Thanh nút lùi mờ đi cho chữ đứng một mình — nút vẫn bấm được nếu cần
+    hud?.classList.add('cine');
+
+    if (o.rain !== false) {
+      const coinSize = Math.max(px(16), this.size * 0.03);
+      for (let i = 0; i < 34; i++) {
+        const x = this.originX + Math.random() * this.size;
+        const coin = this.add.image(x, this.originY - coinSize, this.tet ? 'lixi' : 'coin')
+          .setDepth(66).setDisplaySize(coinSize, coinSize * (this.tet ? 1.4 : 1));
+        this.tweens.add({
+          targets: coin,
+          y: this.originY + this.size * (0.55 + Math.random() * 0.4),
+          angle: (Math.random() - 0.5) * 720,
+          alpha: { from: 1, to: 0 },
+          duration: 1500 + Math.random() * 700,
+          delay: Math.random() * 900,
+          ease: 'Quad.easeIn',
+          onComplete: () => coin.destroy(),
+        });
+      }
+    }
+
+    return new Promise((resolve) => {
+      this.time.delayedCall(HOLD, () => {
+        cap.classList.add('out');
+        setTimeout(() => cap.remove(), 360);
+        // Hai khoảnh khắc chồng nhau thì chỉ rút lớp mờ khi cái cuối đã xong
+        if (!hud?.querySelector('.cine-caption:not(.out)')) hud?.classList.remove('cine');
+        bars.classList.remove('on');
+        this.time.delayedCall(340, resolve);
+      });
+    });
   }
 
   bankruptFx(playerIndex) {

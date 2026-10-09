@@ -14,11 +14,12 @@
  *      cờ đứng im mười phút.
  */
 import { BOARD, GROUPS, GROUP_TILES, money, tileLabel, tileShortLabel } from '../data/board.js';
-import { drawEvent, planEvent, autoRaise } from '../core/events.js';
+import { drawEvent, drawEventPair, returnEvent, planEvent, autoRaise } from '../core/events.js';
 import { houseImmune } from '../core/skills.js';
 import { handoff } from '../ui/modal.js';
 import {
   bracePromptModal, firePromptModal, snowPromptModal, zombiePromptModal, auctionBidModal, auctionResultModal,
+  ghostVoteModal,
 } from '../ui/eventModals.js';
 import { litTiles } from '../ui/tilePicker.js';
 import { audio } from '../audio/audio.js';
@@ -53,6 +54,11 @@ export class EventRunner {
     this.g = game;
     /** Hạn trả lời một câu hỏi của sự kiện — chỉ có nghĩa ở bản online. */
     this.askMs = 30000;
+    /**
+     * Hạn bỏ phiếu của hội đồng hồn ma. Ngắn hơn hạn hỏi thường: người sống
+     * đang ngồi chờ một lá bài, mà hồn ma chỉ cần liếc hai mặt thẻ là chọn được.
+     */
+    this.ghostMs = 15000;
   }
 
   get state() { return this.g.state; }
@@ -76,7 +82,7 @@ export class EventRunner {
    */
   async run() {
     const st = this.state;
-    const card = drawEvent(st);
+    const card = await this.pickCard();
     const plan = card ? planEvent(st, card) : null;
 
     // Không thẻ nào hợp cảnh (bàn chưa ai xây nhà, chưa ai cắm đất…): xả bớt
@@ -104,6 +110,7 @@ export class EventRunner {
     eventCase(card, { detail, seed, onReveal: revealed });
     // Hộp hỏng đường nào đó mà không lật được thì cũng đừng treo cả ván ở đây
     await Promise.race([shown, wait(12000)]);
+    this.g.moment(this.voted ? 'ghostVote' : 'event', { title: card.title });
     await wait(ALERT_MS);
 
     await this.apply(card, plan);
@@ -112,6 +119,66 @@ export class EventRunner {
     this.g.scene.refresh(st);
     this.g.scene.placeTokens();
     this.g.sync();
+  }
+
+  /**
+   * Hồn ma đang ngồi bàn: người đã phá sản mà còn mở máy (bản online), hoặc
+   * mọi người đã phá sản (bản một máy — họ vẫn ngồi quanh cái máy ấy).
+   */
+  ghostSeats() {
+    const g = this.g;
+    return this.state.players
+      .filter((p) => p.bankrupt && (!g.net || g.net.isSeatLive(p.id)))
+      .map((p) => p.id);
+  }
+
+  /**
+   * Lá Thời Cuộc sẽ nổ. Không có hồn ma thì rút như cũ; có thì bày hai lá cho
+   * hội đồng hồn ma chọn — xem `drawEventPair`.
+   */
+  async pickCard() {
+    const st = this.state;
+    this.voted = false;
+    const ghosts = this.ghostSeats();
+    if (!ghosts.length) return drawEvent(st);
+    const { a, b } = drawEventPair(st);
+    if (!a || !b) return a;
+
+    const id = await this.ghostVote(ghosts, a, b);
+    const card = id === b.id ? b : a;
+    returnEvent(st, card === a ? b : a);
+    this.voted = true;
+    return card;
+  }
+
+  /**
+   * Hỏi cả hội đồng cùng lúc, đếm phiếu. Hoà hay không ai bỏ phiếu thì bốc
+   * thăm giữa hai lá — hồn ma ngủ quên không được quyền giữ nguyên lá đầu.
+   * @returns {Promise<string>} id lá thắng
+   */
+  async ghostVote(ghosts, a, b) {
+    const st = this.state;
+    const g = this.g;
+    const names = ghosts.map((s) => st.players[s].name);
+    this.bumpClock('hồn ma bỏ phiếu');
+    await g.bc.show('HỘI ĐỒNG HỒN MA',
+      `${names.map((n) => `<b>${n}</b>`).join(', ')} đang chọn lá Thời Cuộc cho người sống…`,
+      { kind: 'trade', ms: 2600 });
+
+    let votes;
+    if (!g.net) {
+      // Một máy: cả hội đồng ngồi chung màn hình, hỏi một lần là đủ
+      votes = [await ghostVoteModal(a, b, names)];
+    } else {
+      votes = await Promise.all(ghosts.map((seat) => (seat === g.net.mySeat
+        ? ghostVoteModal(a, b, names, this.ghostMs)
+        : g.net.ask(seat, 'ev-ghost', { a: a.id, b: b.id, names },
+          { fallback: null, timeout: this.ghostMs + 5000 }))));
+    }
+    const na = votes.filter((v) => v === a.id).length;
+    const nb = votes.filter((v) => v === b.id).length;
+    if (na !== nb) return na > nb ? a.id : b.id;
+    return Math.random() < 0.5 ? a.id : b.id;
   }
 
   /** Dòng nói rõ sự kiện rơi vào khu nào, vào ai — in ngay trên mặt thẻ. */

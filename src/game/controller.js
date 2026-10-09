@@ -37,15 +37,21 @@ import {
 import { raisePlan } from '../core/raisePlan.js';
 import {
   bracePromptModal, firePromptModal, snowPromptModal, zombiePromptModal, auctionBidModal, auctionResultModal, closeBidModal,
+  ghostVoteModal,
 } from '../ui/eventModals.js';
 import { pickTileOnBoard, litTiles } from '../ui/tilePicker.js';
 import { pickGroupOnBoard } from '../ui/groupPicker.js';
 import { EVENT_BY_ID } from '../data/events.js';
 import { audio } from '../audio/audio.js';
 import { MemeDeck } from '../ui/memes.js';
+import { HexDeck } from '../ui/hexes.js';
 import { skillIcon } from '../ui/skillIcons.js';
 import { fateCase, eventCase, newSeed } from '../ui/caseOpen.js';
 import { setTheme } from '../theme/theme.js';
+import { commentator } from '../ui/commentator.js';
+import {
+  bump, notePay, noteRent, sampleWorth, checkRival, rivalFor, BIG_RENT,
+} from '../core/chronicle.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -66,6 +72,16 @@ const offerTiles = (offer) => [...(offer?.give ?? []), ...(offer?.get ?? [])];
  * thẻ di chuyển để chạy vòng vòng không dứt.
  */
 const MAX_CARD_CHAIN = 2;
+
+/**
+ * Oan gia trả nhau từ chừng này trở lên mới quay chậm. Hai người đã thành oan
+ * gia thì trả qua trả lại liên miên — khoản nào cũng dựng cảnh thì cả bàn ngồi
+ * xem phim chứ không còn chơi cờ.
+ */
+const RIVAL_CINE = 200;
+
+/** Ô kế bên đòi thuê từ chừng này trở lên thì dừng sát nó mới đáng gọi là "suýt". */
+const NEAR_MISS = 300;
 
 /** Chủ đề của ván áp lên hình (bàn cờ, quân, CSS) và tiếng (nhạc, hiệu ứng). */
 function applyTheme(theme) {
@@ -194,6 +210,11 @@ export class Game {
       seatOf: () => this.memeSeat(),
       send: (id) => this.netEmit('meme', { seat: this.memeSeat(), id }),
     });
+    /** Ám quẻ của hồn ma — cũng như meme, chỉ là hình, không vào ảnh chụp. */
+    this.hexes = new HexDeck(this.scene, {
+      ghostSeat: () => this.ghostSeat(),
+      send: (target, kind, by) => this.netEmit('hex', { by, target, kind }),
+    });
     this.watchActivity();
     /* Nút cây kỹ năng ở hàng tiện ích — chỉ bản online mới cần: chơi một máy
        thì người ngồi trước màn hình luôn là người đang tới lượt, nút trên thanh
@@ -228,6 +249,8 @@ export class Game {
     this.scene.setPlayers(this.state.players);
     this.scene.refresh(this.state);
     this.memes.setState(this.state);
+    this.hexes.setState(this.state);
+    commentator.clear();
     this.bc.clear();
 
     await this.bc.show('KHAI CUỘC',
@@ -270,6 +293,8 @@ export class Game {
     this.scene.setPlayers(this.state.players);
     this.scene.refresh(this.state);
     this.memes.setState(this.state);
+    this.hexes.setState(this.state);
+    commentator.clear();
     this.bc.clear();
 
     /* Mọi dòng thông báo của người đang cầm lái được phát cho cả bàn cùng đọc,
@@ -524,6 +549,17 @@ export class Game {
   }
 
   /**
+   * Hồn ma ngồi máy này: bản online là chính mình nếu đã phá sản; bản một máy
+   * thì người phá sản đầu tiên — cả bàn chung màn hình, ai bấm cũng được.
+   */
+  ghostSeat() {
+    const st = this.state;
+    if (!st) return -1;
+    if (this.net) return st.players[this.net.mySeat]?.bankrupt ? this.net.mySeat : -1;
+    return st.players.find((p) => p.bankrupt)?.id ?? -1;
+  }
+
+  /**
    * Phát ảnh chụp trạng thái cho cả phòng.
    * Chỉ người đang cầm lái chạy tới được các chỗ gọi hàm này, nên không cần
    * kiểm tra lại quyền ở đây.
@@ -540,6 +576,52 @@ export class Game {
   /** Báo một việc cần diễn hoạt cho các máy đang ngồi xem. */
   netEmit(name, data) {
     if (this.net) this.net.emit(name, data);
+  }
+
+  /**
+   * Một khoảnh khắc đáng kể lại — ai trả ai một khoản đau, ai vào tù lần thứ
+   * mấy, cặp oan gia nào vừa ra đời. Máy cầm lái phát cho cả bàn rồi tự diễn.
+   *
+   * Khoảnh khắc chỉ là phần **kể**: bình luận viên nói một câu, cú lớn thì
+   * quay chậm. Không đổi tiền, đất hay lượt của ai, nên máy nào lỡ mất tin này
+   * thì ván vẫn y nguyên.
+   *
+   * @param {string} kind loại — xem `data/commentary.js`
+   * @param {{a?:number, b?:number, tile?:number, amount?:number, n?:number, title?:string}} [data]
+   */
+  moment(kind, data = {}) {
+    const m = { ...data, kind, v: Math.floor(Math.random() * 1e6) };
+    this.netEmit('moment', m);
+    return this.showMoment(m);
+  }
+
+  async showMoment(m) {
+    const st = this.state;
+    if (!st) return;
+    const who = (seat) => {
+      const p = st.players[seat];
+      return p ? { name: p.name, css: p.token.css } : '';
+    };
+    commentator.say(m.kind, {
+      a: who(m.a), b: who(m.b),
+      tile: m.tile != null ? tileLabel(m.tile) : '',
+      amount: m.amount != null ? money(m.amount) : '',
+      n: m.n ?? '', title: m.title ?? '',
+    }, m.v);
+
+    const names = (a, b) => `${st.players[a]?.name ?? ''} → ${st.players[b]?.name ?? ''}`;
+    if (m.kind === 'rentBig') {
+      await this.scene.cinematic({ tile: m.tile, text: money(m.amount), sub: names(m.a, m.b) });
+    } else if (m.kind === 'rentRival' && m.amount >= RIVAL_CINE) {
+      await this.scene.cinematic({
+        tile: m.tile, text: money(m.amount), sub: `⚔ Oan gia · ${names(m.a, m.b)}`, tint: '#FF7A66',
+      });
+    } else if (m.kind === 'rival') {
+      this.hud.refresh();
+      await this.scene.cinematic({
+        text: 'OAN GIA', sub: `${st.players[m.a]?.name} ⚔ ${st.players[m.b]?.name}`, tint: '#FF7A66', rain: false,
+      });
+    }
   }
 
   /**
@@ -606,6 +688,7 @@ export class Game {
     this.skills.reconcileLearn();
     this.refreshSkillBtn();
     this.hud.refresh();
+    this.hexes.refresh();
     this.scene.refresh(this.state);
     this.scene.placeTokens();
     // Đang giữa một hộp thoại của chính mình thì để yên, xong việc sẽ tự bày lại
@@ -620,6 +703,9 @@ export class Game {
        lúc ấy. Xếp sau một cú lăn xí ngầu ba giây thì bong bóng nổi lên lạc hẳn
        khỏi chuyện đang xảy ra trên bàn. */
     if (name === 'meme') { this.memes.receive(data.seat, data.id); return; }
+    // Khoảnh khắc cũng không xếp hàng: lời bình phải đi cùng nhịp chuyện đang kể
+    if (name === 'moment') { this.showMoment(data); return; }
+    if (name === 'hex') { this.hexes.receive(data.by, data.target, data.kind); return; }
     // Học kỹ năng ngoài lượt: chỉ máy cầm lái xử lý, không phải hoạt cảnh
     if (name === 'learn') { this.skills.onLearnMsg(data); return; }
     // Trọng tài nhờ phát ván cho người vừa vào lại — xem `room.onNeedSync`
@@ -760,6 +846,13 @@ export class Game {
       audio.sfx('turn');
       return litTiles(this.scene, data.lots.map((l) => l.id),
         () => zombiePromptModal(this.state, this.net.mySeat, data.lots, ms, data.rounds));
+    }
+    // Hội đồng hồn ma: máy này là người đã phá sản, được bỏ phiếu chọn lá Thời Cuộc
+    if (name === 'ev-ghost') {
+      const a = EVENT_BY_ID[data.a], b = EVENT_BY_ID[data.b];
+      if (!a || !b) return null;
+      audio.sfx('turn');
+      return ghostVoteModal(a, b, data.names ?? [], this.events.ghostMs);
     }
     if (name === 'ev-pick') {
       audio.sfx('turn');
@@ -1334,7 +1427,7 @@ export class Game {
     const { d, back } = await this.skills.afterRoll(p, first);
     await this.skills.settleBets(p, d);
     if (st.over || p.bankrupt) { await this.endTurn(); return; }
-    if (d.isDouble) p.doubles += 1;
+    if (d.isDouble) { p.doubles += 1; bump(st, p.id, 'doubles'); }
     /* Chốt "đã lắc" ngay khi có kết quả, trước mọi chỗ phát ảnh chụp bên dưới:
        máy cầm lái bấm F5 giữa nước đi thì vào lại vẫn không được lắc thêm. */
     else st.rolled = true;
@@ -1347,7 +1440,7 @@ export class Game {
         if (await this.skills.jackpot(p)) { await this.endTurn(); return; }
         await this.bc.show('ĐỔ ĐÔI LẦN THỨ BA',
           `<b>${p.name}</b> đổ đôi ba lần liên tiếp, phải vào <b>Khám Lớn</b>!`, { kind: 'bad' });
-        await this.goToJail(p);
+        await this.goToJail(p, 'doubles');
         await this.endTurn();
         return;
       }
@@ -1429,6 +1522,7 @@ export class Game {
          · <b>+${points} điểm kỹ năng</b>${points > 1 ? ' (có Lão Làng)' : ''} (đang có ${p.skillPoints}).`,
         { ms: landed ? 2800 : 2400 });
       await this.receiveFromBank(idx, pay);
+      if (landed) this.moment('goland', { a: p.id });
       this.skills.paid(p, parts);
       await this.skills.lapEnd(p);
       if (st.over || p.bankrupt) return;
@@ -1445,8 +1539,26 @@ export class Game {
     await this.skills.landed(p);
     if (st.over || p.bankrupt) return;
 
+    this.nearMiss(p, steps, dice);
     this.scene.highlightTile(p.pos, p.token.color);
     await this.resolveTile(p, dice);
+  }
+
+  /**
+   * Suýt chết: quân dừng ngay **trước** một ô đắt của người khác — thiếu đúng
+   * một bước là trả cả gia tài. Chỉ để bình luận viên la lên, không đổi gì.
+   * Đi lùi thì "ô trước mặt" nằm phía sau, nên chỉ xét nước đi tới.
+   */
+  nearMiss(p, steps, dice) {
+    if (steps <= 0) return;
+    const st = this.state;
+    const here = st.owner.get(p.pos);
+    if (here !== undefined && here !== p.id) return;   // đã đáp trúng đất người ta thì còn gì là suýt
+    const next = (p.pos + 1) % 40;
+    const ownerId = st.owner.get(next);
+    if (ownerId === undefined || ownerId === p.id || st.players[ownerId].bankrupt) return;
+    const rent = st.rentFor(next, dice?.sum ?? 7);
+    if (rent >= NEAR_MISS) this.moment('nearmiss', { a: p.id, tile: next, amount: rent });
   }
 
   // ------------------------------------------------------ xử lý ô đáp xuống
@@ -1526,6 +1638,8 @@ export class Game {
         this.scene.refresh(st);
         await this.bc.show('TẬU ĐẤT',
           `<b>${p.name}</b> mua <b>${tileLabel(t.id)}</b> giá <span class="down">${money(t.price)}</span>.`);
+        const full = t.type === 'property' && st.hasFullGroup(p.id, t.color_group);
+        this.moment(full ? 'buyFull' : 'buy', { a: p.id, tile: t.id });
         await this.skills.brokerFees(p.id, t.id);
         await this.skills.bought(p, t.id);
       } else {
@@ -1569,7 +1683,12 @@ export class Game {
     await this.bc.show('TRẢ TIỀN THUÊ',
       `<b>${p.name}</b> trả <span class="down">${money(rent)}</span> cho <b>${owner.name}</b>
        tại <b>${tileLabel(t.id)}</b>${this.skills.rentNote(p, t.id, bill)}.`, { kind: 'bad' });
+    // Oan gia xét **trước** khoản này: khoản vừa trả có thể chính là cái làm hai người thành oan gia
+    const rivals = rivalFor(st, p.id) === ownerId;
     if (await this.payPlayer(p.id, ownerId, rent)) {
+      noteRent(st, p.id, ownerId, rent, t.id);
+      await this.moment(rivals ? 'rentRival' : rent >= BIG_RENT ? 'rentBig' : 'rent',
+        { a: p.id, b: ownerId, tile: t.id, amount: rent });
       this.skills.rentPaid(owner, bill);
       await this.skills.stakeShare(owner, rent);
     }
@@ -2213,12 +2332,15 @@ export class Game {
     from.money -= amount;
     to.money += amount;
     st.debt = null;
+    notePay(st, fromId, toId, amount);
+    const rival = checkRival(st);
     this.hud.refresh();
     this.sync();
     this.hud.flashMoney(fromId, false);
     this.hud.flashMoney(toId, true);
     await this.scene.flyMoney(this.hud.cardEl(fromId), this.hud.cardEl(toId), amount,
       { text: `−${money(amount)}`, color: '#FF8A7A' });
+    if (rival) await this.moment('rival', { a: rival.a, b: rival.b });
     return true;
   }
 
@@ -2550,9 +2672,12 @@ export class Game {
 
   // ------------------------------------------------------------------- tù
 
-  async goToJail(p) {
+  /** @param {'doubles'} [why] đổ đôi ba lần — bình luận viên có câu riêng */
+  async goToJail(p, why) {
     const st = this.state;
     st.sendToJail(p);
+    this.moment(why === 'doubles' ? 'jailDoubles' : p.jails >= 2 ? 'jailAgain' : 'jail',
+      { a: p.id, n: p.jails });
     audio.sfx('jail');
     this.netEmit('jail', { seat: p.id });
     this.scene.shake(0.007, 340);
@@ -2863,9 +2988,12 @@ export class Game {
     A.money -= offer.giveMoney; A.money += offer.getMoney;
     B.money -= offer.getMoney; B.money += offer.giveMoney;
 
+    bump(st, A.id, 'trades');
+    bump(st, B.id, 'trades');
     this.hud.refresh();
     this.scene.refresh(st);
     this.sync();
+    this.moment('trade', { a: A.id, b: B.id });
 
     if (net !== 0) {
       const [srcId, dstId, amt] = net > 0 ? [A.id, B.id, net] : [B.id, A.id, -net];
@@ -2967,6 +3095,8 @@ export class Game {
     await this.bc.show('PHÁ SẢN',
       `<b>${p.name}</b> vỡ nợ! ${props} ô đất cùng toàn bộ nhà cửa được trả về <b>ngân hàng</b>.`,
       { kind: 'bad', ms: 5000 });
+    this.moment('bankrupt', { a: playerId });
+    this.hexes.refresh();
     await this.scene.bankruptFx(playerId);
     // Còn nợ ai thì ngân hàng trả thay ngay tại đây, đừng để chủ nợ mất trắng
     await this.coverDebt(playerId);
@@ -3008,6 +3138,8 @@ export class Game {
     if (!w) return false;
     st.over = true;
     st.endedAt = Date.now();
+    // Chấm điểm cuối cho đường tài sản ở bảng hạ màn
+    sampleWorth(st);
     this.clock = null;
     this.hud.setClock(null);
     this.hud.refresh();
@@ -3025,6 +3157,7 @@ export class Game {
     // Máy cầm lái gọi từ `checkGameOver`, máy khác gọi khi ảnh chụp báo hết ván
     if (this.finishing) return;
     this.finishing = true;
+    this.hexes.refresh();
     const winner = win.player;
     const why = {
       last: 'là người cuối cùng trụ lại',
@@ -3033,6 +3166,8 @@ export class Game {
     }[win.by];
     await this.bc.show('HẠ MÀN',
       `<b>${winner.name}</b> ${why}, <b>thắng ván này!</b>`, { ms: 6000 });
+    // Máy nào cũng tự nói câu này (ai cũng tới đây), rút câu theo số lượt cho cả bàn cùng một lời
+    commentator.say('win', { a: { name: winner.name, css: winner.token.css } }, this.state.turnNo);
     this.scene.celebrate(5200, winner.token.color);
     this.scene.skeletonBow?.(winner.token.css);
     await wait(1600);

@@ -109,6 +109,30 @@ const PALETTES = {
     lineSoft: 'rgba(236,230,214,.16)',
     theme: 'halloween',
   },
+  /* Tết: vẫn là sơn mài đỏ vàng của bản gốc nhưng tươi hẳn lên — đỏ son pháo
+     giấy, vàng kim lì xì, mặt ô hồng đào nhạt. Lòng bàn cờ đỏ thẫm để mai vàng
+     và đào hồng vẽ giữa bàn nổi lên. */
+  tet: {
+    lacDeep: '#7A0E0A',
+    lac: '#C8231B',
+    lacLight: '#E0402F',
+    gold: '#E3B341',
+    goldLight: '#FFE08A',
+    goldDeep: '#A87A1C',
+    paper: '#FCEBD8',
+    paperTop: '#FFF5E8',
+    paperWarm: '#F6DCC2',
+    paperDeep: '#E9C3A0',
+    groundLight: '#8E1A12',
+    ground: '#5A0D0A',
+    groundDeep: '#2E0604',
+    groundNight: '#3A0705',
+    ink: '#2A120C',
+    inkSoft: '#6B3A28',
+    line: 'rgba(110,30,18,.40)',
+    lineSoft: 'rgba(110,30,18,.26)',
+    theme: 'tet',
+  },
 };
 
 let current = DEFAULT_THEME;
@@ -118,6 +142,7 @@ const subs = new Set();
 export const currentTheme = () => current;
 export const isXmas = () => current === 'christmas';
 export const isHalloween = () => current === 'halloween';
+export const isTet = () => current === 'tet';
 
 /**
  * Áp một chủ đề. Gọi lại với đúng chủ đề đang chạy thì không làm gì, nên chỗ

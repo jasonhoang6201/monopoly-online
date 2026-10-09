@@ -35,6 +35,12 @@ const DIE_LOOK = {
     face: [240, 128, 46], pipHi: [74, 28, 8], pipLo: [18, 6, 2], sheen: 0.18,
     ribs: 'rgba(150,56,14,.55)', carved: true,
   },
+  /* Tết: thân đỏ son như bao lì xì, mặt ngà vàng, chấm đỏ thẫm — đỏ trên
+     ngà tương phản theo độ sáng nên đếm chấm vẫn nhanh như bản gốc. */
+  tet: {
+    body: '#C8231B', edge: 'rgba(90,10,6,.6)', shadow: 'rgba(30,4,2,.5)',
+    face: [255, 238, 200], pipHi: [176, 32, 22], pipLo: [92, 10, 6], sheen: 0.12,
+  },
 };
 
 

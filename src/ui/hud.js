@@ -6,6 +6,7 @@
 import { money, TOTAL_HOUSES, tileLabel } from '../data/board.js';
 import { cardOf, cardName } from '../data/cards.js';
 import { paintToken } from '../render/pieces.js';
+import { currentRival } from '../core/chronicle.js';
 import { P } from '../render/boardArt.js';
 import {
   eventsOn, unlocked, pressureRatio, threshold, modLabel, shrinkBoost,
@@ -364,7 +365,12 @@ export class Hud {
 
   refresh() {
     const st = this.state;
+    // Cặp oan gia của bàn: băng rôn ⚔ cạnh tên cả hai người
+    const rv = currentRival(st);
+    const foeOf = (id) => (!rv ? null : rv.a === id ? rv.b : rv.b === id ? rv.a : null);
     for (const p of st.players) {
+      const foe = foeOf(p.id);
+      const foeName = foe != null ? st.players[foe].name : '';
       const el = this.cards.get(p.id);
       if (!el) continue;
       // Chỉ thẻ của người đang tới lượt được hiện; hết ván thì giữ nguyên
@@ -382,6 +388,15 @@ export class Hud {
       } else if (!active && chip) {
         chip.remove();
       }
+      let badge = name.querySelector('.rival-badge');
+      if (foe != null && !badge) {
+        name.firstElementChild.insertAdjacentHTML('afterend', '<span class="rival-badge">⚔</span>');
+        badge = name.querySelector('.rival-badge');
+      } else if (foe == null && badge) {
+        badge.remove();
+        badge = null;
+      }
+      if (badge) badge.title = `Oan gia của ${foeName}`;
 
       el.querySelector('.pcard-money').textContent = p.bankrupt ? 'Đã phá sản' : money(p.money);
 
@@ -417,12 +432,13 @@ export class Hud {
         // Mất kết nối: thẻ mờ đi và số tiền nhường chỗ cho chữ "mất kết nối",
         // để nhìn cột trái là biết ngay ai đang không ngồi máy.
         rchip.classList.toggle('is-away', away);
+        rchip.classList.toggle('is-rival', foe != null);
         rchip.querySelector('.rchip-name').textContent = p.name;
         rchip.querySelector('.rchip-money').textContent =
           p.bankrupt ? 'phá sản' : (away ? 'mất kết nối' : money(p.money));
         rchip.title = away
           ? `${p.name} đang mất kết nối`
-          : `Xem bảng tài sản của ${p.name}`;
+          : `Xem bảng tài sản của ${p.name}${foe != null ? ` · ⚔ oan gia của ${foeName}` : ''}`;
       }
 
       // Chấm ghế trên thanh hẹp

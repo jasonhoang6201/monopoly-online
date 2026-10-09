@@ -12,6 +12,7 @@ import { CHANCE, CHEST, Deck } from '../data/cards.js';
 import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
 import { DEFAULT_THEME, themeKey } from '../data/themes.js';
 import { has, param, roll, ownerRentMult, ownerRentFlat, houseImmune, credit } from './skills.js';
+import { blankChronicle, bump, sampleWorth } from './chronicle.js';
 
 /**
  * Bảng màu quân — quân cờ chỉ phân biệt bằng MÀU, không mang biểu tượng riêng.
@@ -246,6 +247,12 @@ export class GameState {
      */
     this.startedAt = Date.now();
     this.endedAt = null;
+    /**
+     * Biên niên ván: ai trả ai bao nhiêu, đường tài sản, đếm việc lặt vặt.
+     * Luật không đọc nó — chỉ bình luận viên và màn hạ màn. Xem `core/chronicle.js`.
+     */
+    this.chron = blankChronicle(this.players.length);
+    sampleWorth(this);
   }
 
   // ------------------------------------------------- hiệu ứng đang hiệu lực
@@ -578,6 +585,7 @@ export class GameState {
       credit(p, 'ac1', Math.ceil(BOARD[tileId].house_cost * this.modMult('build')) - check.cost);
     }
     if (check.mini) credit(p, 'acS1');
+    bump(this, playerId, 'builds');
     if (check.isHotel) {
       this.houses.set(tileId, 5);
       this.bankHouses += 4;   // trả 4 căn nhà về kho
@@ -712,6 +720,7 @@ export class GameState {
     if (!check.ok) return check;
     this.mortgaged.add(tileId);
     this.players[playerId].money += check.amount;
+    bump(this, playerId, 'morts');
     return check;
   }
 
@@ -740,6 +749,7 @@ export class GameState {
     if (!t.ownable || this.owner.has(tileId) || p.money < t.price) return false;
     p.money -= t.price;
     this.owner.set(tileId, playerId);
+    bump(this, playerId, 'buys');
     return true;
   }
 
@@ -749,6 +759,7 @@ export class GameState {
     if (!BOARD[tileId].ownable || this.owner.has(tileId) || p.money < price) return false;
     p.money -= price;
     this.owner.set(tileId, playerId);
+    bump(this, playerId, 'buys');
     return true;
   }
 
@@ -853,7 +864,10 @@ export class GameState {
       const idx = ord[(at + i) % ord.length];
       if (!this.players[idx].bankrupt) {
         // Vòng qua cuối bảng thứ tự đi là sang vòng mới
-        if (at + i >= ord.length) this.round += 1;
+        if (at + i >= ord.length) {
+          this.round += 1;
+          sampleWorth(this);
+        }
         this.turn = idx;
         // Đếm đổ đôi xoá ở đây, không ở `beginTurn` — xem `rolled`
         this.players[idx].doubles = 0;

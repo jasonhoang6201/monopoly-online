@@ -1,0 +1,73 @@
+/* ============================================================
+   CHỦ ĐỀ TẾT — Xuân Sài Gòn
+   Mọi quy tắc nằm dưới :root[data-theme="tet"] (theme/theme.js đặt thuộc
+   tính này), nên chủ đề khác không đổi một điểm ảnh nào.
+
+   Bản gốc vốn đã là sơn mài đỏ vàng, nên Tết không thay áo mà chỉ thắp sáng
+   lên: đỏ son của giấy pháo, vàng kim của bao lì xì, điểm hồng đào. Các bảng
+   giữ nền tối để chữ sáng vẫn đọc rõ; viền đổi sang vàng kim tươi.
+   ============================================================ */
+
+:root[data-theme="tet"] {
+  --lac-deep:   #7A0E0A;
+  --lac:        #C8231B;
+  --lac-light:  #E0402F;
+
+  --gold-deep:  #B8862A;
+  --gold:       #E3B341;
+  --gold-light: #FFE08A;
+  --gold-pale:  #FFF0C2;
+
+  --ground-night:#2A0504;
+  --ground-deep: #3A0705;
+  --ground:      #5A0D0A;
+  --ground-light:#8E1A12;
+
+  --t-peach: #FF9EC0;
+}
+
+:root[data-theme="tet"] body { background: #2A0504; }
+
+/* Cột điều khiển: đỏ thẫm, viền vàng kim */
+:root[data-theme="tet"] #sidebar {
+  background: linear-gradient(180deg, #4A0A07 0%, #2A0504 100%);
+  border-right: 1px solid rgba(227, 179, 65, .45);
+}
+:root[data-theme="tet"] .brand-mark { color: var(--gold-light); text-shadow: 0 0 12px rgba(255, 210, 120, .35); }
+
+/* Hộp thoại: nền nâu đỏ, viền vàng, một vệt sáng hồng đào ở góc */
+:root[data-theme="tet"] .modal {
+  background:
+    radial-gradient(120% 60% at 100% 0%, rgba(255, 158, 192, .10), transparent 60%),
+    linear-gradient(180deg, #3A0B08 0%, #220504 100%);
+  border-color: var(--gold);
+}
+
+/* Thông báo và thanh nút: cùng tông đỏ thẫm */
+:root[data-theme="tet"] .bcast {
+  background: linear-gradient(160deg, rgba(74, 10, 7, .94), rgba(34, 5, 4, .96));
+  border-color: rgba(227, 179, 65, .55);
+}
+:root[data-theme="tet"] #actions {
+  background: linear-gradient(180deg, rgba(74, 10, 7, .95), rgba(34, 5, 4, .96));
+  border-color: rgba(227, 179, 65, .55);
+}
+
+/* Thẻ nhỏ người chơi */
+:root[data-theme="tet"] .rchip {
+  background: linear-gradient(160deg, rgba(110, 18, 12, .92), rgba(46, 6, 4, .96));
+  border-color: rgba(227, 179, 65, .35);
+}
+
+/* Bình luận viên: mic vàng kim trên nền đỏ son */
+:root[data-theme="tet"] #commentator {
+  background: linear-gradient(160deg, rgba(74, 10, 7, .94), rgba(34, 5, 4, .96));
+  border-color: rgba(227, 179, 65, .55);
+}
+:root[data-theme="tet"] .blv-mic { background: radial-gradient(circle at 35% 30%, #FFE08A, #B8862A); }
+
+/* Danh hiệu cuối ván: thẻ như bao lì xì */
+:root[data-theme="tet"] .award {
+  background: linear-gradient(160deg, rgba(212, 42, 30, .32), rgba(122, 14, 10, .25));
+  border-color: rgba(227, 179, 65, .5);
+}
