@@ -215,8 +215,14 @@ ván dở gần nhất.
 3. `cp .env.example .env` rồi dán hai giá trị vào.
 4. `npm install && npm run dev` → http://localhost:5174
 
-Realtime broadcast và presence bật sẵn, không phải tạo bảng nào. Chỉ dùng `anon`
+Realtime broadcast và presence bật sẵn, ván cờ không cần bảng nào. Chỉ dùng `anon`
 key — `service_role` key mà lọt vào bundle client là mở toang cả database.
+
+Riêng **số liệu cân bằng kỹ năng** (trang `/stats.html`) cần vài bảng Postgres:
+dán `supabase/migrations/0001_skill_analytics.sql` rồi `0002_skill_meta.sql` vào
+SQL Editor — xem `supabase/README.md`. Vẫn cùng anon key; RLS chỉ cho client
+INSERT, đọc qua view và hàm `stats_*`. Không chạy migration thì game vẫn chạy
+bình thường, chỉ là mỗi lần gửi số liệu bị 404 và bỏ qua.
 
 ## Đưa lên mạng
 
@@ -291,6 +297,11 @@ Hai mục đáng nói:
 
 Cả bộ chạy trên **Supabase thật** khi có `.env`; thiếu khoá thì tụt về
 `LocalTransport` và §8 tự bỏ qua (BroadcastChannel không đứt được).
+
+Ván của bộ kiểm thử **không** ghi vào số liệu cân bằng dù có khoá thật: Chrome
+do Playwright cầm có `navigator.webdriver`, và `net/analytics.js` tắt khi thấy
+cờ ấy (cũng tắt trên `localhost`). `tests/telemetry-online.mjs` kiểm đúng chỗ
+dễ sai nhất: người ngồi xem học ngoài lượt thì chỉ máy cầm lái ghi, một lần.
 
 Một giới hạn của máy chứ không phải của mã: **sáu bàn cờ Phaser đã chiếm hết
 ngữ cảnh WebGL** mà Chrome cấp cho một tiến trình, tab thứ bảy nằm im ở màn hình

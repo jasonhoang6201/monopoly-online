@@ -347,6 +347,10 @@ src/
   theme/                   đổi chủ đề (Halloween, Giáng sinh)
   audio/                   nhạc và âm thanh tổng hợp, kèm bộ theo mùa
   net/                     phòng, phiên, đường truyền, danh tính — xem ONLINE.md
+  core/telemetry.js        bộ đệm sự kiện kỹ năng (học, tẩy, phát huy kèm tiền có dấu)
+  net/analytics.js         gom sự kiện thành batch, gửi về Supabase Postgres
+  stats/                   trang /stats.html: dashboard cân bằng kỹ năng
+supabase/                  migration SQL + hướng dẫn cho phần số liệu
 ```
 
 Bàn cờ và quân cờ vẽ bằng Phaser (canvas); HUD và các hộp thoại là HTML phủ lên trên
@@ -355,6 +359,16 @@ Bàn cờ và quân cờ vẽ bằng Phaser (canvas); HUD và các hộp thoại
 Lớp phủ `#board-hud` được `BoardScene.layout()` dán **trùng khít ô vuông bàn cờ** sau mỗi
 lần dựng bố cục, nên thanh nút và bảng thông báo neo theo **phần trăm cạnh bàn cờ** — đổi cỡ
 cửa sổ hay bật toàn màn hình thì chúng tự chạy theo bàn, không cần tính lại chỗ nào.
+
+## Số liệu cân bằng kỹ năng
+
+Mỗi ván thật ghi lại từng lần **học / lên level / tẩy / bật tắt / phát huy** kỹ
+năng (kèm tiền có dấu) và tổng kết ván vào vài bảng Postgres trên Supabase; trang
+**`/stats.html`** đọc lại thành bảng: ô nào hay được học và học ở **điểm kỹ năng thứ
+mấy**, ô nào hay bị tẩy, mỗi ô mang về bao nhiêu tiền mỗi ván / phút / lượt / lần
+dùng, người học có thắng nhiều hơn không, điểm thừa cuối ván… Dựng bảng theo
+[`supabase/README.md`](supabase/README.md). Chỉ máy cầm lái ghi; ván của bộ kiểm
+thử, ván trên `localhost` và URL có `?telemetry=0` không ghi (`?telemetry=1` ép bật).
 
 ## Kiểm thử
 

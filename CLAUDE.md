@@ -14,6 +14,7 @@ thẳng ở gốc repo.
 | `npm test` | bộ kiểm thử một máy | cần dev server ở **5178** |
 | `npm run test:online` | bộ kiểm thử nhiều máy | cần dev server ở **5179** |
 | `npm run sim:skills` | cân bằng kỹ năng: bot chơi trọn ván, báo tối thượng lệch | không cần |
+| `npm run test:telemetry` | luật ghi số liệu kỹ năng, chạy thuần Node | không cần dev server |
 
 ## Quy ước sửa mã
 
@@ -42,7 +43,15 @@ src/
   theme/                 đổi chủ đề (Halloween, Giáng sinh): biến CSS + báo dựng lại hình
   audio/                 nhạc và hiệu ứng tổng hợp bằng Web Audio, kèm bộ theo mùa
   net/                   Supabase Realtime: phòng, phiên, đường truyền, danh tính
+  core/telemetry.js      bộ đệm sự kiện kỹ năng — luật chỉ gọi track(), không biết mạng
+  net/analytics.js       gom batch, gửi REST về Supabase; tắt khi là bot/localhost
+  stats/                 trang /stats.html đọc hàm stats_* (dashboard cân bằng)
+supabase/                migration SQL (bảng, RLS, view, hàm stats_*) + README
 ```
+
+Số liệu cân bằng: chỉ **máy cầm lái** ghi (cổng kiểm `isDriver()` lúc phát); mọi
+chỗ kỹ năng mang tiền về đều đi qua `credit()` — khoản thua ghi bằng `delta` âm
+hoặc `tally()`. Đổi tên / thêm ô kỹ năng thì chạy lại `scripts/skill-meta-sql.mjs`.
 
 Mọi thứ trong `core/` không phụ thuộc UI — `serialize.js` tuần tự hoá trạng
 thái để phát cho các máy khác, và cả thư mục chạy được dưới Node trong các bài
