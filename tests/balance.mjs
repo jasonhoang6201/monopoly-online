@@ -16,6 +16,11 @@
  * tiền trực tiếp được: script tính theo một giả định ghi ngay cạnh công thức,
  * đánh dấu `*` trong bảng. Số của chúng thô hơn, đọc để so thứ bậc.
  *
+ * Bảng này chỉ đo tiền ở một thế cờ đứng yên nên bỏ sót những thứ quyết định
+ * thắng thua: né khách sạn, phá bộ màu, hệ số nhân chồng nhau, quay vòng ô
+ * Bắt Đầu. Cân bằng thật thì đo bằng tests/gamesim.mjs (bot chơi trọn ván);
+ * bảng này để soát nhanh thứ bậc tiền của từng ô.
+ *
  * Đường đi: kỹ năng học lúc nào thì mang tiền về từ lúc đó tới hết ván
  * (`TURNS` lượt). Cấp 1 học ở lần qua ô Bắt Đầu thứ 1, cấp 2 ở lần 2, cấp 3 và
  * nhánh phụ ở lần 4 (2 điểm), tối thượng ở lần 7.

@@ -13,6 +13,7 @@ thẳng ở gốc repo.
 | `npm run dev` | máy chủ phát triển | 5174 |
 | `npm test` | bộ kiểm thử một máy | cần dev server ở **5178** |
 | `npm run test:online` | bộ kiểm thử nhiều máy | cần dev server ở **5179** |
+| `npm run sim:skills` | cân bằng kỹ năng: bot chơi trọn ván, báo tối thượng lệch | không cần |
 
 ## Quy ước sửa mã
 

@@ -29,7 +29,7 @@ import { skillIcon } from './skillIcons.js';
 import { BRANCHES, SKILLS, KINDS, RESPEC_FEE, MAX_LEVEL } from '../data/skills.js';
 import {
   skillById, branchByKey, skillCost, skillState, canLearn, learnSkill, levelOf,
-  canLevelUp, nextCost, lvParams, levelLine, spentIn, branchMax, fillText,
+  canLevelUp, nextCost, lvParams, levelLine, effectLine, spentIn, branchMax, fillText,
   canRespec, respec, growNeed, growText, growProgress, rivalUlt,
   isOff, switchable, skillNow,
 } from '../core/skills.js';
@@ -267,7 +267,7 @@ function detailHtml(player, s, readOnly, manage, st) {
       <div class="sd-body">
         <section>
           <h4>Tác dụng${lv ? ` (level ${lv})` : ''}</h4>
-          <p class="sd-effect">${esc(fillText(s.effect, lvParams(s, lv || 1)))}</p>
+          <p class="sd-effect">${esc(effectLine(s, lv || 1))}</p>
         </section>
         ${now.length ? `<section>
           <h4>${lv ? 'Số liệu lúc này' : 'Nếu học bây giờ'}</h4>

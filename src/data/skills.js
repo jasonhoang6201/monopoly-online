@@ -192,7 +192,7 @@ export const SKILLS = [
     levels: [
       { chance: 0.35, amount: [10, 30] },
       { chance: 0.35, amount: 25 },
-      { chance: 0.45, amount: 35 },
+      { chance: 0.4, amount: 30 },
     ],
     grow: { by: 'gain', at: [100, 250] },
     short: 'Đi đường có lúc nhặt được tiền.',
@@ -203,7 +203,7 @@ export const SKILLS = [
     id: 'cn2a', branch: 'congnhan', tier: 2, slot: 'a', kind: 'passive', span: 'forever', icon: 'overtime',
     requires: ['cn1'],
     name: 'Tăng Ca',
-    levels: [{ bonus: [20, 80] }, { bonus: 60 }, { bonus: 90 }],
+    levels: [{ bonus: [20, 50] }, { bonus: 40 }, { bonus: 60 }],
     grow: { by: 'gain', at: [100, 250] },
     short: 'Lương qua ô Bắt Đầu cao hơn.',
     effect: 'Mỗi lần qua ô Bắt Đầu nhận thêm {$bonus} ngoài lương 200$.',
@@ -223,11 +223,7 @@ export const SKILLS = [
     id: 'cn3', branch: 'congnhan', tier: 3, slot: 'a', kind: 'passive', span: 'forever', icon: 'seniority',
     requires: ['cn2a'],
     name: 'Thâm Niên',
-    levels: [
-      { perLap: [5, 25], cap: 150 },
-      { perLap: 20, cap: 200 },
-      { perLap: 25, cap: 300 },
-    ],
+    levels: [{ perLap: [5, 20], cap: 90 }, { perLap: 15, cap: 120 }, { perLap: 20, cap: 150 }],
     grow: { by: 'gain', at: [120, 300] },
     short: 'Qua ô Bắt Đầu càng nhiều, lương càng cao.',
     effect: 'Mỗi lần bạn đã qua ô Bắt Đầu cộng thêm {$perLap} vào lương, tối đa +{$cap}.',
@@ -245,9 +241,9 @@ export const SKILLS = [
        `each` chặn số tiền một người nộp mỗi lần: `each` × số lần đã qua. Xem
        vì sao phải có trần này ở ghi chú `levyEach` trong core/skills.js. */
     levels: [
-      { base: 0.03, perLap: 0.01, jail: 0.03, cap: 0.12, each: 12 },
-      { base: 0.03, perLap: 0.01, jail: 0.03, cap: 0.16, each: 15 },
-      { base: 0.03, perLap: 0.01, jail: 0.03, cap: 0.20, each: 18 },
+      { base: 0.02, perLap: 0.01, jail: 0.03, cap: 0.07, each: 6 },
+      { base: 0.02, perLap: 0.01, jail: 0.03, cap: 0.09, each: 7 },
+      { base: 0.02, perLap: 0.01, jail: 0.03, cap: 0.1, each: 8 },
     ],
     grow: { by: 'gain', at: [300, 800] },
     short: 'Mỗi lần qua ô Bắt Đầu, mọi người khác nộp quỹ theo % tiền mặt của bạn.',
@@ -263,11 +259,7 @@ export const SKILLS = [
        chạy đúng lúc mình không đủ tiền. Trả hộ trước khi hỏi bán nhà / thế
        chấp, nên cứu được cả dãy nhà chứ không chỉ cứu khỏi phá sản. */
     uses: 'Tự chạy khi thiếu tiền, rồi chờ vài lần qua ô Bắt Đầu',
-    levels: [
-      { cover: 400, cooldown: 3 },
-      { cover: 550, cooldown: 3 },
-      { cover: 700, cooldown: 3 },
-    ],
+    levels: [{ cover: 800, cooldown: 1 }, { cover: 1100, cooldown: 1 }, { cover: 1500, cooldown: 1 }],
     grow: { by: 'gain', at: [200, 500] },
     short: 'Thiếu tiền trả thì ngân hàng trả hộ phần thiếu.',
     effect: 'Khi bạn phải trả một khoản lớn hơn tiền mặt đang có, ngân hàng trả hộ phần còn thiếu, tối đa {$cover}, trước khi bạn phải bán nhà hay thế chấp. Chạy xong phải qua ô Bắt Đầu {cooldown} lần mới chạy lại.',
@@ -280,7 +272,7 @@ export const SKILLS = [
     name: 'Lão Làng',
     /* Đếm từ lúc học chứ không từ đầu ván: tính theo tổng số lần qua thì học
        muộn là được bù ngay cả loạt điểm của những vòng trước. */
-    levels: [{ every: 4 }, { every: 3 }, { every: 2 }],
+    levels: [{ every: 3 }, { every: 3 }, { every: 2 }],
     grow: { by: 'uses', at: [1, 2], say: 'Được tặng điểm {n} lần' },
     short: 'Cứ vài lần qua ô Bắt Đầu được thêm 1 điểm kỹ năng.',
     effect: 'Từ lúc học, cứ mỗi {every} lần qua ô Bắt Đầu bạn được thêm 1 điểm kỹ năng.',
@@ -329,7 +321,7 @@ export const SKILLS = [
        mua được bến — nên vừa có 2 bến ở vòng đầu là học ô này có lời ngay.
        `own` cộng thẳng vào tiền vé, không nhân: bến thu 25–200$ theo số bến,
        nhân thì người có 4 bến lời gấp tám người có 1 bến. */
-    levels: [{ pay: 0.6, own: 10 }, { pay: 0.4, own: 15 }, { pay: 0.2, own: 20 }],
+    levels: [{ pay: 0.6, own: 15 }, { pay: 0.4, own: 20 }, { pay: 0.2, own: 30 }],
     grow: { by: 'gain', at: [60, 180] },
     short: 'Trả ít tiền vé ở bến của người khác; bến của mình thu thêm.',
     effect: 'Dừng ở bến xe / nhà ga của người khác chỉ trả {%pay} tiền vé. Bến/ga của bạn thu thêm {$own} cho mỗi bến/ga bạn đang có.',
@@ -369,13 +361,13 @@ export const SKILLS = [
     id: 'dh3', branch: 'duhanh', tier: 3, slot: 'a', kind: 'active', auto: true, icon: 'fork',
     requires: ['dh2a'],
     name: 'Quay Đầu',
-    uses: 'Reset mỗi khi qua ô Bắt Đầu',
+    uses: '1 lần, rồi chờ vài lần qua ô Bắt Đầu',
     when: 'sau khi lắc, trước khi quân đi',
-    levels: [{ charges: 1, cooldown: 1 }, { charges: 2, cooldown: 1 }, { charges: 3, cooldown: 1 }],
+    levels: [{ charges: 1, cooldown: 3 }, { charges: 1, cooldown: 2 }, { charges: 1, cooldown: 1 }],
     grow: { by: 'uses', at: [1, 3], say: 'Quay đầu {n} lần' },
     short: 'Lắc xong được chọn đi lùi.',
-    effect: 'Sau khi lắc, được chọn đi lùi đúng số bước thay vì đi tới, để né ô đắt tiền phía trước.',
-    lvText: 'Dùng {charges} lần giữa hai lần qua ô Bắt Đầu',
+    effect: 'Sau khi lắc, được chọn đi lùi đúng số bước thay vì đi tới, để né ô đắt tiền phía trước. Dùng xong phải qua ô Bắt Đầu {cooldown} lần mới dùng lại được.',
+    lvText: 'Dùng xong chờ {cooldown} lần qua ô Bắt Đầu',
   },
   {
     id: 'dhU', branch: 'duhanh', tier: 4, slot: 'a', kind: 'active', once: true, icon: 'teleport',
@@ -383,10 +375,10 @@ export const SKILLS = [
     name: 'Chuyến Tàu Xuyên Việt',
     uses: '1 lần, rồi chờ vài lần qua ô Bắt Đầu',
     when: 'đầu lượt, thay cho nút lắc',
-    levels: [{ cooldown: 3 }, { cooldown: 2 }, { cooldown: 1 }],
+    levels: [{ cooldown: 5 }, { cooldown: 4 }, { cooldown: 3 }],
     grow: { by: 'uses', at: [1, 2], say: 'Đi Xuyên Việt {n} lần' },
-    short: 'Không lắc, đi thẳng tới ô bất kỳ.',
-    effect: 'Thay cho việc lắc: đi thẳng tới bất kỳ ô nào trên bàn (trừ ô Vào Tù). Đi ngang ô Bắt Đầu vẫn nhận lương. Dùng xong phải qua ô Bắt Đầu {cooldown} lần mới dùng lại được.',
+    short: 'Không lắc, đi thẳng tới ô bất kỳ, trừ đất chưa có chủ.',
+    effect: 'Thay cho việc lắc: đi thẳng tới bất kỳ ô nào trên bàn, trừ ô Vào Tù và đất, bến/ga, công ty chưa có chủ. Đi ngang ô Bắt Đầu vẫn nhận lương. Dùng xong phải qua ô Bắt Đầu {cooldown} lần mới dùng lại được; chính chuyến đi này không tính.',
     lvText: 'Dùng lại sau {cooldown} lần qua ô Bắt Đầu',
   },
 
@@ -395,13 +387,13 @@ export const SKILLS = [
     requires: ['dhX1'],
     name: 'Trạm Thu Phí BOT',
     /* Một ô bị đi ngang chừng 7 lần cho mỗi lần có người dừng hẳn (bước lắc
-       trung bình 7). Có 2 bến + 1 công ty, level 1 (20$) thu ≈ 32$ mỗi lượt
-       từ cả bàn 4 người — đã là tối thượng thu nhiều nhất ở thế cờ tham chiếu
-       của tests/balance.mjs; 30$ thì thu gấp đôi các tối thượng khác. Không có
-       bến thì chọn Xuyên Việt.
+       trung bình 7). Bảng tiền của tests/balance.mjs từng cho level 1 20$ là
+       tối thượng thu nhiều nhất; chơi trọn ván (tests/gamesim.mjs) thì nó lại
+       đứng giữa bảng vì phí chỉ thu trong tiền mặt, nên nâng lên 25/32/40$.
+       Không có bến thì chọn Xuyên Việt.
        Chỉ thu trong số tiền mặt người đi đang có: trạm thu phí thì hay gặp,
        đẩy người ta vào xoay tiền mỗi lần đi ngang là cả bàn đứng chờ. */
-    levels: [{ toll: 20 }, { toll: 28 }, { toll: 35 }],
+    levels: [{ toll: 25 }, { toll: 32 }, { toll: 40 }],
     grow: { by: 'gain', at: [200, 500] },
     short: 'Người khác đi ngang bến/ga, công ty của bạn phải nộp phí.',
     effect: 'Mỗi lần người khác đi ngang (không dừng) một bến/ga hoặc công ty của bạn, họ nộp cho bạn {$toll} mỗi trạm. Dừng hẳn trên đó thì trả thuê như thường. Ô đang thế chấp không thu phí; ai không đủ thì nộp hết tiền mặt đang có.',
@@ -477,7 +469,7 @@ export const SKILLS = [
   {
     id: 'dd1', branch: 'doden', tier: 1, kind: 'passive', span: 'forever', icon: 'parity',
     name: 'Chẵn Lẻ',
-    levels: [{ even: [10, 50], odd: [0, 30] }, { even: 35, odd: 10 }, { even: 40, odd: 10 }],
+    levels: [{ even: [10, 50], odd: [0, 30] }, { even: 30, odd: 10 }, { even: 35, odd: 15 }],
     grow: { by: 'gain', at: [100, 250] },
     short: 'Lắc ra chẵn được tiền, lắc ra lẻ mất ít tiền.',
     effect: 'Mỗi lần lắc: tổng chẵn nhận {$even}, tổng lẻ mất {$odd}.',
@@ -494,7 +486,7 @@ export const SKILLS = [
     levels: [{ payout: [0.7, 1.4], max: 200 }, { payout: 1.05, max: 200 }, { payout: 1.15, max: 250 }],
     grow: { by: 'uses', at: [3, 6], say: 'Đặt cược {n} lần' },
     short: 'Đoán tổng xí ngầu chẵn hay lẻ, đúng thì ăn tiền cược.',
-    effect: 'Mỗi lượt, lúc bấm Lắc, game hỏi bạn có cược không: chọn cửa chẵn hay lẻ và số tiền cược (tối đa {$max}). Hộp hỏi chọn sẵn cửa và tiền của lần cược trước: Enter là cược, Esc là lượt này không cược. Đoán đúng: được thêm {%payout} số tiền cược. Đoán sai: mất tiền cược, số tiền này vào Quỹ Công.',
+    effect: 'Mỗi lượt, lúc bấm Lắc, game hỏi bạn có cược không: chọn cửa chẵn hay lẻ và số tiền cược (tối đa {$max}). Hộp hỏi chọn sẵn cửa và tiền của lần cược trước: Enter là cược, Esc là lượt này không cược. Chốt theo cú lắc đầu tiên, Xí Ngầu Gian không đổi được. Đoán đúng: được thêm {%payout} số tiền cược. Đoán sai: mất tiền cược, số tiền này vào Quỹ Công.',
     lvText: 'Đúng ăn {%payout} tiền cược, cược tối đa {$max}',
   },
   {
@@ -502,9 +494,9 @@ export const SKILLS = [
     requires: ['dd1'],
     name: 'Đôi Hên',
     levels: [
-      { double: [20, 60], jackpot: [200, 400] },
-      { double: 50, jackpot: 350 },
-      { double: 80, jackpot: 500 },
+      { double: [10, 40], jackpot: [100, 250] },
+      { double: 30, jackpot: 200 },
+      { double: 45, jackpot: 300 },
     ],
     grow: { by: 'gain', at: [100, 250] },
     short: 'Lắc ra đôi có thưởng; đôi lần ba không vào tù mà trúng lớn.',
@@ -515,13 +507,13 @@ export const SKILLS = [
     id: 'dd3', branch: 'doden', tier: 3, slot: 'a', kind: 'active', auto: true, icon: 'reroll',
     requires: ['dd2b'],
     name: 'Xí Ngầu Gian',
-    uses: 'Reset mỗi khi qua ô Bắt Đầu',
+    uses: '1 lần, rồi chờ vài lần qua ô Bắt Đầu',
     when: 'ngay sau khi lắc, trước khi quân đi',
-    levels: [{ charges: 1, cooldown: 1 }, { charges: 2, cooldown: 1 }, { charges: 3, cooldown: 1 }],
+    levels: [{ charges: 1, cooldown: 4 }, { charges: 1, cooldown: 3 }, { charges: 1, cooldown: 2 }],
     grow: { by: 'uses', at: [1, 3], say: 'Lắc lại {n} lần' },
     short: 'Lắc lại một viên xí ngầu tuỳ chọn.',
-    effect: 'Sau khi lắc, được lắc lại 1 viên (bạn chọn viên nào). Kết quả mới là kết quả cuối, kể cả khi xấu hơn.',
-    lvText: 'Dùng {charges} lần giữa hai lần qua ô Bắt Đầu',
+    effect: 'Sau khi lắc, được lắc lại 1 viên (bạn chọn viên nào) để đổi ô sẽ tới. Kết quả mới là kết quả cuối, kể cả khi xấu hơn. Cược và Tất Tay đã chốt theo cú lắc đầu, không đổi theo. Dùng xong phải qua ô Bắt Đầu {cooldown} lần mới dùng lại được.',
+    lvText: 'Dùng xong chờ {cooldown} lần qua ô Bắt Đầu',
   },
   {
     id: 'ddU', branch: 'doden', tier: 4, slot: 'a', kind: 'active', once: true, icon: 'allin',
@@ -530,13 +522,13 @@ export const SKILLS = [
     uses: '1 lần, rồi chờ vài lần qua ô Bắt Đầu',
     when: 'trước khi lắc',
     levels: [
-      { win: [0.2, 0.35], lose: 0.15, cooldown: 2 },
-      { win: 0.3, lose: 0.12, cooldown: 1 },
-      { win: 0.35, lose: 0.1, cooldown: 1 },
+      { win: [0.08, 0.16], lose: 0.12, cooldown: 2 },
+      { win: 0.12, lose: 0.1, cooldown: 2 },
+      { win: 0.14, lose: 0.1, cooldown: 2 },
     ],
     grow: { by: 'uses', at: [1, 2], say: 'Tất tay {n} lần' },
     short: 'Đoán chẵn/lẻ với cả bàn: đúng thì mỗi người trả bạn một phần tiền mặt.',
-    effect: 'Trước khi lắc, đoán tổng hai viên xí ngầu ra chẵn hay lẻ. Đoán đúng: mỗi người chơi khác trả bạn {%win} tiền mặt họ đang có. Đoán sai: bạn trả mỗi người {%lose} tiền mặt của bạn. Dùng xong phải qua ô Bắt Đầu {cooldown} lần mới dùng lại được.',
+    effect: 'Trước khi lắc, đoán tổng hai viên xí ngầu ra chẵn hay lẻ. Chốt theo cú lắc đầu tiên, Xí Ngầu Gian không đổi được. Đoán đúng: mỗi người chơi khác trả bạn {%win} tiền mặt họ đang có. Đoán sai: bạn trả mỗi người {%lose} tiền mặt của bạn. Dùng xong phải qua ô Bắt Đầu {cooldown} lần mới dùng lại được.',
     lvText: 'Thắng lấy {%win}, thua trả {%lose}, chờ {cooldown} lần',
   },
 
@@ -552,7 +544,7 @@ export const SKILLS = [
        hỏi giữa lúc quân đang đi ngang ô Bắt Đầu. */
     uses: 'Đổi số một lần giữa hai lần qua ô Bắt Đầu',
     when: 'trong lượt của bạn',
-    levels: [lotto(5), lotto(7), lotto(9)],
+    levels: [lotto(7), lotto(9), lotto(12)],
     grow: { by: 'gain', at: [200, 500] },
     short: 'Chọn một con số; người khác lắc ra số đó thì trả bạn.',
     effect: 'Chọn một tổng từ 2 đến 12; đổi được một lần giữa hai lần qua ô Bắt Đầu. Mỗi lần người khác lắc ra đúng tổng đó thì họ trả bạn. Số càng khó ra trả càng nhiều: 7 → {$p7}, 6 hoặc 8 → {$p6}, 2 hoặc 12 → {$p2}. Ai không đủ thì trả hết tiền mặt đang có.',
@@ -624,17 +616,17 @@ export const SKILLS = [
     id: 'dc2a', branch: 'dauco', tier: 2, slot: 'a', kind: 'passive', span: 'forever', icon: 'swap',
     requires: ['dc1'],
     name: 'Cò Đất',
-    levels: [{ rate: [0.15, 0.25], cap: 150 }, { rate: 0.25, cap: 250 }, { rate: 0.3, cap: 400 }],
+    levels: [{ rate: [0.25, 0.35], cap: 250 }, { rate: 0.35, cap: 350 }, { rate: 0.45, cap: 500 }],
     grow: { by: 'gain', at: [60, 180] },
-    short: 'Ai giao dịch đất cũng phải chia bạn tiền cò.',
-    effect: 'Mỗi giao dịch trên bàn có đất đổi chủ, kể cả giữa hai người khác, bạn nhận {%rate} giá gốc số đất đó, tối đa {$cap} mỗi giao dịch. Ngân hàng trả.',
+    short: 'Người khác giao dịch đất với nhau, bạn có tiền cò.',
+    effect: 'Mỗi giao dịch có đất đổi chủ giữa hai người khác, bạn nhận {%rate} giá gốc số đất đó, tối đa {$cap} mỗi giao dịch. Ngân hàng trả. Giao dịch bạn đứng ra làm thì không có tiền cò.',
     lvText: '{%rate} giá đất, tối đa {$cap}',
   },
   {
     id: 'dc2b', branch: 'dauco', tier: 2, slot: 'b', kind: 'passive', span: 'forever', icon: 'bricks',
     requires: ['dc1'],
     name: 'Thầu Vật Liệu',
-    levels: [{ build: [10, 30], sell: [5, 15] }, { build: 25, sell: 15 }, { build: 40, sell: 20 }],
+    levels: [{ build: [10, 20], sell: [5, 10] }, { build: 18, sell: 10 }, { build: 25, sell: 12 }],
     grow: { by: 'gain', at: [60, 180] },
     short: 'Người khác xây nhà hay bán nhà, bạn cũng có phần.',
     effect: 'Mỗi căn nhà (hoặc khách sạn) người khác xây, bạn nhận {$build}. Mỗi căn người khác bán lại hoặc bị dỡ, bạn nhận {$sell}. Ngân hàng trả.',
@@ -647,20 +639,20 @@ export const SKILLS = [
     uses: '1 lần, rồi chờ vài lần qua ô Bắt Đầu',
     when: 'khi bạn dừng trên đất chưa có nhà của người khác',
     levels: [
-      { premium: [1.3, 1.8], cooldown: 2 },
-      { premium: 1.4, cooldown: 2 },
-      { premium: 1.25, cooldown: 1 },
+      { premium: [1.1, 1.3], cooldown: 1 },
+      { premium: 1.1, cooldown: 1 },
+      { premium: 1.0, cooldown: 1 },
     ],
     grow: { by: 'uses', at: [1, 2], say: 'Thâu tóm {n} lần' },
     short: 'Ép mua đất chưa xây nhà của người khác.',
-    effect: 'Dừng trên đất chưa có nhà của người khác: mua lại với giá {%premium} giá gốc, chủ đất nhận tiền và không được từ chối. Không dùng được nếu chủ đất đã xây nhà trong bộ màu đó. Dùng xong phải qua ô Bắt Đầu {cooldown} lần mới dùng lại được.',
+    effect: 'Dừng trên đất chưa có nhà, bến/ga hay công ty của người khác: mua lại với giá {%premium} giá gốc, chủ đất nhận tiền và không được từ chối. Không dùng được nếu chủ đất đã xây nhà trong bộ màu đó. Dùng xong phải qua ô Bắt Đầu {cooldown} lần mới dùng lại được.',
     lvText: 'Giá {%premium}, chờ {cooldown} lần',
   },
   {
     id: 'dcU', branch: 'dauco', tier: 4, slot: 'a', kind: 'passive', span: 'forever', icon: 'boom',
     requires: ['dc3'],
     name: 'Cơn Sốt Đất',
-    levels: [{ mult: 2.5 }, { mult: 2.75 }, { mult: 3 }],
+    levels: [{ mult: 3 }, { mult: 3.5 }, { mult: 4.5 }],
     grow: { by: 'worth', at: [2500, 3500] },
     short: 'Đất chưa xây, bến/ga, công ty của bạn thu thuê gấp nhiều lần.',
     effect: 'Mọi ô chưa có nhà của bạn (đất trống, bến/ga, công ty) thu tiền thuê ×{mult}. Ô đã xây nhà thì tính giá thuê nhà như thường.',
@@ -671,28 +663,35 @@ export const SKILLS = [
     id: 'dcV', branch: 'dauco', tier: 4, slot: 'b', kind: 'active', once: true, icon: 'foreclose',
     requires: ['dcX1'],
     name: 'Siết Nợ',
-    /* Người mua trả ngân hàng đúng số thế chấp (không lãi 10%) và trả chủ cũ
-       phần `premium` — tổng chỉ 55–65% giá gốc, đổi lại chỉ nhắm được đất
-       người ta đã phải cầm cố. Cơn Sốt Đất hợp khi mình gom nhiều đất trống;
-       ô này hợp khi cả bàn đang túng tiền. */
+    /* Nhắm con nợ: người đang có ô thế chấp hoặc cạn tiền mặt dưới `poor`.
+       Ô đang thế chấp mua rẻ (`bank` × số thế chấp), ô thường của con nợ mua
+       theo `debt` × giá gốc. Từng chỉ nhắm ô đang thế chấp — hiếm tới mức bot
+       chơi nghìn ván mới siết được chừng 2 lần mỗi ván, yếu nhất trong mười
+       tối thượng (xem `forecloseOffers` và tests/gamesim.mjs). Cơn Sốt Đất hợp
+       khi mình gom nhiều đất trống; ô này hợp khi cả bàn đang túng tiền. */
     uses: 'Reset mỗi khi qua ô Bắt Đầu',
-    when: 'trong lượt của bạn, khi có đất đang thế chấp của người khác',
+    when: 'trong lượt của bạn, khi có người đang có ô thế chấp hoặc cạn tiền mặt',
     levels: [
-      { premium: 0.2, charges: 1, cooldown: 1 },
-      { premium: 0.1, charges: 2, cooldown: 1 },
-      { premium: 0, charges: 2, cooldown: 1 },
+      { poor: 250, bank: 0.5, premium: 0.1, debt: 0.55, charges: 1, cooldown: 1 },
+      { poor: 300, bank: 0.4, premium: 0, debt: 0.5, charges: 2, cooldown: 1 },
+      { poor: 350, bank: 0.3, premium: 0, debt: 0.45, charges: 2, cooldown: 1 },
     ],
     grow: { by: 'uses', at: [1, 2], say: 'Siết nợ {n} ô' },
-    short: 'Mua đứt đất đang thế chấp của người khác.',
-    effect: 'Chọn một ô đang thế chấp của người khác: bạn trả ngân hàng số tiền thế chấp (không lãi) và trả chủ cũ thêm {%premium} số đó. Ô về tay bạn, hết thế chấp; chủ cũ không được từ chối.',
-    lvText: 'Trả chủ cũ thêm {%premium}, dùng {charges} lần giữa hai lần qua',
+    short: 'Mua đứt đất của người đang túng tiền.',
+    // Level 2–3 không trả chủ cũ đồng nào cho ô thế chấp, nên bỏ hẳn vế ấy
+    effect: [
+      'Chọn một ô của người đang có ô thế chấp hoặc có dưới {$poor} tiền mặt. Ô đang thế chấp: trả ngân hàng {%bank} số tiền thế chấp và trả chủ cũ thêm {%premium} số đó. Ô chưa thế chấp và chưa có nhà trong bộ: trả chủ cũ {%debt} giá gốc. Ô về tay bạn, hết thế chấp; chủ cũ không được từ chối.',
+      'Chọn một ô của người đang có ô thế chấp hoặc có dưới {$poor} tiền mặt. Ô đang thế chấp: trả ngân hàng {%bank} số tiền thế chấp, chủ cũ không nhận gì. Ô chưa thế chấp và chưa có nhà trong bộ: trả chủ cũ {%debt} giá gốc. Ô về tay bạn, hết thế chấp; chủ cũ không được từ chối.',
+      'Chọn một ô của người đang có ô thế chấp hoặc có dưới {$poor} tiền mặt. Ô đang thế chấp: trả ngân hàng {%bank} số tiền thế chấp, chủ cũ không nhận gì. Ô chưa thế chấp và chưa có nhà trong bộ: trả chủ cũ {%debt} giá gốc. Ô về tay bạn, hết thế chấp; chủ cũ không được từ chối.',
+    ],
+    lvText: 'Con nợ dưới {$poor}, ô thế chấp trả {%bank}, ô thường trả {%debt} giá, {charges} lần giữa hai lần qua',
   },
 
   {
     id: 'dcX1', branch: 'dauco', tier: 3, slot: 'b', kind: 'passive', span: 'forever', icon: 'ledger',
     requires: ['dc2b'],
     name: 'Chủ Nợ',
-    levels: [{ late: 0.2 }, { late: 0.25 }, { late: 0.3 }],
+    levels: [{ late: 0.5 }, { late: 0.6 }, { late: 0.75 }],
     grow: { by: 'gain', at: [40, 100] },
     short: 'Người đang nợ ngân hàng trả thuê cho bạn đắt hơn.',
     effect: 'Người dừng trên đất của bạn mà đang có ô thế chấp ở ngân hàng thì trả thêm {%late} tiền thuê.',
@@ -702,7 +701,7 @@ export const SKILLS = [
     id: 'dcX2', branch: 'dauco', tier: 2, slot: 'c', kind: 'passive', span: 'forever', icon: 'receipt',
     requires: ['dc1'],
     name: 'Khách Sộp',
-    levels: [{ back: [0.1, 0.2] }, { back: 0.18 }, { back: 0.25 }],
+    levels: [{ back: [0.25, 0.35] }, { back: 0.35 }, { back: 0.45 }],
     grow: { by: 'lands', at: [5, 7] },
     short: 'Mua đất của ngân hàng được hoàn lại một phần.',
     effect: 'Mỗi lần bạn dừng chân rồi mua ô chưa có chủ (đất, bến/ga, công ty), ngân hàng hoàn lại {%back} giá mua. Mua qua đấu giá không tính.',
@@ -718,13 +717,13 @@ export const SKILLS = [
     uses: 'Reset mỗi khi qua ô Bắt Đầu',
     when: 'trong lượt của bạn, khi có người khác đang đứng ở ô chưa có chủ',
     levels: [
-      { price: 0.8, charges: 1, cooldown: 1 },
-      { price: 0.75, charges: 1, cooldown: 1 },
-      { price: 0.7, charges: 2, cooldown: 1 },
+      { price: 0.9, charges: 1, cooldown: 1, early: 3 },
+      { price: 0.85, charges: 1, cooldown: 1, early: 3 },
+      { price: 0.8, charges: 2, cooldown: 1, early: 3 },
     ],
     grow: { by: 'uses', at: [1, 2], say: 'Nhặt {n} ô' },
     short: 'Mua ô chưa có chủ mà người khác đang đứng, quân bạn ở đâu cũng được.',
-    effect: 'Dùng Nhặt Hàng Thừa: những ô chưa có chủ mà người khác đang đứng sẽ sáng trên bàn cờ; chọn một ô để mua với {%price} giá gốc, dù quân bạn đang ở đâu.',
+    effect: 'Dùng Nhặt Hàng Thừa: những ô chưa có chủ mà người khác đang đứng sẽ sáng trên bàn cờ; chọn một ô để mua với {%price} giá gốc, dù quân bạn đang ở đâu. Chưa qua ô Bắt Đầu đủ {early} lần thì không nhặt được ô làm đủ bộ màu cho bạn.',
     lvText: 'Mua {%price} giá, dùng {charges} lần giữa hai lần qua',
   },
   {
@@ -733,7 +732,7 @@ export const SKILLS = [
     name: 'Góp Vốn',
     uses: 'Đổi người một lần giữa hai lần qua ô Bắt Đầu',
     when: 'trong lượt của bạn',
-    levels: [{ share: 0.15 }, { share: 0.2 }, { share: 0.25 }],
+    levels: [{ share: 0.2 }, { share: 0.25 }, { share: 0.3 }],
     grow: { by: 'gain', at: [100, 250] },
     short: 'Hưởng một phần tiền thuê của người bạn góp vốn.',
     effect: 'Chọn một người chơi khác để góp vốn. Mỗi lần người đó thu tiền thuê, ngân hàng trả bạn {%share} số tiền ấy; người đó không mất gì. Đổi người được một lần giữa hai lần qua ô Bắt Đầu.',
@@ -748,7 +747,7 @@ export const SKILLS = [
        vài ô đất, chưa ai đủ bộ để xây nhà, nên Mái Ấm đứng ở đây thì nằm im
        cả chục lượt. Chủ Nhà chạy từ ô đất đầu tiên. Số tiền hạ xuống ngang
        Nhặt Tiền Rơi vì giờ không cần mở khoá thành tựu nữa. */
-    levels: [{ bonus: [10, 25] }, { bonus: 20 }, { bonus: 30 }],
+    levels: [{ bonus: [15, 35] }, { bonus: 30 }, { bonus: 40 }],
     grow: { by: 'gain', at: [50, 120] },
     short: 'Dừng trên đất của mình thì được tiền.',
     effect: 'Mỗi lần bạn dừng trên đất, bến/ga hay công ty của chính mình, ngân hàng trả {$bonus}.',
@@ -758,7 +757,7 @@ export const SKILLS = [
     id: 'ac1', branch: 'ancu', tier: 2, slot: 'c', kind: 'passive', span: 'forever', icon: 'hearth',
     requires: ['acX2'],
     name: 'Mái Ấm',
-    levels: [{ cut: 0.15 }, { cut: 0.2 }, { cut: 0.3 }],
+    levels: [{ cut: 0.2 }, { cut: 0.25 }, { cut: 0.35 }],
     grow: { by: 'lands', at: [4, 6] },
     short: 'Xây nhà rẻ hơn.',
     effect: 'Giá xây mỗi căn nhà và khách sạn giảm {%cut}.',
@@ -771,18 +770,18 @@ export const SKILLS = [
     levels: [{ perLap: 0.03, cap: 0.3 }, { perLap: 0.04, cap: 0.4 }, { perLap: 0.05, cap: 0.6 }],
     grow: { by: 'gain', at: [100, 250] },
     short: 'Nhà của bạn càng về cuối ván càng thu thuê cao.',
-    effect: 'Mỗi lần bạn đã qua ô Bắt Đầu, tiền thuê các ô có nhà của bạn tăng thêm {%perLap}, tối đa +{%cap}.',
+    effect: 'Mỗi lần bạn đã qua ô Bắt Đầu, tiền thuê các ô có nhà của bạn tăng thêm {%perLap}, tối đa +{%cap}. Cộng chung với Đất Nhiều Màu và Hàng Xóm Láng Giềng rồi mới nhân vào tiền thuê.',
     lvText: '+{%perLap} mỗi lần đã qua, tối đa +{%cap}',
   },
   {
     id: 'ac2b', branch: 'ancu', tier: 2, slot: 'b', kind: 'passive', span: 'forever', icon: 'palette',
     requires: ['acX2'],
     name: 'Đất Nhiều Màu',
-    levels: [{ perColor: 0.04 }, { perColor: 0.05 }, { perColor: 0.07 }],
+    levels: [{ perColor: 0.03, max: 6 }, { perColor: 0.04, max: 6 }, { perColor: 0.05, max: 6 }],
     grow: { by: 'colors', at: [3, 5] },
     short: 'Có đất ở càng nhiều màu, mọi tiền thuê càng cao.',
-    effect: 'Mỗi màu đất khác nhau bạn đang có ít nhất 1 ô: mọi tiền thuê của bạn +{%perColor}.',
-    lvText: '+{%perColor} mỗi màu đất',
+    effect: 'Mỗi màu đất khác nhau bạn đang có ít nhất 1 ô: mọi tiền thuê của bạn +{%perColor}, tính tối đa {max} màu. Cộng chung với Nhà Lâu Năm và Hàng Xóm Láng Giềng rồi mới nhân vào tiền thuê.',
+    lvText: '+{%perColor} mỗi màu đất, tối đa {max} màu',
   },
   {
     id: 'ac3', branch: 'ancu', tier: 3, slot: 'a', kind: 'passive', span: 'forever', icon: 'heirloom',
@@ -803,7 +802,7 @@ export const SKILLS = [
     id: 'acU', branch: 'ancu', tier: 4, slot: 'a', kind: 'passive', span: 'lap', icon: 'pagoda',
     requires: ['ac3'],
     name: 'Phố Cổ',
-    levels: [{ houses: 1, mult: 1.5 }, { houses: 1, mult: 1.75 }, { houses: 2, mult: 2 }],
+    levels: [{ houses: 3, mult: 2.75 }, { houses: 4, mult: 3 }, { houses: 4, mult: 3.25 }],
     grow: { by: 'uses', at: [1, 3], say: 'Được xây {n} căn miễn phí' },
     short: 'Mỗi lần qua ô Bắt Đầu được xây thêm nhà miễn phí.',
     effect: 'Mỗi lần bạn qua ô Bắt Đầu: ô ít nhà nhất trong các bộ bạn đang xây được thêm {houses} căn miễn phí. Ô lên khách sạn theo cách này thành Di Sản: thuê ×{mult}, không ai dỡ hay ép mua được.',
@@ -827,7 +826,7 @@ export const SKILLS = [
     id: 'acX1', branch: 'ancu', tier: 3, slot: 'b', kind: 'passive', span: 'forever', icon: 'lifebuoy',
     requires: ['ac2b'],
     name: 'Sống Sót',
-    levels: [{ pay: 0.5, under: 200 }, { pay: 0.4, under: 200 }, { pay: 0.3, under: 250 }],
+    levels: [{ pay: 0.4, under: 250 }, { pay: 0.3, under: 300 }, { pay: 0.2, under: 350 }],
     grow: { by: 'gain', at: [60, 150] },
     short: 'Đang cạn tiền thì trả thuê ít hơn.',
     effect: 'Khi tiền mặt của bạn dưới {$under}, tiền thuê bạn phải trả chỉ còn {%pay}.',
@@ -837,20 +836,24 @@ export const SKILLS = [
     id: 'acS1', branch: 'ancu', tier: 3, slot: 'c', kind: 'passive', span: 'forever', icon: 'apartment',
     requires: ['ac2b'],
     name: 'Chung Cư Mini',
-    levels: [{ cap: 1, mult: 1.25 }, { cap: 2, mult: 1 }, { cap: 3, mult: 1 }],
+    levels: [
+      { cap: 1, mult: 1.25, total: 3 },
+      { cap: 2, mult: 1.25, total: 4 },
+      { cap: 2, mult: 1, total: 6 },
+    ],
     grow: { by: 'uses', at: [1, 3], say: 'Xây {n} căn trên đất lẻ' },
     short: 'Đất chưa đủ bộ màu vẫn xây được nhà.',
-    effect: 'Ô đất chưa đủ bộ màu vẫn xây được tối đa {cap} căn nhà, giá xây ×{mult}. Xây trong bảng Quản lý tài sản như thường.',
-    lvText: 'Đất lẻ xây tối đa {cap} căn, giá ×{mult}',
+    effect: 'Ô đất chưa đủ bộ màu vẫn xây được tối đa {cap} căn nhà, giá xây ×{mult}; cộng mọi ô đất lẻ lại không quá {total} căn. Xây trong bảng Quản lý tài sản như thường.',
+    lvText: 'Đất lẻ xây tối đa {cap} căn mỗi ô, {total} căn tất cả, giá ×{mult}',
   },
   {
     id: 'acS2', branch: 'ancu', tier: 3, slot: 'd', kind: 'passive', span: 'forever', icon: 'neighbors',
     requires: ['ac1'],
     name: 'Hàng Xóm Láng Giềng',
-    levels: [{ bonus: 0.15 }, { bonus: 0.2 }, { bonus: 0.3 }],
+    levels: [{ bonus: 0.25 }, { bonus: 0.35 }, { bonus: 0.5 }],
     grow: { by: 'gain', at: [60, 180] },
     short: 'Ô nằm liền kề ô khác của mình thì thu thuê cao hơn.',
-    effect: 'Ô của bạn có ô ngay trước hoặc ngay sau trên bàn cờ cũng của bạn thì thu thuê +{%bonus}.',
+    effect: 'Ô của bạn có ô ngay trước hoặc ngay sau trên bàn cờ cũng của bạn thì thu thuê +{%bonus}. Cộng chung với Nhà Lâu Năm và Đất Nhiều Màu rồi mới nhân vào tiền thuê.',
     lvText: 'Thuê +{%bonus} khi có hàng xóm',
   },
 ];
@@ -865,7 +868,7 @@ export const BUILDS = [
   {
     name: 'Con Bạc Khát Nước',
     skills: ['dd1', 'dd2a', 'dd2b', 'dd3', 'ddU'],
-    note: 'Cược Chẵn Lẻ một mình thì ăn thua 50/50; có Xí Ngầu Gian thì đoán sai còn lắc lại được một viên.',
+    note: 'Chẵn Lẻ, Đôi Hên kiếm tiền lẻ mỗi lần lắc; Xí Ngầu Gian né ô đắt; Tất Tay đoán chẵn lẻ với cả bàn, ăn thua theo cú lắc đầu.',
   },
   {
     name: 'Địa Chủ Lấn Đất',

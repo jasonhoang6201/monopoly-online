@@ -1329,10 +1329,14 @@ export class Game {
     this.netEmit('dice', first);
     await this.scene.rollDiceAnim(first.a, first.b);
 
-    /* Kỹ năng sau khi lắc: Xí Ngầu Gian đổi kết quả, Quay Đầu đổi chiều đi.
-       Cược chốt theo kết quả **cuối cùng**, nên phải chạy sau hộp hỏi ấy. */
+    /* Cược và Tất Tay chốt theo cú lắc **đầu tiên**, trước Xí Ngầu Gian: chốt
+       sau thì đoán sai được lắc lại một viên, chẵn lẻ lật ngược nửa số lần,
+       đoán trúng thành 75% (tests/gamesim.mjs). Xí Ngầu Gian chỉ còn để đổi
+       đường đi. */
+    await this.skills.settleBets(p, first);
+    if (st.over || p.bankrupt) { await this.endTurn(); return; }
+    // Kỹ năng sau khi lắc: Xí Ngầu Gian đổi kết quả, Quay Đầu đổi chiều đi
     const { d, back } = await this.skills.afterRoll(p, first);
-    await this.skills.settleBets(p, d);
     if (st.over || p.bankrupt) { await this.endTurn(); return; }
     if (d.isDouble) p.doubles += 1;
     /* Chốt "đã lắc" ngay khi có kết quả, trước mọi chỗ phát ảnh chụp bên dưới:
@@ -2881,7 +2885,7 @@ export class Game {
        <br><b style="color:${B.token.css}">${B.name}</b> nhận: ${describe(st, offer.give, offer.giveMoney)}`,
       { kind: 'trade', ms: 6000 });
     await this.spot([...offer.give, ...offer.get], 2600);
-    await this.skills.tradeFees(offer);
+    await this.skills.tradeFees(offer, A, B);
 
     // Chủ mới của đất đang thế chấp được mời chuộc lại (phí = thế chấp + 10%)
     await this.offerRedeem(B.id, offer.give.filter((id) => st.isMortgaged(id)));

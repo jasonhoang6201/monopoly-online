@@ -11,7 +11,7 @@ import {
 import { CHANCE, CHEST, Deck } from '../data/cards.js';
 import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
 import { DEFAULT_THEME, themeKey } from '../data/themes.js';
-import { has, param, roll, ownerRentMult, ownerRentFlat, houseImmune, credit } from './skills.js';
+import { has, param, roll, ownerRentMult, ownerRentFlat, houseImmune, credit, miniRoom } from './skills.js';
 
 /**
  * Bảng màu quân — quân cờ chỉ phân biệt bằng MÀU, không mang biểu tượng riêng.
@@ -93,6 +93,11 @@ export class Player {
     this.laps = 0;
     /** id kỹ năng → số lần qua ô Bắt Đầu còn phải chờ trước khi dùng lại. */
     this.cooldowns = {};
+    /**
+     * id kỹ năng → `turnNo` mà lần qua ô Bắt Đầu trong lượt đó không trừ thời
+     * gian chờ của nó (Chuyến Tàu Xuyên Việt: chuyến tàu đi ngang ô Bắt Đầu).
+     */
+    this.cdHold = {};
     /** id kỹ năng → số lượt (`GameState.turnNo`) lần cuối đã dùng — cho giới hạn "mỗi lượt 1 lần". */
     this.usedTurn = {};
     /** id kỹ năng → level, chỉ ghi ô từ level 2 trở lên (xem `levelOf`). */
@@ -415,6 +420,18 @@ export class GameState {
     return GROUP_TILES[group].some((id) => this.owner.get(id) === playerId && this.housesOn(id) > 0);
   }
 
+  /**
+   * Chủ ô này đã xây căn nào trong khu màu chứa nó chưa — chỉ tính ô của chính
+   * chủ ấy (xem `groupBuilt`). Ô không thuộc khu màu (ga tàu, dịch vụ) thì chỉ
+   * xét chính nó, vì chúng không có bộ để mà phá. Thẻ Thâu Tóm và Siết Nợ
+   * dùng chung luật này.
+   */
+  groupHasHouses(tileId) {
+    const group = BOARD[tileId].color_group;
+    if (!group) return this.housesOn(tileId) > 0;
+    return this.groupBuilt(this.owner.get(tileId), group);
+  }
+
   /** Số nhà ga người chơi đang sở hữu. */
   stationCount(playerId) {
     return BOARD.filter((t) => t.type === 'station' && this.owner.get(t.id) === playerId).length;
@@ -521,7 +538,8 @@ export class GameState {
    */
   /**
    * @param {{free?:boolean}} [o] `free`: căn nhà tặng của Phố Cổ — không xét
-   *   tiền, không xét lệnh giới nghiêm (kỹ năng chứ không phải thợ thuê).
+   *   tiền, không xét lệnh giới nghiêm (kỹ năng chứ không phải thợ thuê). Vẫn
+   *   xét trần đất lẻ của Chung Cư Mini và kho 32 căn của ngân hàng.
    */
   canBuild(playerId, tileId, o = {}) {
     const t = BOARD[tileId];
@@ -537,6 +555,9 @@ export class GameState {
       group = [tileId];
       if (this.housesOn(tileId) >= param(p, 'acS1').cap) {
         return { ok: false, reason: `Đất lẻ chỉ xây được ${param(p, 'acS1').cap} căn (Chung Cư Mini).` };
+      }
+      if (miniRoom(this, p) <= 0) {
+        return { ok: false, reason: `Đã xây đủ ${param(p, 'acS1').total} căn trên đất lẻ (Chung Cư Mini).` };
       }
     }
     if (!group.length) {
