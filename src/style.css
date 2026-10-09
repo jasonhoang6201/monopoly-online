@@ -3956,7 +3956,7 @@ html, body {
 }
 .ghost-card:hover, .ghost-card:focus-visible {
   transform: translateY(-4px) rotate(-.6deg);
-  box-shadow: 0 0 0 2px #B9A6FF, 0 10px 30px rgba(140, 110, 255, .35);
+  box-shadow: 0 0 0 2px var(--gold-light), 0 10px 30px color-mix(in srgb, var(--gold) 35%, transparent);
 }
 .ghost-card .fate-card { margin: 0; height: 100%; }
 @media (max-width: 640px) { .ghost-pick { grid-template-columns: 1fr; } }
@@ -3965,45 +3965,55 @@ html, body {
    Ám quẻ của hồn ma (ui/hexes.js) — bảng chọn cạnh nút meme, và
    dấu bám theo quân cờ người bị ám
    ------------------------------------------------------------ */
+/* Màu lấy hết từ biến chủ đề (--ground, --gold…) để bảng đổi theo bàn cờ:
+   sơn mài, Giáng Sinh, Halloween hay Tết đều cùng tông với nút meme cạnh bên. */
 #hex-pop {
   position: absolute; right: -2px; bottom: 40px;
   width: min(268px, calc(var(--rail) - 22px));
   padding: 10px;
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(34, 22, 52, .97), rgba(16, 10, 26, .98));
-  border: 1px solid #7E68C8;
-  box-shadow: var(--shadow-lg), 0 0 24px rgba(140, 110, 255, .25);
+  background:
+    linear-gradient(165deg, rgba(239, 226, 198, .05), transparent 46%),
+    linear-gradient(180deg, color-mix(in srgb, var(--ground) 96%, transparent), var(--ground-night));
+  border: 1px solid var(--gold-deep);
+  box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 225, 170, .14);
   color: var(--paper);
   font-family: var(--sans);
   z-index: 6;
   animation: meme-pop-in .18s var(--ease-out-back) both;
 }
 #hex-pop[hidden] { display: none; }
-.hex-head { font-family: var(--display); font-size: 14px; color: #D9CCFF; margin-bottom: 7px; }
+.hex-head { font-family: var(--display); font-size: 14px; color: var(--gold-light); margin-bottom: 7px; }
 .hex-kinds { display: flex; gap: 6px; margin-bottom: 8px; }
 .hex-kind {
   flex: 1; padding: 5px 0;
-  border-radius: 8px; border: 1px solid rgba(185, 166, 255, .3);
-  background: rgba(185, 166, 255, .08);
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
+  background: color-mix(in srgb, var(--ground-light) 45%, transparent);
   font-size: 20px; cursor: pointer;
+  transition: border-color .16s, background .16s;
 }
-.hex-kind.on { border-color: #B9A6FF; background: rgba(185, 166, 255, .26); }
+.hex-kind:hover { border-color: var(--gold-light); }
+.hex-kind.on {
+  border-color: var(--gold-light);
+  background: color-mix(in srgb, var(--gold) 26%, transparent);
+}
 .hex-targets { display: flex; flex-wrap: wrap; gap: 6px; }
 .hex-target {
   flex: 1 1 40%;
   padding: 6px 8px;
   border-radius: 8px;
-  border: 1px solid rgba(185, 166, 255, .3);
+  border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
   border-left: 3px solid var(--pc);
-  background: rgba(255, 255, 255, .05);
+  background: color-mix(in srgb, var(--ground-light) 45%, transparent);
   color: var(--paper);
   font: 600 12.5px var(--sans);
   cursor: pointer;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.hex-target:hover:not(:disabled) { background: rgba(185, 166, 255, .2); }
+.hex-target:hover:not(:disabled) { border-color: var(--gold-light); border-left-color: var(--pc); }
 .hex-target:disabled { opacity: .45; cursor: default; }
-.hex-note { margin-top: 7px; font-size: 11.5px; color: rgba(217, 204, 255, .7); }
+.hex-note { margin-top: 7px; font-size: 11.5px; color: color-mix(in srgb, var(--gold-pale) 70%, transparent); }
 
 .hex-mark {
   position: fixed;
