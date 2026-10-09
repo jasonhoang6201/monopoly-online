@@ -616,15 +616,15 @@ export const SKILLS = [
        khác vừa bỏ qua ô: không ai phải đứng chờ, và hai người cùng học kỹ năng
        này thì ai tới lượt trước người đó mua. */
     uses: 'Reset mỗi khi qua ô Bắt Đầu',
-    when: 'trong lượt của bạn, khi có ô người khác dừng mà không mua',
+    when: 'trong lượt của bạn, khi có người khác đang đứng ở ô chưa có chủ',
     levels: [
       { price: 0.8, charges: 1, cooldown: 1 },
       { price: 0.75, charges: 1, cooldown: 1 },
       { price: 0.7, charges: 2, cooldown: 1 },
     ],
     grow: { by: 'uses', at: [1, 2], say: 'Nhặt {n} ô' },
-    short: 'Mua ô người khác dừng mà không mua, ở đâu cũng được.',
-    effect: 'Dùng Nhặt Hàng Thừa: những ô chưa có chủ mà người khác đã dừng chân nhưng không mua sẽ sáng trên bàn cờ; chọn một ô để mua với {%price} giá gốc, dù quân bạn đang ở đâu.',
+    short: 'Mua ô chưa có chủ mà người khác đang đứng, quân bạn ở đâu cũng được.',
+    effect: 'Dùng Nhặt Hàng Thừa: những ô chưa có chủ mà người khác đang đứng sẽ sáng trên bàn cờ; chọn một ô để mua với {%price} giá gốc, dù quân bạn đang ở đâu.',
     lvText: 'Mua {%price} giá, dùng {charges} lần giữa hai lần qua',
   },
   {

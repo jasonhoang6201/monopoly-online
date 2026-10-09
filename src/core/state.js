@@ -220,12 +220,6 @@ export class GameState {
      */
     this.heritage = new Set();
     /**
-     * Ô chưa có chủ mà có người dừng chân rồi không mua: tileId → mảng ghế đã
-     * bỏ qua. Nhặt Hàng Thừa chỉ sáng những ô **người khác** bỏ qua. Ô có chủ
-     * rồi thì xoá khỏi đây. @type {Map<number, number[]>}
-     */
-    this.passedUp = new Map();
-    /**
      * Đếm lượt từ đầu ván, tăng ở `nextTurn`. Kỹ năng "mỗi lượt 1 lần" đánh dấu
      * bằng con số này thay vì một cờ bật/tắt: `beginTurn` chạy lại nhiều lần
      * trong cùng một lượt (ảnh chụp về, sổ ghế đổi), xoá cờ ở đó là cho dùng lại.
@@ -746,7 +740,6 @@ export class GameState {
     if (!t.ownable || this.owner.has(tileId) || p.money < t.price) return false;
     p.money -= t.price;
     this.owner.set(tileId, playerId);
-    this.passedUp.delete(tileId);
     return true;
   }
 
@@ -756,15 +749,7 @@ export class GameState {
     if (!BOARD[tileId].ownable || this.owner.has(tileId) || p.money < price) return false;
     p.money -= price;
     this.owner.set(tileId, playerId);
-    this.passedUp.delete(tileId);
     return true;
-  }
-
-  /** Có người dừng ở ô chưa có chủ mà không mua — ghi lại cho Nhặt Hàng Thừa. */
-  passUp(tileId, seat) {
-    if (!BOARD[tileId].ownable || this.owner.has(tileId)) return;
-    const seats = this.passedUp.get(tileId) ?? [];
-    if (!seats.includes(seat)) this.passedUp.set(tileId, [...seats, seat]);
   }
 
   /** Chuyển quyền sở hữu (dùng cho trading). Nhà cửa không đi kèm — luật buộc bán hết trước. */

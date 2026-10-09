@@ -639,16 +639,19 @@ export function tourPassed(st, p, from, steps) {
 }
 
 /**
- * Nhặt Hàng Thừa: ô chưa có chủ mà **người khác** đã bỏ qua, người này đủ
- * tiền mua với giá kỹ năng.
+ * Nhặt Hàng Thừa: ô chưa có chủ mà một người khác **đang đứng** trên đó, người
+ * này đủ tiền mua với giá kỹ năng. Đang là lượt mình thì người đứng đó đã xong
+ * lượt mà ô vẫn trống, nên họ từ chối hay thiếu tiền đều như nhau. Người đó đi
+ * khỏi ô thì ô thôi sáng.
  * @returns {Array<{id:number, price:number}>}
  */
 export function leftoverOffers(st, p) {
   if (!has(p, 'dcS1')) return [];
   const { price } = param(p, 'dcS1');
-  return [...st.passedUp]
-    .filter(([id, seats]) => !st.owner.has(id) && seats.some((x) => x !== p.id))
-    .map(([id]) => ({ id, price: Math.round(BOARD[id].price * price) }))
+  const ids = new Set(st.alive().filter((q) => q.id !== p.id).map((q) => q.pos));
+  return [...ids]
+    .filter((id) => BOARD[id].ownable && !st.owner.has(id))
+    .map((id) => ({ id, price: Math.round(BOARD[id].price * price) }))
     .filter((x) => x.price <= p.money);
 }
 

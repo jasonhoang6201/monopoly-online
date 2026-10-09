@@ -163,7 +163,7 @@ export class SkillPlay {
     const offers = leftoverOffers(st, p).length;
     cell('dcS1', usesLeft(p, 'dcS1') <= 0 ? { ok: false, why: wait('dcS1') }
       : jail ? { ok: false, why: 'Không dùng khi đang ở tù' }
-        : !offers ? { ok: false, why: 'Chưa có ô nào người khác bỏ qua mà bạn đủ tiền mua' }
+        : !offers ? { ok: false, why: 'Không có ô trống nào người khác đang đứng, hoặc bạn chưa đủ tiền' }
           : { once: true, on: (v) => `Mua ${tileLabel(v)} khi Chốt`,
             off: `${offers} ô mua được, ${Math.round(param(p, 'dcS1').price * 100)}% giá`,
             choose: () => this.chooseTile(p, 'dcS1') });
@@ -474,7 +474,7 @@ export class SkillPlay {
       dcS1: {
         ids: leftoverOffers(st, p).map((x) => x.id),
         title: 'Nhặt ô nào?',
-        sub: `Các ô sáng là ô chưa có chủ mà người khác đã dừng rồi bỏ qua. Mua với ${Math.round(param(p, 'dcS1').price * 100)}% giá gốc.`,
+        sub: `Các ô sáng là ô chưa có chủ mà người khác đang đứng. Mua với ${Math.round(param(p, 'dcS1').price * 100)}% giá gốc.`,
         confirm: 'Chọn ô này',
       },
       dcV: {

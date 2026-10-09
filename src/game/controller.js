@@ -1509,7 +1509,6 @@ export class Game {
     // Chưa ai sở hữu → hỏi mua (không có luật đấu giá)
     if (ownerId === undefined) {
       if (p.money < t.price) {
-        st.passUp(t.id, p.id);
         await this.bc.show('KHÔNG ĐỦ TIỀN',
           `<b>${p.name}</b> dừng ở <b>${tileLabel(t.id)}</b> nhưng chỉ có ${money(p.money)}.`, { ms: 2600 });
         return;
@@ -1529,8 +1528,6 @@ export class Game {
         await this.skills.brokerFees(p.id, t.id);
         await this.skills.bought(p, t.id);
       } else {
-        st.passUp(t.id, p.id);
-        this.sync();
         await this.bc.show('BỎ QUA', `<b>${p.name}</b> không mua <b>${tileLabel(t.id)}</b>.`, { ms: 2200 });
       }
       return;

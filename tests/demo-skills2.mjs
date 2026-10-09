@@ -229,14 +229,14 @@ if (want(3)) {
   const { page, run } = g;
   await run(`
     me.skills = ['dcS1', 'dcV'];
-    s.passedUp.set(23, [o1.id]); s.passedUp.set(39, [o2.id]); s.passedUp.set(3, [me.id]);
+    o1.pos = 23; o2.pos = 39; me.pos = 3;
     s.owner.set(6, o1.id); s.owner.set(8, o1.id); s.mortgaged.add(6);
     c.hud.refresh(); c.scene.refresh(s); c.restoreActions();
   `);
-  await cap(page, 'Kho kỹ năng: Nhặt Hàng Thừa (có ô người khác bỏ qua) và Siết Nợ (có đất thế chấp)');
+  await cap(page, 'Kho kỹ năng: Nhặt Hàng Thừa (có ô trống người khác đang đứng) và Siết Nợ (có đất thế chấp)');
   await page.waitForTimeout(2500);
   await kit(page, 'Nhặt Hàng Thừa', 3500);
-  await cap(page, 'Chỉ ô người khác đã dừng mà không mua mới sáng (ô mình tự bỏ qua thì không): mua 80% giá');
+  await cap(page, 'Chỉ ô chưa có chủ mà người khác đang đứng mới sáng (ô quân mình đứng thì không): mua 80% giá');
   await pickTile(page, 39);
   await page.waitForTimeout(5000);
   await kit(page, 'Siết Nợ');
@@ -355,7 +355,7 @@ if (want(8)) {
   const g = await openGame({ width: 844, height: 390 });
   const { page, run } = g;
   await run(`me.skills = ['dh1','dh2a','dh2b','dh3','dhS1','ddS2','dcS2','ddV','dd1','dd2a','dcS1'];
-    s.passedUp.set(39, [o1.id]); c.restoreActions();`);
+    o1.pos = 39; c.restoreActions();`);
   await cap(page, 'Màn nhỏ: 11 kỹ năng mà thanh nút vẫn chỉ thêm 1 nút');
   await page.waitForTimeout(4000);
   await btn(page, 'Dùng kỹ năng').click();
