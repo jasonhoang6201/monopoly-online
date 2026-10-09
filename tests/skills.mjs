@@ -298,18 +298,27 @@ check(await page.locator('#actions button', { hasText: 'Lắc xí ngầu' }).cou
 /* ------------------------------------------------ 3b. công tắc kỹ năng bấm để dùng */
 log('\n=== 3b. BẬT / TẮT ===');
 await reset();
-await run(`const p = s.current; p.skills = ['dd1']; p.skillPoints = 2; c.restoreActions();`);
+await run(`const p = s.current; p.skills = ['dd1','dh1','dh2b']; p.skillPoints = 3; c.restoreActions();`);
 await page.locator('#actions button[data-key="k"]').click();
-await page.locator('.st-node[data-id="dd2a"]').click();
+await page.locator('.st-node[data-id="dhS1"]').click();
 await page.locator('[data-act="learn"]').click();
 await page.waitForTimeout(400);
-check(await run(`return s.current.skills.includes('dd2a') && !K.has(s.current, 'dd2a');`), 'kỹ năng bấm để dùng học xong nằm tắt');
-check(await page.locator('.st-node[data-id="dd2a"].off').count() === 1, 'ô đang tắt tô xám');
-await page.locator('.st-node[data-id="dd2a"]').click();
+check(await run(`return s.current.skills.includes('dhS1') && !K.has(s.current, 'dhS1');`), 'kỹ năng bấm để dùng học xong nằm tắt');
+check(await page.locator('.st-node[data-id="dhS1"].off').count() === 1, 'ô đang tắt tô xám');
+await page.locator('.st-node[data-id="dhS1"]').click();
 // Bật / tắt chỉ trong kho Dùng kỹ năng: cây chỉ báo trạng thái
 check(await page.locator('[data-act="toggle"]').count() === 0
   && await page.locator('.sd-wait', { hasText: 'kho Dùng kỹ năng' }).count() === 1,
   'thẻ chi tiết không có nút bật / tắt, chỉ chỉ sang kho');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(300);
+// Cược Chẵn Lẻ không còn công tắc: học xong là có tác dụng, lúc bấm Lắc thì hỏi
+await page.locator('.st-node[data-id="dd2a"]').click();
+await page.locator('[data-act="learn"]').click();
+await page.waitForTimeout(400);
+check(await run(`return K.has(s.current, 'dd2a') && !s.current.skillOff.includes('dd2a');`),
+  'Cược Chẵn Lẻ học xong có tác dụng ngay, không nằm tắt');
+await page.locator('.st-node[data-id="dd2a"]').click();
 await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
 // Tất Tay làm một lần: không công tắc, học xong là có tác dụng (ghi được tiến độ lên level)
@@ -325,69 +334,73 @@ await page.keyboard.press('Escape');
 await page.waitForTimeout(3200);
 // Kho kỹ năng: ô có màu là bật, xám là tắt; mọi thao tác là bản nháp, Chốt mới áp dụng
 await reset();
-// dd3 trong skillOff: ảnh chụp cũ, lúc kỹ năng tự hỏi còn công tắc
+// dd2a, dd3 trong skillOff: ảnh chụp cũ, lúc kỹ năng tự hỏi còn công tắc
 await run(`const p = s.current; p.skills = ['dd1','dd2a','dd2b','dd3','ddS2','dh1','dh2b','dhS1']; p.skillOff = ['dd2a','dd3','ddS2','dhS1']; c.restoreActions();`);
 await openKit();
 check(await page.locator('.kit-sw').count() === 0, 'kho kỹ năng không còn công tắc');
 check(await item('Xí Ngầu Gian').count() === 0 && await run(`return K.has(s.current, 'dd3')`),
   'kỹ năng tự hỏi (Xí Ngầu Gian) không nằm trong kho, luôn chạy dù ảnh chụp cũ ghi tắt');
-check(await isGray('Cược Chẵn Lẻ') && await isGray('Xe Đạp'), 'kỹ năng đang tắt: ô xám');
-// Cược: bấm ô mở bảng chọn có "Không"; chọn xong về lại kho
-await item('Cược Chẵn Lẻ').click();
-await page.locator('.sk-bet').waitFor({ timeout: 3000 });
-check(await page.locator('.sk-bet [data-v="none"]', { hasText: 'Không' }).count() === 1, 'bảng cược có lựa chọn Không');
-await pickIn('Lẻ');
-await pickIn('100$');
-await topBtn('Xong').click();
-await page.waitForTimeout(400);
-check(await page.locator('.sk-bet').count() === 0 && await item('Cược Chẵn Lẻ').isVisible(), 'chọn xong thì về lại kho');
-check(!(await isGray('Cược Chẵn Lẻ')) && (await item('Cược Chẵn Lẻ').textContent()).includes('Lẻ 100$'), 'ô Cược có màu, ghi cửa và tiền vừa chọn');
+check(await item('Cược Chẵn Lẻ').count() === 0 && await run(`return K.has(s.current, 'dd2a')`),
+  'Cược Chẵn Lẻ không nằm trong kho, luôn chạy dù ảnh chụp cũ ghi tắt');
+check(await isGray('Cò Quay') && await isGray('Xe Đạp'), 'kỹ năng đang tắt: ô xám');
 await item('Xe Đạp').click();
 check(!(await isGray('Xe Đạp')), 'bấm ô bật / tắt: ô có màu ngay');
-check(await run(`return !K.has(s.current, 'dd2a') && !K.has(s.current, 'dhS1') && !s.current.betSet;`), 'chưa Chốt: trên ván chưa đổi gì');
+check(await run(`return !K.has(s.current, 'dhS1');`), 'chưa Chốt: trên ván chưa đổi gì');
 await topBtn('Huỷ').click();
 await page.waitForTimeout(500);
-check(await run(`return !K.has(s.current, 'dd2a') && !K.has(s.current, 'dhS1') && !s.current.betSet;`), 'Huỷ: đóng kho, không đổi gì');
+check(await run(`return !K.has(s.current, 'dhS1');`), 'Huỷ: đóng kho, không đổi gì');
 await openKit();
-check(await isGray('Cược Chẵn Lẻ') && await isGray('Xe Đạp'), 'mở lại sau Huỷ: ô về như cũ');
-await item('Cược Chẵn Lẻ').click();
-await page.locator('.sk-bet').waitFor({ timeout: 3000 });
-await pickIn('Lẻ');
-await pickIn('100$');
-await topBtn('Xong').click();
-await page.waitForTimeout(300);
+check(await isGray('Cò Quay') && await isGray('Xe Đạp'), 'mở lại sau Huỷ: ô về như cũ');
 await item('Xe Đạp').click();
 await item('Cò Quay').click();
 await item('Cò Quay').click(); // bấm hai lần: coi như không đổi
 await page.keyboard.press('Enter');
 await page.waitForTimeout(400);
-check(await run(`const p = s.current; return K.has(p, 'dd2a') && K.has(p, 'dhS1') && !K.has(p, 'ddS2') && p.betSet?.pick === 'odd' && p.betSet?.amount === 100;`),
-  'Enter: áp dụng cả hai ô trong một lần, lưu cửa Lẻ 100$');
+check(await run(`const p = s.current; return K.has(p, 'dhS1') && !K.has(p, 'ddS2');`), 'Enter: áp dụng bản nháp');
 const note = await page.locator('.bcast').last().textContent().catch(() => '');
-check(note.includes('Cược Chẵn Lẻ') && note.includes('Xe Đạp') && note.includes('Lẻ 100$') && !note.includes('Cò Quay'),
-  `loan tin một lần (${note.replace(/\s+/g, ' ').trim().slice(0, 100)})`);
+check(note.includes('Xe Đạp') && !note.includes('Cò Quay'), `loan tin một lần (${note.replace(/\s+/g, ' ').trim().slice(0, 100)})`);
 await page.waitForTimeout(2400);
-// Tự cược mỗi lượt, lúc bấm Lắc; đổ đôi lắc lại không cược thêm
-const auto = await run(`const p = s.current; await c.skills.beforeRoll(p); const b1 = { ...c.skills.bet };
-  c.skills.bet = null; await c.skills.beforeRoll(p); return { b1, again: c.skills.bet };`);
-check(auto.b1.pick === 'odd' && auto.b1.amount === 100 && !auto.again, `lúc lắc tự cược Lẻ 100$, mỗi lượt một lần (${JSON.stringify(auto)})`);
-const nextTurn = await run(`const p = s.current; s.turnNo += 1; c.skills.bet = null; await c.skills.beforeRoll(p); return c.skills.bet;`);
-check(nextTurn?.pick === 'odd' && nextTurn?.amount === 100, 'lượt sau tự cược lại như cũ');
-const poor = await run(`const p = s.current; s.turnNo += 1; c.skills.bet = null; p.money = 60; await c.skills.beforeRoll(p); const r = { bet: c.skills.bet, on: K.has(p, 'dd2a') }; p.money = 1500; return r;`);
-check(!poor.bet && poor.on, 'không đủ tiền thì bỏ lượt ấy, kỹ năng vẫn bật');
-await run('c.skills.bet = null; c.restoreActions();');
+await run(`s.current.skillOff = s.current.skillOff.filter((x) => x !== 'dhS1').concat('dhS1');`);
+
+// Cược: bấm Lắc thì hỏi; chọn sẵn lần trước, Enter là cược, Esc là không cược
+const betBox = page.locator('#modal-root .scrim.show .sk-bet');
+await run(`window.__bet = c.skills.beforeRoll(s.current);`);
+await betBox.waitFor({ timeout: 3000 });
+check(await page.locator('.sk-bet [data-v="none"]').count() === 0, 'hộp cược không có cửa Không, bỏ qua bằng nút / Esc');
+check(await page.locator('.sk-bet [data-row="pick"] .on').textContent() === 'Chẵn', 'chưa cược lần nào: chọn sẵn Chẵn');
+await pickIn('Lẻ');
+await pickIn('100$');
+await page.keyboard.press('Enter');
+await run(`await window.__bet;`);
+const bEnter = await run(`const p = s.current; return { bet: c.skills.bet && { ...c.skills.bet }, set: p.betSet };`);
+check(bEnter.bet?.pick === 'odd' && bEnter.bet?.amount === 100 && bEnter.set?.pick === 'odd' && bEnter.set?.amount === 100,
+  `Enter: cược Lẻ 100$ và nhớ lựa chọn (${JSON.stringify(bEnter)})`);
+// Đổ đôi lắc lại trong cùng lượt: không hỏi nữa
+const again = await run(`c.skills.bet = null; await c.skills.beforeRoll(s.current); return c.skills.bet;`);
+check(!again && await betBox.count() === 0, 'mỗi lượt hỏi một lần');
 await page.waitForTimeout(2000);
-// Chọn Không rồi Chốt: tắt
-await openKit();
-await item('Cược Chẵn Lẻ').click();
-await page.locator('.sk-bet').waitFor({ timeout: 3000 });
-await pickIn('Không');
-await topBtn('Xong').click();
-await page.waitForTimeout(300);
-check(await isGray('Cược Chẵn Lẻ'), 'chọn Không: ô xám lại');
-await topBtn('Chốt').click();
-await page.waitForTimeout(2600);
-check(await run(`return !K.has(s.current, 'dd2a');`), 'chọn Không rồi Chốt: Cược tắt');
+// Lượt sau: chọn sẵn Lẻ 100$, Enter là cược lại y như cũ
+await run(`s.turnNo += 1; c.skills.bet = null; window.__bet = c.skills.beforeRoll(s.current);`);
+await betBox.waitFor({ timeout: 3000 });
+const pre = await page.evaluate(() => [...document.querySelectorAll('.sk-bet [data-row] .on')].map((b) => b.textContent));
+check(pre.join() === 'Lẻ,100$', `lượt sau chọn sẵn lần cược trước (${pre.join()})`);
+await page.keyboard.press('Enter');
+await run(`await window.__bet;`);
+check(await run(`return c.skills.bet?.pick === 'odd' && c.skills.bet?.amount === 100;`), 'Enter: cược lại như cũ');
+await page.waitForTimeout(2000);
+// Esc: lượt này không cược, lựa chọn cũ vẫn nhớ
+await run(`s.turnNo += 1; c.skills.bet = null; window.__bet = c.skills.beforeRoll(s.current);`);
+await betBox.waitFor({ timeout: 3000 });
+await page.keyboard.press('Escape');
+await run(`await window.__bet;`);
+check(await run(`return !c.skills.bet && s.current.betSet?.pick === 'odd';`), 'Esc: không cược, vẫn nhớ lần trước');
+// Không đủ tiền cho mức thấp nhất: không hỏi
+const poor = await run(`const p = s.current; s.turnNo += 1; c.skills.bet = null; p.money = 40; await c.skills.beforeRoll(p); const r = { bet: c.skills.bet, on: K.has(p, 'dd2a') }; p.money = 1500; return r;`);
+check(!poor.bet && poor.on && await betBox.count() === 0, 'không đủ tiền thì không hỏi, kỹ năng vẫn còn');
+// Lắc hộ lúc hết giờ: không hỏi, không cược
+const afk = await run(`s.turnNo += 1; c.skills.bet = null; await c.skills.beforeRoll(s.current, false); return c.skills.bet;`);
+check(!afk && await betBox.count() === 0, 'bàn lắc hộ: không hỏi, không cược');
+await run('c.skills.bet = null; c.restoreActions();');
 
 // Cò Quay: kỹ năng bật là lương được quay
 check(await run(`return c.skills.spinPay(s.current, 200).pay === 200;`), 'Cò Quay tắt: lương giữ nguyên');
@@ -497,22 +510,16 @@ const qd3 = await run('const r = await window.__ar; return { a: r.d.a, back: r.b
 check(qd3.a === 3 && !qd3.back && qd3.dd3 === 1, `bấm viên phải chạy Xí Ngầu Gian rồi hỏi lại (${JSON.stringify(qd3)})`);
 
 await run('c.restoreActions();');
-await openKit();
-await item('Cược Chẵn Lẻ').click();
+await run('window.__bet = c.skills.beforeRoll(s.current);');
 await page.locator('.sk-bet').waitFor({ timeout: 3000 });
 await pickIn('Lẻ');
 await pickIn('100$');
-await topBtn('Xong').click();
-await topBtn('Chốt').click();
-await page.waitForTimeout(2800);
-await run('await c.skills.beforeRoll(s.current);');
+await topBtn('Cược').first().click();
+await run('await window.__bet;');
+await page.waitForTimeout(2000);
 const b1 = await run('return c.skills.bet;');
 check(b1 && b1.pick === 'odd' && b1.amount === 100, `đã cược Lẻ $100 (${JSON.stringify(b1)})`);
 await run('c.restoreActions();');
-await openKit();
-check((await item('Cược Chẵn Lẻ').textContent()).includes('Lượt này đã cược Lẻ'), 'ô trong kho ghi "Lượt này đã cược Lẻ"');
-await topBtn('Huỷ').click();
-await page.waitForTimeout(400);
 const settle = await run(`
   const p = s.current; p.skills = ['dd2a']; const m0 = p.money;
   await c.skills.settleBets(p, { a: 2, b: 5, sum: 7, isDouble: false }); await c.skills.flushSlip(p, { a: 2, b: 5, sum: 7, isDouble: false });
@@ -558,7 +565,7 @@ const fees = await run(`
   await c.executeTrade({ give: [1], get: [3], giveMoney: 0, getMoney: 0 }, a, b);
   return { broke, cut: broker.money - m1, swapped: s.owner.get(1) === b.id && s.owner.get(3) === a.id };
 `);
-check(fees.broke === 72, `Môi Giới level 2: người khác mua lô 400$ → +18% = 72$ (được ${fees.broke})`);
+check(fees.broke === 48, `Môi Giới level 2: người khác mua lô 400$ → +12% = 48$ (được ${fees.broke})`);
 check(fees.swapped && fees.cut === 30, `Cò Đất level 2: hai người khác đổi 2 lô 60$ → +25% = 30$ (được ${fees.cut})`);
 
 /* ------------------------------------------------ 4c. Chuyến Tàu Xuyên Việt */
@@ -889,18 +896,16 @@ check(bets.use.dd2a.n === 2 && bets.use.ddX1.gain === 200 && bets.use.ddX2.gain 
 
 await reset();
 await run(`const p = s.current; p.skills = ['dd2a', 'ddX1']; c.lastRolled = false; c.restoreActions();`);
-await openKit();
-await item('Cược Chẵn Lẻ').click();
+await run('window.__bet = c.skills.beforeRoll(s.current);');
 await page.locator('.sk-bet').waitFor({ timeout: 5000 });
 check(await page.locator('.sk-bet [data-v="big"]').count() === 1 && await page.locator('.sk-bet [data-v="small"]').count() === 1,
   'hộp cược có thêm cửa Tài và Xỉu');
 await page.locator('.sk-bet [data-v="small"]').click();
-await topBtn('Xong').click();
-await topBtn('Chốt').click();
-await page.waitForTimeout(2600);
-await run('await c.skills.beforeRoll(s.current);');
-check(await run(`return c.skills.bet?.pick === 'small';`), 'đặt cửa Xỉu: lúc lắc tự cược cửa Xỉu');
+await page.keyboard.press('Enter');
+await run('await window.__bet;');
+check(await run(`return c.skills.bet?.pick === 'small';`), 'chọn cửa Xỉu, Enter: cược cửa Xỉu');
 await run('c.skills.bet = null;');
+await page.waitForTimeout(2000);
 
 // Khách Quen Nhà Đá: bồi thường khi vào tù, ra tù miễn phí
 await reset();
@@ -961,12 +966,39 @@ const vet = await run(`
 check(JSON.stringify(vet.got) === '[1,2,1,2]' && vet.pts === 6, `Lão Làng level 3: cứ 2 lần qua được thêm 1 điểm, tính từ lúc học (${JSON.stringify(vet)})`);
 check(vet.use.n === 2, 'Lão Làng: mỗi lần tặng điểm là một lần chạy');
 
+// Nhặt Hàng Thừa: chỉ ô chưa có chủ mà người khác đang đứng; Esc bỏ ngang bảng chọn ô
+await reset();
+const left = await run(`
+  const me = s.current;
+  const [o1, o2] = s.players.filter((q) => q.id !== me.id);
+  me.skills = ['dc1', 'dc2b', 'dcS1']; me.pos = 6;   // ô mình đang đứng không tính
+  o1.pos = 39;                                       // ô trống, người khác đứng: mua được
+  o2.pos = 1; s.owner.set(1, o2.id);                 // người khác đứng nhưng đã có chủ
+  s.owner.delete(3);                                 // ô trống không ai đứng
+  c.restoreActions();
+  return K.leftoverOffers(s, me).map((x) => x.id);
+`);
+check(JSON.stringify(left) === '[39]', `Nhặt Hàng Thừa chỉ thấy ô trống người khác đang đứng (${JSON.stringify(left)})`);
+await openKit();
+await item('Nhặt Hàng Thừa').click();
+await page.locator('.tile-pick:not(.out)').waitFor({ timeout: 5000 });
+check(JSON.stringify(await markedTiles(page)) === '[39]', 'bảng chọn ô chỉ sáng ô 39');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(500);
+check(await page.locator('.tile-pick:not(.out)').count() === 0 && await item('Nhặt Hàng Thừa').isVisible(),
+  'Esc: bỏ bảng chọn ô, về lại kho');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(500);
+check(await page.locator('#modal-root .scrim.show').count() === 0
+  && await run(`return !s.owner.has(39);`), 'Esc lần nữa: đóng kho, không mua gì');
+await run('c.restoreActions();');
+
 // Khách Sộp: mua ô trống thì ngân hàng hoàn tiền
 await reset();
 const buy = await run(`
   const { BOARD } = await import('/src/data/board.js');
   const me = s.current;
-  const locked = K.skillState({ ...me, skills: ['dcS1'] }, 'dcX2');
+  const locked = K.skillState({ ...me, skills: ['dc1'] }, 'dcX2');
   me.pos = 39;
   window.__buyGo = c.resolveOwnable(me, BOARD[39], { a: 1, b: 2, sum: 3 });
   return { locked };
@@ -982,7 +1014,7 @@ const buy2 = await run(`
   return { back: me.money - m0, price: BOARD[39].price, use: me.skillUse.dcX2,
            owner: s.owner.get(39) === me.id };
 `);
-check(buy.locked !== 'locked' && buy2.owner, `Khách Sộp học được ngay sau Nhặt Hàng Thừa; mua ô trống qua hộp Mua (${JSON.stringify(buy2)})`);
+check(buy.locked !== 'locked' && buy2.owner, `Khách Sộp học được ngay sau Môi Giới; mua ô trống qua hộp Mua (${JSON.stringify(buy2)})`);
 check(buy2.back === Math.round(buy2.price * 0.18) && buy2.use.gain === buy2.back,
   `Khách Sộp level 2: hoàn 18% giá mua, ghi vào tiến độ (${buy2.back})`);
 

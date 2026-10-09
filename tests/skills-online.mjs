@@ -183,33 +183,26 @@ ok(await until(async () => (await skillView(A)) === (await skillView(B)), 15000)
 
 console.log('\n▸ 3. Cược rồi lắc — tiền hai máy khớp nhau');
 await D.bringToFront();
-// Cược Chẵn Lẻ học xong nằm tắt: bật trong kho kỹ năng rồi mới cược được
-await until(async () => (await D.locator('#actions button[data-key="u"]:not([disabled])').count()) === 1, 8000);
+// Cược Chẵn Lẻ không có công tắc: bấm Lắc thì hộp hỏi cược hiện trên máy người đi
 ok((await O.locator('#actions button[data-key="u"]').count()) === 0, 'máy ngồi xem không có nút Dùng kỹ năng');
-await D.locator('#actions button[data-key="u"]').click();
-const offItem = D.locator('.kit-item.is-off', { hasText: 'Cược Chẵn Lẻ' });
-ok(await until(async () => (await offItem.count()) === 1, 5000), 'kho kỹ năng có Cược Chẵn Lẻ đang tắt (ô xám)');
-await offItem.click();
-await D.locator('.sk-bet').waitFor({ timeout: 5000 });
-const topD = D.locator('#modal-root .scrim.show:not(.stashed)').last();
-await topD.locator('[data-row="amount"] button', { hasText: '100$' }).click();
-await topD.locator('.modal-foot button', { hasText: 'Xong' }).click();
-await D.waitForTimeout(400);
-await D.locator('#modal-root .scrim.show .modal-foot button', { hasText: 'Chốt' }).click();
-ok(await until(async () => O.evaluate((s) => {
-  const p = window.__monopoly.controller.state.players[s];
-  return !p.skillOff.includes('dd2a') && p.betSet?.pick === 'even' && p.betSet?.amount === 100;
-}, seat)), 'Chốt: máy kia thấy Cược bật, cửa Chẵn 100$');
-await D.waitForTimeout(2600);
 await until(async () => (await D.locator('#actions button[data-key="r"]').count()) === 1, 8000);
 await D.locator('#actions button[data-key="r"]').click();
+await D.locator('.sk-bet').waitFor({ timeout: 5000 });
+ok((await O.locator('.sk-bet').count()) === 0, 'hộp hỏi cược chỉ hiện trên máy người đi');
+const topD = D.locator('#modal-root .scrim.show:not(.stashed)').last();
+await topD.locator('[data-row="amount"] button', { hasText: '100$' }).click();
+await D.keyboard.press('Enter');
+ok(await until(async () => O.evaluate((s) => {
+  const p = window.__monopoly.controller.state.players[s];
+  return p.betSet?.pick === 'even' && p.betSet?.amount === 100;
+}, seat)), 'Enter: máy kia thấy lần cược Chẵn 100$');
 await D.waitForTimeout(2500);
 await drain(D, 25000);
 await until(async () => !(await D.evaluate(() => window.__monopoly.controller.busy)), 20000);
 ok(await until(async () => (await skillView(A)) === (await skillView(B)), 15000),
   'sau khi chốt cược, tiền và kỹ năng hai máy khớp nhau');
 ok(await D.evaluate(() => window.__monopoly.controller.skills.bet === null), 'cược đã chốt, không còn treo');
-ok(await D.evaluate((s) => window.__monopoly.controller.state.players[s].usedTurn?.dd2a != null, seat), 'bấm Lắc thì tự cược');
+ok(await D.evaluate((s) => window.__monopoly.controller.state.players[s].usedTurn?.dd2a != null, seat), 'bấm Lắc thì đã hỏi cược');
 
 /* ============================================================ sang lượt người kia */
 

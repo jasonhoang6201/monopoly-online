@@ -173,23 +173,26 @@ for (const [W, H] of SIZES) {
       .findIndex((b) => b.textContent.includes(t)), t);
     await tappable(tag, `kho kỹ năng: nút «${t}»`, page, '#modal-root .scrim.show .modal-foot button', i);
   }
-  await page.locator('.kit-item', { hasText: 'Cược Chẵn Lẻ' }).tap();
-  await page.locator('.sk-bet').waitFor({ timeout: 5000 });
+  await modalBtn(page, 'Huỷ').tap();
+  await page.waitForTimeout(500);
+
+  /* ---- hộp hỏi cược lúc bấm Lắc ---- */
+  await run(page, `s.turnNo += 1; c.skills.bet = null; window.__bet = c.skills.beforeRoll(s.current);`);
+  await page.locator('#modal-root .scrim.show .sk-bet').waitFor({ timeout: 5000 });
   await page.waitForTimeout(600);
   await shot('5-bet');
   const top = '#modal-root .scrim.show:not(.stashed) button';
-  for (const t of ['Không', 'Chẵn', 'Lẻ', '200$', 'Xong', 'Huỷ']) {
+  for (const t of ['Chẵn', 'Lẻ', '200$', 'Cược', 'Không cược']) {
     const i = await page.evaluate(([t, sel]) => [...document.querySelectorAll(sel)]
-      .findIndex((b) => b.textContent.trim().startsWith(t)), [t, top]);
+      .findIndex((b) => b.textContent.replace(/⏎|Esc/g, '').trim() === t || b.textContent.trim().startsWith(t + '$')), [t, top]);
     await tappable(tag, `hộp cược: nút «${t}»`, page, top, i);
   }
   await page.locator(top, { hasText: 'Lẻ' }).first().tap();
-  await page.locator(top, { hasText: 'Xong' }).tap();
-  await page.waitForTimeout(400);
-  ok(`${tag} · chọn cược xong về lại kho, ô Cược ghi cửa vừa chọn`,
-    (await page.locator('.kit-item', { hasText: 'Cược Chẵn Lẻ' }).textContent()).includes('Lẻ'));
-  await modalBtn(page, 'Huỷ').tap();
-  await page.waitForTimeout(500);
+  await page.locator('#modal-root .scrim.show .modal-foot .btn-gold').tap();
+  await run(page, 'await window.__bet;');
+  ok(`${tag} · bấm Cược: cược cửa vừa chọn`, await run(page, `return c.skills.bet?.pick === 'odd';`));
+  await run(page, 'c.skills.bet = null;');
+  await page.waitForTimeout(2000);
 
   /* ---- sau khi lắc: chọn ô đi tới / đi lùi trên bàn cờ, 3 nút phụ ---- */
   await run(page, `await c.scene.rollDiceAnim(3, 4);

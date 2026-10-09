@@ -103,7 +103,7 @@ export class SkillPlay {
    * - bật / tắt (`switch`, không có `choose`): bấm là đổi màu trong bản nháp.
    *   Gồm Cò Quay, Xe Đạp.
    * - có bảng chọn (`choose`): bấm mở bảng, trong bảng có lựa chọn "Không"
-   *   là tắt. Chọn xong về lại kho. Cược, Xổ Số, Góp Vốn giữ lựa chọn và tự
+   *   là tắt. Chọn xong về lại kho. Xổ Số, Góp Vốn giữ lựa chọn và tự
    *   làm lại mỗi lượt; Tất Tay, Mua Lại, Siết Nợ, Xuyên Việt (`once`) làm
    *   một lần ngay lúc Chốt.
    * - việc làm ngay (`act`, kỹ năng nội tại như Ngồi Yên): bấm là chốt bản
@@ -133,14 +133,6 @@ export class SkillPlay {
       ? { on, off: 'Bấm để bật' + extra }
       : { ok: false, why: wait(id) });
 
-    const bet = this.pending(this.bet);
-    cell('dd2a', {
-      on: (v) => (v ? `Tự cược ${PARITY_NAME[v.pick]} ${money(v.amount)} mỗi lượt, lúc bấm Lắc` : 'Bật nhưng chưa chọn cửa'),
-      off: 'Bấm để chọn cửa và tiền cược',
-      note: bet ? `Lượt này đã cược ${PARITY_NAME[bet.pick]} ${money(bet.amount)}` : '',
-      val: p.betSet ?? null,
-      choose: (v) => this.chooseBet(p, v),
-    });
     const all = this.pending(this.allIn);
     cell('ddU', all ? { ok: false, why: `Đã tất tay cửa ${PARITY_NAME[all.pick]}` }
       : !ready(p, 'ddU') ? { ok: false, why: wait('ddU') }
@@ -184,8 +176,8 @@ export class SkillPlay {
     cell('cnS2', this.canSit(p)
       ? { act: () => this.g.sitInJail(), on: () => `Bấm để ngồi yên, còn ${this.sitsLeft(p)} lượt` }
       : { ok: false, why: !jail ? 'Chỉ dùng khi đang ở tù' : 'Đã ngồi yên đủ số lượt lần này' });
-    // Tàu Tốc Hành, Quay Đầu, Xí Ngầu Gian, Thâu Tóm không nằm trong kho: không
-    // có công tắc, tới đúng lúc thì game tự hỏi (xem `switchable`)
+    // Tàu Tốc Hành, Quay Đầu, Xí Ngầu Gian, Thâu Tóm, Cược Chẵn Lẻ không nằm
+    // trong kho: không có công tắc, tới đúng lúc thì game tự hỏi (xem `switchable`)
     return out;
   }
 
@@ -262,8 +254,7 @@ export class SkillPlay {
   }
 
   /**
-   * Áp dụng bản nháp của kho: công tắc, lựa chọn giữ lâu (Cược, Xổ Số, Góp
-   * Vốn), rồi các việc làm một lần. Loan tin phần công tắc và lựa chọn một
+   * Áp dụng bản nháp của kho: công tắc, lựa chọn giữ lâu (Xổ Số, Góp Vốn), rồi các việc làm một lần. Loan tin phần công tắc và lựa chọn một
    * lần; mỗi việc làm một lần tự loan tin của nó. Xuyên Việt để `openKit` chạy
    * sau cùng vì nó dời quân và có thể hết lượt.
    */
@@ -280,10 +271,6 @@ export class SkillPlay {
       }
       if (setSkillOn(p, c.id, on)) res[on ? 'on' : 'off'].push(c.id);
       if (!on) continue;
-      if (c.id === 'dd2a' && val && (p.betSet?.pick !== val.pick || p.betSet?.amount !== val.amount)) {
-        p.betSet = { ...val };
-        res.notes.push(`Cược Chẵn Lẻ: tự cược ${PARITY_NAME[val.pick]} ${money(val.amount)} mỗi lượt.`);
-      }
       if (c.id === 'ddV' && val != null && val !== p.lotto) {
         if (p.lotto != null) p.lapUses = { ...p.lapUses, ddVpick: 1 };
         p.lotto = val;
@@ -317,24 +304,77 @@ export class SkillPlay {
   }
 
   /**
-   * Trước khi lắc: đặt cược đang bật. Cược mỗi lượt một lần (đổ đôi lắc lại
-   * không cược thêm); thiếu tiền thì bỏ lượt này, không tắt. Xe Đạp không
-   * cần đặt trước: đang bật thì `shape` tự nắn mọi lần lắc.
+   * Trước khi lắc: hỏi Cược Chẵn Lẻ. Mỗi lượt hỏi một lần, đổ đôi lắc lại
+   * không hỏi nữa, kể cả khi lần đầu đã bấm không cược. Hộp chọn sẵn cửa và
+   * tiền của lần cược trước (`p.betSet`), nên Enter là cược lại y như cũ, Esc
+   * là lượt này không cược. Xe Đạp không cần đặt trước: đang bật thì `shape`
+   * tự nắn mọi lần lắc.
+   *
+   * `ask = false` khi bàn lắc hộ người để hết giờ: không hỏi, không cược, vì
+   * tiêu tiền của người vắng mặt là quyết định của họ.
    */
-  async beforeRoll(p) {
+  async beforeRoll(p, ask = true) {
     const st = this.st;
-    const set = p.betSet;
-    if (has(p, 'dd2a') && set && p.usedTurn?.dd2a !== st.turnNo && !this.pending(this.bet)) {
-      p.usedTurn = { ...p.usedTurn, dd2a: st.turnNo };
-      if (p.money >= set.amount) {
-        this.bet = { turnNo: st.turnNo, seat: p.id, pick: set.pick, amount: set.amount };
-        this.g.sync();
-        // Không chờ: dòng này hiện song song với hoạt cảnh lắc
-        this.bc(title('dd2a'), `${named(p)} cược <b>${money(set.amount)}</b> vào cửa <b>${PARITY_NAME[set.pick]}</b>.`, { ms: 1800 });
-      } else {
-        await this.bc(title('dd2a'), `${named(p)} không đủ ${money(set.amount)} để cược, lượt này bỏ qua.`, { kind: 'bad', ms: 1800 });
-      }
-    }
+    if (!has(p, 'dd2a') || p.usedTurn?.dd2a === st.turnNo || this.pending(this.bet)) return;
+    p.usedTurn = { ...p.usedTurn, dd2a: st.turnNo };
+    if (!ask) return;
+    const set = await this.askBet(p);
+    if (!set || st.current !== p || p.bankrupt || st.over) return;
+    p.betSet = set;
+    this.bet = { turnNo: st.turnNo, seat: p.id, pick: set.pick, amount: set.amount };
+    this.g.sync();
+    // Không chờ: dòng này hiện song song với hoạt cảnh lắc
+    this.bc(title('dd2a'), `${named(p)} cược <b>${money(set.amount)}</b> vào cửa <b>${PARITY_NAME[set.pick]}</b>.`, { ms: 1800 });
+  }
+
+  /**
+   * Hộp hỏi cược lúc bấm Lắc. Trả `{pick, amount}`, hoặc `null` khi không cược
+   * (Esc, nút Không cược, hết giờ lượt, hoặc không đủ tiền cho mức thấp nhất).
+   *
+   * Cửa và tiền lần trước được chọn sẵn. Mức tiền quá số tiền mặt đang có thì
+   * mờ; mức lần trước đã quá thì lùi về mức cao nhất còn đủ. Lần trước cược
+   * Tài / Xỉu mà nay đã tẩy Thần Tài Xỉu thì về Chẵn.
+   */
+  async askBet(p) {
+    const { payout, max } = param(p, 'dd2a');
+    const amounts = [50, 100, 200, 300].filter((a) => a <= max);
+    const afford = amounts.filter((a) => a <= p.money);
+    if (!afford.length) return null;
+    const taiXiu = has(p, 'ddX1');
+    const picks = [['even', 'Chẵn'], ['odd', 'Lẻ'],
+      ...(taiXiu ? [['big', 'Tài · 8–12'], ['small', 'Xỉu · 2–6']] : [])];
+    const last = p.betSet;
+    const sel = {
+      pick: picks.some(([v]) => v === last?.pick) ? last.pick : 'even',
+      amount: afford.includes(last?.amount) ? last.amount : afford[afford.length - 1],
+    };
+    const summary = () => `Cược <b>${money(sel.amount)}</b> vào cửa <b>${PARITY_NAME[sel.pick]}</b>`;
+    const ok = await openModal({
+      eyebrow: `Kỹ năng · ${skillById('dd2a').name}`,
+      title: 'Cược lần lắc này?',
+      body: `<div class="sk-bet">
+        ${SkillPlay.row('pick', picks, sel.pick)}
+        ${SkillPlay.row('amount', amounts.map((a) => [a, money(a), a > p.money]), sel.amount)}
+        <p class="sk-bet-note sk-bet-sum">${summary()}</p>
+        <p class="sk-bet-note">Chẵn/Lẻ đúng: được thêm ${pctText(payout)} số tiền cược.${taiXiu
+          ? ` Tài/Xỉu đúng: được thêm ${pctText(param(p, 'ddX1').payout)}; ra 7 thì cả hai cửa thua.` : ''}
+          Sai: mất tiền cược vào Quỹ Công${has(p, 'ddX2') ? `, được hoàn ${pctText(param(p, 'ddX2').back)}` : ''}.</p>
+      </div>`,
+      buttons: [
+        { label: 'Cược', value: true, cls: 'btn-gold' },
+        { label: 'Không cược', value: false, cls: 'btn-ghost' },
+      ],
+      onMount: (el) => {
+        el.querySelectorAll('[data-row] button').forEach((b) => b.addEventListener('click', () => {
+          const row = b.parentElement;
+          row.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+          sel[row.dataset.row] = row.dataset.row === 'amount' ? Number(b.dataset.v) : b.dataset.v;
+          el.querySelector('.sk-bet-sum').innerHTML = summary();
+          audio.sfx('click');
+        }));
+      },
+    });
+    return ok ? { ...sel } : null;
   }
 
   /* ================================================================
@@ -375,30 +415,6 @@ export class SkillPlay {
       },
     });
     return ok ? sel : undefined;
-  }
-
-  /** Cược Chẵn Lẻ: chọn cửa và số tiền, hoặc Không. */
-  async chooseBet(p, cur) {
-    const { payout, max } = param(p, 'dd2a');
-    const amounts = [50, 100, 200, 300].filter((a) => a <= max);
-    const taiXiu = has(p, 'ddX1');
-    const picks = [['none', 'Không'], ['even', 'Chẵn'], ['odd', 'Lẻ'],
-      ...(taiXiu ? [['big', 'Tài · 8–12'], ['small', 'Xỉu · 2–6']] : [])];
-    const sel = await this.chooser('dd2a', {
-      title: 'Tự cược mỗi lượt',
-      rows: { pick: cur?.pick ?? 'even', amount: cur?.amount ?? amounts[0] },
-      body: `${SkillPlay.row('pick', picks, cur?.pick ?? 'even')}
-        ${SkillPlay.row('amount', amounts.map((a) => [a, money(a)]), cur?.amount ?? amounts[0])}
-        <p class="sk-bet-note">Đang bật thì mỗi lượt, lúc bấm Lắc, tự cược đúng cửa và số tiền này; chọn Không là tắt.
-          Chẵn/Lẻ đúng: được thêm ${pctText(payout)} số tiền cược.${taiXiu
-          ? ` Tài/Xỉu đúng: được thêm ${pctText(param(p, 'ddX1').payout)}; ra 7 thì cả hai cửa thua.` : ''}
-          Sai: mất tiền cược vào Quỹ Công${has(p, 'ddX2') ? `, được hoàn ${pctText(param(p, 'ddX2').back)}` : ''}.
-          Lượt nào không đủ tiền thì bỏ lượt ấy.</p>`,
-      onPick: (s, el) => el.querySelector('[data-row="amount"]').classList.toggle('dim', s.pick === 'none'),
-    });
-    if (!sel) return undefined;
-    if (sel.pick === 'none') return { on: false, val: cur };
-    return { on: true, val: { pick: sel.pick, amount: Number(sel.amount) } };
   }
 
   /** Tất Tay: chọn cửa, hoặc Không. Làm một lần lúc Chốt. */
@@ -606,7 +622,8 @@ export class SkillPlay {
         gained.length ? `, rồi học ${gained.join(', ')}` : ''}.`);
     } else if (gained.length) lines.push(`${named(p)} học ${gained.join(', ')}.`);
     const names = (ids) => ids.map((id) => `<b>${skillById(id).name}</b>`).join(', ');
-    const on = p.skills.filter((id) => has(p, id) && !wasOn.has(id));
+    // Ô vừa học đã nằm trong dòng "học …"; "Bật" chỉ nói ô học từ trước nay mới bật
+    const on = p.skills.filter((id) => has(p, id) && !wasOn.has(id) && base[id] > 0);
     const off = wiped ? [] : [...wasOn].filter((id) => !has(p, id));
     if (on.length) lines.push(`Bật: ${names(on)}.`);
     if (off.length) lines.push(`Tắt: ${names(off)}.`);
@@ -1344,6 +1361,7 @@ export class SkillPlay {
         quick: true,
         dice: canReroll ? ['a', 'b'] : undefined,
         cancel: canBack ? 'Đi tới như thường' : undefined,
+        esc: true,
       }, this.g.events.localMs);
       const v = pick === back && canBack ? 'back' : pick === 'a' || pick === 'b' ? pick : 'go';
 

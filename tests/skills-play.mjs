@@ -171,7 +171,8 @@ async function answerModal() {
     await top.locator('[data-row="pick"] button').nth(Math.floor(rand() * 2)).click();
     const amts = top.locator('[data-row="amount"] button:not([disabled])');
     if (await amts.count()) await amts.nth(Math.floor(rand() * await amts.count())).click();
-    await top.locator('.modal-foot button', { hasText: 'Đặt cược' }).click();
+    // Nút đầu ở chân hộp: "Cược" của hộp hỏi lúc Lắc, "Xong" của bảng chọn Tất Tay
+    await top.locator('.modal-foot button').first().click();
     count('cược chẵn lẻ');
     return 'cược';
   }

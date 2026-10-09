@@ -181,7 +181,7 @@ export const BRANCHES = [
  * `cooldown` thì là công tắc vĩnh viễn (Xe Đạp, Cò Quay). `once: true` là kỹ năng làm
  * một việc ngay lúc chọn trong kho (Tất Tay, Xuyên Việt, Nhặt Hàng Thừa, Siết
  * Nợ): không có trạng thái bật / tắt để giữ. `auto: true` là kỹ năng tự
- * hỏi người đang đi đúng lúc (sau khi lắc, khi dừng ở ô nào đó), không mở từ kho. `cooldown` (trong levels) = số lần qua ô Bắt Đầu phải chờ sau mỗi
+ * hỏi người đang đi đúng lúc (lúc bấm Lắc, sau khi lắc, khi dừng ở ô nào đó), không mở từ kho. `cooldown` (trong levels) = số lần qua ô Bắt Đầu phải chờ sau mỗi
  * lần dùng; `charges` = dùng được mấy lần trước khi phải chờ.
  */
 export const SKILLS = [
@@ -484,15 +484,17 @@ export const SKILLS = [
     lvText: 'Chẵn +{$even}, lẻ −{$odd}',
   },
   {
-    id: 'dd2a', branch: 'doden', tier: 2, slot: 'b', kind: 'active', icon: 'chip',
+    id: 'dd2a', branch: 'doden', tier: 2, slot: 'b', kind: 'active', auto: true, icon: 'chip',
     requires: ['dd1'],
     name: 'Cược Chẵn Lẻ',
+    /* Không còn công tắc trong kho: bấm Lắc là hỏi ngay, hộp chọn sẵn cửa và
+       tiền lần trước nên Enter là cược lại y như cũ, Esc là lượt này không cược. */
     uses: 'Mỗi lượt 1 lần',
     when: 'mỗi lượt, lúc bấm Lắc',
     levels: [{ payout: [0.7, 1.4], max: 200 }, { payout: 1.05, max: 200 }, { payout: 1.15, max: 250 }],
     grow: { by: 'uses', at: [3, 6], say: 'Đặt cược {n} lần' },
     short: 'Đoán tổng xí ngầu chẵn hay lẻ, đúng thì ăn tiền cược.',
-    effect: 'Chọn cửa chẵn hay lẻ và số tiền cược (tối đa {$max}). Đang bật thì mỗi lượt, lúc bấm Lắc, tự cược đúng cửa và số tiền ấy cho tới khi bạn chọn Không. Đoán đúng: được thêm {%payout} số tiền cược. Đoán sai: mất tiền cược, số tiền này vào Quỹ Công.',
+    effect: 'Mỗi lượt, lúc bấm Lắc, game hỏi bạn có cược không: chọn cửa chẵn hay lẻ và số tiền cược (tối đa {$max}). Hộp hỏi chọn sẵn cửa và tiền của lần cược trước: Enter là cược, Esc là lượt này không cược. Đoán đúng: được thêm {%payout} số tiền cược. Đoán sai: mất tiền cược, số tiền này vào Quỹ Công.',
     lvText: 'Đúng ăn {%payout} tiền cược, cược tối đa {$max}',
   },
   {
@@ -610,26 +612,17 @@ export const SKILLS = [
 
   /* ============================================ Nhà Đầu Cơ */
   {
-    id: 'dcS1', branch: 'dauco', tier: 1, kind: 'active', once: true, icon: 'basket',
-    name: 'Nhặt Hàng Thừa',
-    /* Bấm để dùng trong lượt của mình, không phải hộp hỏi chen vào lúc người
-       khác vừa bỏ qua ô: không ai phải đứng chờ, và hai người cùng học kỹ năng
-       này thì ai tới lượt trước người đó mua. */
-    uses: 'Reset mỗi khi qua ô Bắt Đầu',
-    when: 'trong lượt của bạn, khi có người khác đang đứng ở ô chưa có chủ',
-    levels: [
-      { price: 0.8, charges: 1, cooldown: 1 },
-      { price: 0.75, charges: 1, cooldown: 1 },
-      { price: 0.7, charges: 2, cooldown: 1 },
-    ],
-    grow: { by: 'uses', at: [1, 2], say: 'Nhặt {n} ô' },
-    short: 'Mua ô chưa có chủ mà người khác đang đứng, quân bạn ở đâu cũng được.',
-    effect: 'Dùng Nhặt Hàng Thừa: những ô chưa có chủ mà người khác đang đứng sẽ sáng trên bàn cờ; chọn một ô để mua với {%price} giá gốc, dù quân bạn đang ở đâu.',
-    lvText: 'Mua {%price} giá, dùng {charges} lần giữa hai lần qua',
+    id: 'dc1', branch: 'dauco', tier: 1, kind: 'passive', span: 'forever', icon: 'broker',
+    name: 'Môi Giới',
+    levels: [{ rate: [0.05, 0.15] }, { rate: 0.12 }, { rate: 0.18 }],
+    grow: { by: 'gain', at: [100, 250] },
+    short: 'Người khác mua đất thì bạn nhận hoa hồng.',
+    effect: 'Mỗi khi người chơi khác mua đất, bến/ga hay công ty từ ngân hàng (kể cả qua đấu giá), bạn nhận hoa hồng {%rate} giá gốc. Ngân hàng trả, người mua không mất thêm.',
+    lvText: 'Hoa hồng {%rate} giá đất',
   },
   {
     id: 'dc2a', branch: 'dauco', tier: 2, slot: 'a', kind: 'passive', span: 'forever', icon: 'swap',
-    requires: ['dcS1'],
+    requires: ['dc1'],
     name: 'Cò Đất',
     levels: [{ rate: [0.15, 0.25], cap: 150 }, { rate: 0.25, cap: 250 }, { rate: 0.3, cap: 400 }],
     grow: { by: 'gain', at: [60, 180] },
@@ -639,7 +632,7 @@ export const SKILLS = [
   },
   {
     id: 'dc2b', branch: 'dauco', tier: 2, slot: 'b', kind: 'passive', span: 'forever', icon: 'bricks',
-    requires: ['dcS1'],
+    requires: ['dc1'],
     name: 'Thầu Vật Liệu',
     levels: [{ build: [10, 30], sell: [5, 15] }, { build: 25, sell: 15 }, { build: 40, sell: 20 }],
     grow: { by: 'gain', at: [60, 180] },
@@ -707,7 +700,7 @@ export const SKILLS = [
   },
   {
     id: 'dcX2', branch: 'dauco', tier: 2, slot: 'c', kind: 'passive', span: 'forever', icon: 'receipt',
-    requires: ['dcS1'],
+    requires: ['dc1'],
     name: 'Khách Sộp',
     levels: [{ back: [0.1, 0.2] }, { back: 0.18 }, { back: 0.25 }],
     grow: { by: 'lands', at: [5, 7] },
@@ -716,16 +709,23 @@ export const SKILLS = [
     lvText: 'Hoàn {%back} giá mua',
   },
   {
-    id: 'dc1', branch: 'dauco', tier: 3, slot: 'c', kind: 'passive', span: 'forever', icon: 'broker',
+    id: 'dcS1', branch: 'dauco', tier: 3, slot: 'c', kind: 'active', once: true, icon: 'basket',
     requires: ['dc2b'],
-    name: 'Môi Giới',
-    /* Ô gốc cũ, dời xuống nhánh phụ 2 điểm nên hoa hồng nâng lên (5–15/12/18%
-       thành 10–20/18/25%) cho đáng hai điểm. */
-    levels: [{ rate: [0.1, 0.2] }, { rate: 0.18 }, { rate: 0.25 }],
-    grow: { by: 'gain', at: [100, 250] },
-    short: 'Người khác mua đất thì bạn nhận hoa hồng.',
-    effect: 'Mỗi khi người chơi khác mua đất, bến/ga hay công ty từ ngân hàng (kể cả qua đấu giá), bạn nhận hoa hồng {%rate} giá gốc. Ngân hàng trả, người mua không mất thêm.',
-    lvText: 'Hoa hồng {%rate} giá đất',
+    name: 'Nhặt Hàng Thừa',
+    /* Bấm để dùng trong lượt của mình, không phải hộp hỏi chen vào lúc người
+       khác vừa bỏ qua ô: không ai phải đứng chờ, và hai người cùng học kỹ năng
+       này thì ai tới lượt trước người đó mua. */
+    uses: 'Reset mỗi khi qua ô Bắt Đầu',
+    when: 'trong lượt của bạn, khi có người khác đang đứng ở ô chưa có chủ',
+    levels: [
+      { price: 0.8, charges: 1, cooldown: 1 },
+      { price: 0.75, charges: 1, cooldown: 1 },
+      { price: 0.7, charges: 2, cooldown: 1 },
+    ],
+    grow: { by: 'uses', at: [1, 2], say: 'Nhặt {n} ô' },
+    short: 'Mua ô chưa có chủ mà người khác đang đứng, quân bạn ở đâu cũng được.',
+    effect: 'Dùng Nhặt Hàng Thừa: những ô chưa có chủ mà người khác đang đứng sẽ sáng trên bàn cờ; chọn một ô để mua với {%price} giá gốc, dù quân bạn đang ở đâu.',
+    lvText: 'Mua {%price} giá, dùng {charges} lần giữa hai lần qua',
   },
   {
     id: 'dcS2', branch: 'dauco', tier: 3, slot: 'd', kind: 'active', icon: 'handshake',
