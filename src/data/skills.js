@@ -625,8 +625,8 @@ export const SKILLS = [
     name: 'Cò Đất',
     levels: [{ rate: [0.25, 0.35], cap: 250 }, { rate: 0.35, cap: 350 }, { rate: 0.45, cap: 500 }],
     grow: { by: 'gain', at: [60, 180] },
-    short: 'Ai giao dịch đất cũng phải chia bạn tiền cò.',
-    effect: 'Mỗi giao dịch trên bàn có đất đổi chủ, kể cả giữa hai người khác, bạn nhận {%rate} giá gốc số đất đó, tối đa {$cap} mỗi giao dịch. Ngân hàng trả.',
+    short: 'Người khác giao dịch đất với nhau, bạn có tiền cò.',
+    effect: 'Mỗi giao dịch có đất đổi chủ giữa hai người khác, bạn nhận {%rate} giá gốc số đất đó, tối đa {$cap} mỗi giao dịch. Ngân hàng trả. Giao dịch bạn đứng ra làm thì không có tiền cò.',
     lvText: '{%rate} giá đất, tối đa {$cap}',
   },
   {
@@ -685,7 +685,12 @@ export const SKILLS = [
     ],
     grow: { by: 'uses', at: [1, 2], say: 'Siết nợ {n} ô' },
     short: 'Mua đứt đất của người đang túng tiền.',
-    effect: 'Chọn một ô của người đang có ô thế chấp hoặc có dưới {$poor} tiền mặt. Ô đang thế chấp: trả ngân hàng {%bank} số tiền thế chấp và trả chủ cũ thêm {%premium} số đó. Ô chưa thế chấp và chưa có nhà trong bộ: trả chủ cũ {%debt} giá gốc. Ô về tay bạn, hết thế chấp; chủ cũ không được từ chối.',
+    // Level 2–3 không trả chủ cũ đồng nào cho ô thế chấp, nên bỏ hẳn vế ấy
+    effect: [
+      'Chọn một ô của người đang có ô thế chấp hoặc có dưới {$poor} tiền mặt. Ô đang thế chấp: trả ngân hàng {%bank} số tiền thế chấp và trả chủ cũ thêm {%premium} số đó. Ô chưa thế chấp và chưa có nhà trong bộ: trả chủ cũ {%debt} giá gốc. Ô về tay bạn, hết thế chấp; chủ cũ không được từ chối.',
+      'Chọn một ô của người đang có ô thế chấp hoặc có dưới {$poor} tiền mặt. Ô đang thế chấp: trả ngân hàng {%bank} số tiền thế chấp, chủ cũ không nhận gì. Ô chưa thế chấp và chưa có nhà trong bộ: trả chủ cũ {%debt} giá gốc. Ô về tay bạn, hết thế chấp; chủ cũ không được từ chối.',
+      'Chọn một ô của người đang có ô thế chấp hoặc có dưới {$poor} tiền mặt. Ô đang thế chấp: trả ngân hàng {%bank} số tiền thế chấp, chủ cũ không nhận gì. Ô chưa thế chấp và chưa có nhà trong bộ: trả chủ cũ {%debt} giá gốc. Ô về tay bạn, hết thế chấp; chủ cũ không được từ chối.',
+    ],
     lvText: 'Con nợ dưới {$poor}, ô thế chấp trả {%bank}, ô thường trả {%debt} giá, {charges} lần giữa hai lần qua',
   },
 

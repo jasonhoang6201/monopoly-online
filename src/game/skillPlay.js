@@ -128,7 +128,6 @@ export class SkillPlay {
     const wait = (id) => `Chờ ${p.cooldowns[id]} lần qua ô Bắt Đầu`;
     const beforeRoll = rolled ? 'Chỉ dùng trước khi lắc' : jail ? 'Không dùng khi đang ở tù' : '';
     const cell = (id, o) => { if (has(p, id)) out.push({ id, switch: switchable(skillById(id)), ok: true, ...o }); };
-    const left = (id) => `còn ${usesLeft(p, id)} lần tới lần qua ô Bắt Đầu`;
     // Bật / tắt: kỹ năng có lượt dùng đang chờ hồi thì không bật được
     const toggle = (id, on, extra = '') => cell(id, ready(p, id)
       ? { on, off: 'Bấm để bật' + extra }
@@ -560,10 +559,18 @@ export class SkillPlay {
     await this.bc(title('dhU'), `${named(p)} đi thẳng tới <b>${tileLabel(dest)}</b>.`, { ms: 2200 });
     // Chuyến tàu thay cho lượt lắc — chốt trước khi đi, xem `GameState.rolled`
     this.st.rolled = true;
-    /* Bắt chờ **sau** khi đi: chuyến tàu về ô Bắt Đầu là một lần đi ngang ô
-       ấy, bắt chờ trước thì lần qua này trừ luôn thời gian chờ — level 3 (chờ
+    /* Bắt chờ **trước** khi đi để mọi ảnh chụp phát ra giữa chuyến đã ghi
+       thời gian chờ — máy cầm lái rớt mạng giữa chừng thì người nối lại không
+       được bay thêm chuyến nữa. Chuyến tàu đi ngang ô Bắt Đầu thì lần qua ấy
+       không được trừ thời gian chờ vừa đặt (`cdHold`), không thì level 3 (chờ
        1 lần) lượt nào cũng bay về lãnh lương và điểm. */
-    try { await this.g.advance(p, (dest - p.pos + 40) % 40, null); } finally { spend(p, 'dhU'); }
+    spend(p, 'dhU');
+    p.cdHold = { ...p.cdHold, dhU: this.st.turnNo };
+    this.g.sync();
+    try { await this.g.advance(p, (dest - p.pos + 40) % 40, null); } finally {
+      const { dhU, ...rest } = p.cdHold ?? {};
+      p.cdHold = rest;
+    }
     if (this.st.over || p.bankrupt || p.inJail) { await this.g.endTurn(); return; }
     this.g.setTurnActions(true);
   }
@@ -729,7 +736,7 @@ export class SkillPlay {
    * Chạy **trước** khi tính lương: Thâm Niên đếm cả lần qua này.
    * @returns {number} số điểm kỹ năng vừa nhận (2 nếu tới nhịp Lão Làng)
    */
-  lapStart(p) { return onLap(p); }
+  lapStart(p) { return onLap(p, this.st.turnNo); }
 
   /** Lương vừa lãnh: ghi phần mỗi kỹ năng góp vào tiến độ lên level. */
   paid(p, parts) {
@@ -1133,7 +1140,8 @@ export class SkillPlay {
   /**
    * Cò Đất: giao dịch có đất đổi chủ **giữa hai người khác**, ai có kỹ năng
    * này nhận tiền cò. Người đứng ra giao dịch không được: ngân hàng trả cò cho
-   * cả hai bên thì hai người bán qua bán lại một miếng đất là in ra tiền.
+   * cả hai bên thì hai người bán qua bán lại một miếng đất, lần nào cũng được
+   * ngân hàng trả cò, không mất gì.
    */
   async tradeFees(offer, A, B) {
     const ids = [...offer.give, ...offer.get];

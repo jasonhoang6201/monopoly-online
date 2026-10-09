@@ -32,6 +32,7 @@ export function snapshot(st) {
       skillOff: [...p.skillOff],
       laps: p.laps,
       cooldowns: { ...p.cooldowns },
+      cdHold: { ...p.cdHold },
       usedTurn: { ...p.usedTurn },
       skillLv: { ...p.skillLv },
       lapUses: { ...p.lapUses },
@@ -122,6 +123,7 @@ export function applySnapshot(st, snap) {
     p.skillOff = s.skillOff ? [...s.skillOff] : (s.skills ?? []).includes('ddS2') && !s.spin ? ['ddS2'] : [];
     p.laps = s.laps ?? p.laps;
     p.cooldowns = { ...(s.cooldowns ?? p.cooldowns) };
+    p.cdHold = { ...(s.cdHold ?? {}) };
     p.usedTurn = { ...(s.usedTurn ?? p.usedTurn) };
     p.skillLv = { ...(s.skillLv ?? p.skillLv) };
     p.lapUses = { ...(s.lapUses ?? p.lapUses) };

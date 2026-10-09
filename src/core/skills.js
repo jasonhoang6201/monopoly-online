@@ -244,6 +244,15 @@ export function levelLine(s, lv) {
   return fillText(t, lvParams(s, lv));
 }
 
+/**
+ * Chữ hiệu ứng của một level, đã điền số. `effect` dạng mảng thì mỗi level một
+ * câu — dùng khi một level bỏ hẳn một vế (số đó bằng 0) chứ không chỉ đổi số.
+ */
+export function effectLine(s, lv) {
+  const t = Array.isArray(s.effect) ? s.effect[lv - 1] : s.effect;
+  return fillText(t, lvParams(s, lv));
+}
+
 /* ------------------------------------------------------------ tẩy điểm */
 
 /** Tổng điểm đã tiêu trên cả cây, tính cả level — đây là số điểm được hoàn khi tẩy. */
@@ -398,8 +407,12 @@ export function spend(p, id) {
  *
  * Bộ đếm hồi nằm ngoài `skills` nên tẩy điểm không xoá được nó — dùng xong
  * tối thượng, tẩy rồi học lại vẫn phải chờ như thường.
+ *
+ * `turnNo`: lượt đang chạy. Kỹ năng có `cdHold[id] === turnNo` giữ nguyên
+ * thời gian chờ ở lần qua này; dấu của lượt cũ (máy rớt giữa chừng, chưa kịp
+ * xoá) không còn tác dụng.
  */
-export function onLap(p) {
+export function onLap(p, turnNo) {
   p.laps = (p.laps ?? 0) + 1;
   grantLapPoint(p);
   /* Lão Làng: `tick` đếm số lần qua từ lúc học tới lần tặng điểm kế tiếp —
@@ -413,7 +426,11 @@ export function onLap(p) {
     if (give) { grantLapPoint(p); credit(p, 'cnX1'); points += 1; }
   }
   const next = {};
-  for (const [id, n] of Object.entries(p.cooldowns ?? {})) if (n > 1) next[id] = n - 1;
+  for (const [id, n] of Object.entries(p.cooldowns ?? {})) {
+    const hold = turnNo != null && p.cdHold?.[id] === turnNo;
+    if (hold) next[id] = n;
+    else if (n > 1) next[id] = n - 1;
+  }
   p.cooldowns = next;
   p.lapUses = {};
   return points;
@@ -679,8 +696,9 @@ export function teleportTargets(st, p) {
 
 /**
  * Thâu Tóm ép mua được ô này không. Không đụng bộ màu chủ đất đã có nhà, và
- * không đụng bộ màu chủ đất **đã gom đủ**: phá được bộ vừa đủ màu thì cả bàn
- * không ai dám gom bộ khi có người học ô này — mà gom bộ là trục của cả ván.
+ * không đụng bộ màu chủ đất **đã gom đủ**: xây nhà, thuê gấp đôi đất trống và
+ * điều kiện thắng đều cần đủ bộ, phá được bộ vừa đủ màu thì cả bàn không ai
+ * dám gom bộ khi có người học ô này.
  */
 export function canSeize(st, p, tileId) {
   const owner = st.ownerOf(tileId);
@@ -751,7 +769,7 @@ export function forecloseOffers(st, p) {
     .filter((q) => q.id !== p.id && (q.money < poor || st.propertiesOf(q.id).some((id) => st.isMortgaged(id))))
     .map((q) => q.id));
   return [...st.owner]
-    .filter(([id, seat]) => debtors.has(seat) && (st.isMortgaged(id) || !groupLocked(st, id)))
+    .filter(([id, seat]) => debtors.has(seat) && (st.isMortgaged(id) || !st.groupHasHouses(id)))
     .map(([id]) => {
       const m = BOARD[id].mortgage;
       return st.isMortgaged(id)
@@ -760,12 +778,6 @@ export function forecloseOffers(st, p) {
     })
     .filter((x) => x.bank + x.owner <= p.money);
 }
-
-/** Ô có nhà, hoặc cùng bộ màu với ô có nhà của chính chủ — không siết được. */
-const groupLocked = (st, id) => {
-  const g = BOARD[id].color_group;
-  return g ? st.groupBuilt(st.owner.get(id), g) : st.housesOn(id) > 0;
-};
 
 /**
  * Màu các nhánh người này đã học tới tối thượng. BoardScene dùng danh sách này
@@ -887,7 +899,7 @@ export function skillNow(st, p, s) {
       }
       break;
     case 'dh3': case 'dd3':
-      if (p.skills.includes(s.id)) row('Còn dùng được', `${usesLeft(p, s.id)} lần tới lần qua ô Bắt Đầu`);
+      if (p.skills.includes(s.id)) out.push(waitRow(p, s.id));
       break;
     case 'dhV': {
       const n = mine.filter((id) => ['station', 'utility'].includes(BOARD[id].type) && !st.isMortgaged(id)).length;
@@ -925,7 +937,7 @@ export function skillNow(st, p, s) {
       break;
     }
     case 'dcS1': row('Ô mua được lúc này', `${leftoverOffers(st, { ...p, skills: [...p.skills, 'dcS1'], skillOff: [] }).length}`); break;
-    case 'dcV': row('Ô thế chấp mua được', `${forecloseOffers(st, { ...p, skills: [...p.skills, 'dcV'], skillOff: [] }).length}`); break;
+    case 'dcV': row('Ô siết được lúc này', `${forecloseOffers(st, { ...p, skills: [...p.skills, 'dcV'], skillOff: [] }).length}`); break;
     case 'dcX1': {
       const n = opp.filter((q) => st.propertiesOf(q.id).some((id) => st.isMortgaged(id))).length;
       row('Người đang có ô thế chấp', `${n}/${opp.length}`);

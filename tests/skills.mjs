@@ -1093,7 +1093,25 @@ const bal = await run(`
   const poor = K.forecloseOffers(s, me).map((x) => [x.id, x.bank, x.owner]);
   s.mortgaged.add(26);
   const lien = K.forecloseOffers(s, me).find((x) => x.id === 26);
-  return { earlySet, lateSet, lone, seize, tele, rent3, gains, poor, lien };
+  s.mortgaged.delete(26); s.owner.delete(21); s.owner.delete(26);
+
+  // Chung Cư Mini level 1 (3 căn trên đất lẻ): nhà tặng của Phố Cổ cũng không vượt trần
+  me.skills = ['ac1', 'ac2b', 'acS1', 'acU'];
+  for (const id of [1, 6, 11, 16]) s.owner.set(id, me.id);
+  for (const id of [1, 6, 11]) { s.houses.set(id, 1); s.bankHouses -= 1; }
+  const miniFree = s.canBuild(me.id, 16, { free: true }).ok;
+  for (const id of [1, 6, 11]) { s.houses.delete(id); s.bankHouses += 1; }
+  for (const id of [1, 6, 11, 16]) s.owner.delete(id);
+
+  // Xuyên Việt: lần qua ô Bắt Đầu trong chính lượt bay không trừ thời gian chờ, dấu lượt cũ thì bỏ
+  const laps0 = me.laps, pts0 = me.skillPoints;
+  me.cooldowns = { dhU: 1 }; me.cdHold = { dhU: s.turnNo };
+  K.onLap(me, s.turnNo);
+  const heldCd = me.cooldowns.dhU ?? 0;
+  K.onLap(me, s.turnNo + 1);
+  const staleCd = me.cooldowns.dhU ?? 0;
+  me.cooldowns = {}; me.cdHold = {}; me.laps = laps0; me.skillPoints = pts0;
+  return { earlySet, lateSet, lone, seize, tele, rent3, gains, poor, lien, miniFree, heldCd, staleCd };
 `);
 check(!bal.earlySet && bal.lateSet && bal.lone, `Nhặt Hàng Thừa: chưa qua ô Bắt Đầu 3 lần thì không nhặt ô làm đủ bộ; ô không làm đủ bộ vẫn nhặt (${JSON.stringify(bal)})`);
 check(!bal.seize.full && bal.seize.lone && bal.seize.station, `Thâu Tóm: không phá bộ đủ màu, ô lẻ và bến/ga thì được (${JSON.stringify(bal.seize)})`);
@@ -1102,6 +1120,8 @@ check(bal.rent3 === 740 && bal.gains.ac2b === 34 && bal.gains.acS2 === 141,
   `thuê An Cư cộng dồn: 565$ × (1 + 6% + 25%) = 740$, mỗi kỹ năng ghi phần của mình (${bal.rent3}, ${JSON.stringify(bal.gains)})`);
 check(JSON.stringify(bal.poor) === '[[21,0,121]]' && bal.lien && bal.lien.bank === 65 && bal.lien.owner === 13,
   `Siết Nợ: ô của người dưới 200$ trả chủ 55% giá; ô thế chấp trả ngân hàng 50% + chủ 10% (${JSON.stringify(bal)})`);
+check(!bal.miniFree, 'Chung Cư Mini: nhà tặng của Phố Cổ không xây quá trần đất lẻ');
+check(bal.heldCd === 1 && bal.staleCd === 0, `Xuyên Việt: lượt bay giữ thời gian chờ, dấu lượt cũ không giữ (${bal.heldCd}, ${bal.staleCd})`);
 
 // Cò Đất: người đứng ra giao dịch không ăn tiền cò
 await reset();

@@ -106,20 +106,6 @@ export function repairBill(st, seat, card) {
 }
 
 /**
- * Chủ ô này đã xây căn nào trong khu màu chứa nó chưa — chỉ tính ô của chính
- * chủ ấy. Nhà của người khác cùng khu (Chung Cư Mini, Sổ Hồng) không che chở
- * cho ô này: không thì một căn nhà lẻ khoá cả khu, kể cả khỏi tay người xây.
- *
- * Ô không thuộc khu màu (ga tàu, dịch vụ) thì chỉ xét chính nó, vì chúng không
- * có bộ để mà phá.
- */
-export function groupHasHouses(st, tileId) {
-  const group = BOARD[tileId].color_group;
-  if (!group) return st.housesOn(tileId) > 0;
-  return st.groupBuilt(st.owner.get(tileId), group);
-}
-
-/**
  * Những ô người rút được nhắm tới, theo từng loại thẻ.
  *
  * Luật chung cho cả ba thẻ đụng nhà đất: **chỉ nhắm được vào người khác**, và
@@ -147,7 +133,7 @@ export function cardTargets(st, card, seat) {
        chứ không giật cả bộ trong một nước. */
     case 'seize':
       return foreign
-        .filter((id) => !groupHasHouses(st, id) && st.players[seat].money >= seizePrice(id))
+        .filter((id) => !st.groupHasHouses(id) && st.players[seat].money >= seizePrice(id))
         .sort((a, b) => a - b);
 
     /* Giải toả nhắm được vào **mọi** lô đang có chủ, kể cả đất của chính người
