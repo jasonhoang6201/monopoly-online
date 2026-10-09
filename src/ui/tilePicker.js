@@ -31,6 +31,28 @@ function tileMeta(state, id, owned) {
 }
 
 /**
+ * Esc bỏ ngang phiên chọn trên bàn cờ, như bấm nút bỏ ngang. Trả hàm gỡ phím.
+ *
+ * Chỉ ăn phím khi bảng của phiên này là bảng chọn mới nhất và không có hộp
+ * thoại nào đang mở đè lên: lúc hộp xác nhận ô đang mở thì Esc thuộc về hộp
+ * ấy ("Chọn ô khác"). Hộp thoại đang `stash` (kho kỹ năng nấp sau bàn cờ) không
+ * tính, vì phím lúc ấy thuộc về phiên chọn.
+ */
+export function escCancels(panel, onEsc) {
+  const onKey = (e) => {
+    if (e.key !== 'Escape' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    const picks = document.querySelectorAll('.tile-pick:not(.out)');
+    if (picks[picks.length - 1] !== panel) return;
+    if (document.querySelector('.scrim:not(.hide):not(.stashed)')) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    onEsc();
+  };
+  window.addEventListener('keydown', onKey, true);
+  return () => window.removeEventListener('keydown', onKey, true);
+}
+
+/**
  * Chọn ô trên bàn cờ.
  *
  * @param {import('../scenes/BoardScene.js').default} scene
@@ -38,7 +60,7 @@ function tileMeta(state, id, owned) {
  * @param {number[]} ids các ô chọn được
  * @param {{eyebrow:string,title:string,sub:string,note?:string,confirm?:string,
  *          owned?:boolean,cancel?:string,quick?:boolean,
- *          extra?:Array<{label:string,value:*}>,dice?:Array<*>}} text `cancel` là nhãn nút bỏ ngang;
+ *          extra?:Array<{label:string,value:*}>,dice?:Array<*>,esc?:boolean}} text `cancel` là nhãn nút bỏ ngang;
  *   bỏ trống thì phiên chọn này bắt buộc phải ra một ô. Chỉ đặt khi bên gọi còn
  *   lùi lại được — thẻ tự lôi ra khỏi túi thì lùi được, sự kiện ép chọn thì không.
  *   `quick`: bấm ô là chốt luôn, không mở hộp xác nhận — dùng khi chỉ có vài ô
@@ -47,6 +69,8 @@ function tileMeta(state, id, owned) {
  *   bấm thì trả về `value` của nút ấy thay cho số ô. `dice`: hai giá trị cho
  *   viên trái / viên phải — hai viên xí ngầu trên bàn sáng vòng và bấm được,
  *   bấm viên nào thì trả về giá trị của viên ấy (Xí Ngầu Gian chọn viên lắc lại).
+ *   Có `cancel` thì Esc bỏ ngang như bấm nút ấy; `esc: true` cho Esc trả `null`
+ *   cả khi không có nút bỏ ngang (bên gọi coi `null` là đi như thường).
  * @param {number} [ms] bản online: hạn chọn. Hết giờ thì lấy ô **rẻ nhất** —
  *   bỏ trống thì sự kiện đứng lại, mà tự lấy ô đắt thì hoá ra phạt người mất
  *   kết nối nặng hơn người ngồi bấm. Phiên bỏ ngang được thì hết giờ là bỏ
@@ -88,6 +112,7 @@ export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
     let closeAsk = null;
     let ticker = 0;
     let myClick = null;      // đặt ở dưới; `finish` chỉ gỡ đúng phiên này ra
+    let unEsc = null;
     if (text.dice) {
       scene.armDicePick((i) => {
         if (done || asking) return;
@@ -100,6 +125,7 @@ export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
       if (done) return;
       done = true;
       clearInterval(ticker);
+      unEsc?.();
       closeAsk?.(false);
       scene.popTileClick(myClick);
       scene.clearMarks();
@@ -162,6 +188,7 @@ export function pickTileOnBoard(scene, state, ids, text, ms = 0) {
       audio.sfx('click');
       finish(null);
     });
+    if (cancel || text.esc) unEsc = escCancels(panel, () => { if (!asking) finish(null); });
     panel.querySelectorAll('.tp-extra').forEach((b) => b.addEventListener('click', () => {
       audio.sfx('click');
       finish(extra[Number(b.dataset.i)].value);

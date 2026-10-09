@@ -75,13 +75,13 @@ const BUILDS = {
   'DĐ Tất Tay': ['dd1', 'dd2b', 'dd3', 'ddU', 'ddU', 'ddU', 'dd3', 'dd3'],
   'DĐ Xổ Số': ['dd1', 'dd2a', 'ddX1', 'ddV', 'ddV', 'ddV', 'ddX1', 'ddX1'],
   'DĐ Cờ Bạc': ['dd1', 'dd2a', 'ddX2', 'ddS2', 'ddS1', 'ddS2', 'ddS2', 'dd2a', 'dd2a'],
-  'ĐC Cơn Sốt': ['dcS1', 'dc2a', 'dc3', 'dcU', 'dcU', 'dcU', 'dc3', 'dc3'],
-  'ĐC Siết Nợ': ['dcS1', 'dc2b', 'dcX1', 'dcV', 'dcV', 'dcV', 'dc1', 'dc1'],
-  'ĐC Môi Giới + Góp Vốn': ['dcS1', 'dc2b', 'dc1', 'dcX2', 'dcS2', 'dc1', 'dc1', 'dcS2', 'dcS2'],
+  'ĐC Cơn Sốt': ['dc1', 'dc2a', 'dc3', 'dcU', 'dcU', 'dcU', 'dc3', 'dc3'],
+  'ĐC Siết Nợ': ['dc1', 'dc2b', 'dcX1', 'dcV', 'dcV', 'dcV', 'dc1', 'dc1'],
+  'ĐC Môi Giới + Góp Vốn': ['dc1', 'dc2b', 'dcX2', 'dcS2', 'dc1', 'dc1', 'dcS2', 'dcS2', 'dcS1'],
   'AC Phố Cổ': ['acX2', 'ac2a', 'ac3', 'acU', 'acU', 'acU', 'ac2a', 'ac2a'],
   'AC Mặt Tiền': ['acX2', 'ac2b', 'acX1', 'acV', 'acV', 'acV', 'ac2b', 'ac2b'],
   'AC Chung Cư': ['acX2', 'ac2b', 'acS1', 'acS1', 'acS1', 'ac1', 'acS2', 'acS2'],
-  'Combo Nhặt + Thâu Tóm + Chung Cư': ['dcS1', 'acX2', 'ac2b', 'acS1', 'dc2a', 'dc3', 'acS1', 'acS1', 'dc3'],
+  'Combo Nhặt + Thâu Tóm + Chung Cư': ['dc1', 'dc2b', 'dcS1', 'acX2', 'ac2b', 'acS1', 'dc2a', 'dc3', 'acS1'],
 };
 
 /* ------------------------------------------------------------ một ván */

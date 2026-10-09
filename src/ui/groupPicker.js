@@ -16,6 +16,7 @@
  * nhẹ tay hơn là tự dỡ nhà nhà người ta hộ; không huỷ được thì lấy khu đầu bảng.
  */
 import { openModal } from './modal.js';
+import { escCancels } from './tilePicker.js';
 import { BOARD, GROUPS, GROUP_TILES, tileShortLabel } from '../data/board.js';
 import { audio } from '../audio/audio.js';
 
@@ -87,11 +88,13 @@ export function pickGroupOnBoard(scene, state, data, ms = 0) {
     let closeAsk = null;
     let ticker = 0;
     let myClick = null;      // đặt ở dưới; `finish` chỉ gỡ đúng phiên này ra
+    let unEsc = null;
 
     const finish = (key) => {
       if (done) return;
       done = true;
       clearInterval(ticker);
+      unEsc?.();
       closeAsk?.(false);
       scene.popTileClick(myClick);
       scene.clearMarks();
@@ -160,6 +163,7 @@ export function pickGroupOnBoard(scene, state, data, ms = 0) {
       audio.sfx('click');
       finish(null);
     });
+    if (cancel) unEsc = escCancels(panel, () => { if (!asking) finish(null); });
 
     if (ms) {
       const timer = panel.querySelector('.tp-timer');

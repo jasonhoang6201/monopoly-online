@@ -543,8 +543,9 @@ export function modLabel(m) {
  * bốn người một lúc là treo bàn. Cách cấn nợ ở đây tất định: máy nào tính cũng
  * ra đúng một kết quả, và người chơi đọc thông báo là biết mình vừa mất gì.
  *
- * Thứ tự cố ý: thế chấp ô rẻ nhất trước (mất ít tiền thuê nhất), giữ nhà cửa
- * lại tới cùng vì nhà bán ra chỉ được nửa giá xây.
+ * Thứ tự cố ý: thế chấp đất lẻ rẻ nhất trước (mất ít tiền thuê nhất), bến ga
+ * và thuỷ điện để sau đất lẻ vì tiền thuê của chúng cao hơn đất lẻ thường, giữ
+ * nhà cửa lại tới cùng vì nhà bán ra chỉ được nửa giá xây.
  *
  * @returns {{ok:boolean, mortgaged:number[], sold:number[]}}
  */
@@ -555,7 +556,8 @@ export function autoRaise(st, seat, need) {
 
   const cheapFirst = () => st.propertiesOf(seat)
     .filter((id) => st.canMortgage(seat, id).ok)
-    .sort((a, b) => BOARD[a].mortgage - BOARD[b].mortgage);
+    .sort((a, b) => (BOARD[a].type !== 'property') - (BOARD[b].type !== 'property')
+      || BOARD[a].mortgage - BOARD[b].mortgage);
 
   while (p.money < need) {
     const next = cheapFirst()[0];

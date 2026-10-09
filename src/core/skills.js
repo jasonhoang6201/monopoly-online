@@ -312,7 +312,7 @@ export const isOff = (p, id) => !!p?.skillOff?.includes(id) && switchable(skillB
 /**
  * Chỉ kỹ năng bấm để dùng có công tắc; kỹ năng tự động học là có tác dụng.
  * Kỹ năng tự hỏi đúng lúc (`auto`: Tàu Tốc Hành, Quay Đầu, Xí Ngầu Gian, Thâu
- * Tóm) cũng không có công tắc: hộp hỏi đã có nút bỏ qua, bắt bật trước chỉ
+ * Tóm, Cược Chẵn Lẻ) cũng không có công tắc: hộp hỏi đã có nút bỏ qua, bắt bật trước chỉ
  * thêm một bước mà người chơi hay quên. `isOff` cũng hỏi hàm này, nên ảnh chụp
  * cũ còn ghi các ô ấy trong `skillOff` dựng lại vẫn chạy.
  *
@@ -917,7 +917,7 @@ export function skillNow(st, p, s) {
       row('Trung bình mỗi lần lắc', `≈ +${money(Math.round((mid(P.even) - mid(P.odd)) / 2))}`);
       break;
     case 'dd2a':
-      if (p.betSet) row(`Đang cược ${money(p.betSet.amount)}`, `trúng +${cash(Array.isArray(P.payout)
+      if (p.betSet) row(`Lần cược trước ${money(p.betSet.amount)}`, `trúng +${cash(Array.isArray(P.payout)
         ? P.payout.map((k) => Math.round(p.betSet.amount * k)) : Math.round(p.betSet.amount * P.payout))}`);
       break;
     case 'ddV':

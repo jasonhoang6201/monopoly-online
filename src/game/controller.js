@@ -985,7 +985,7 @@ export class Game {
     if (this.state.turn !== p.id || p.bankrupt) return;
     if (p.inJail) return this.rollInJail();
     if (this.state.rolled) return this.endTurn();
-    return this.takeRoll();
+    return this.takeRoll(true);
   }
 
   /** Sổ ghế đổi (ai đó rớt mạng hay vào lại) — cập nhật danh sách bên cột trái. */
@@ -1317,11 +1317,12 @@ export class Game {
 
   // ------------------------------------------------------------- lắc xí ngầu
 
-  async takeRoll() {
+  /** @param {boolean} [auto] bàn lắc hộ người để hết giờ — không hỏi cược */
+  async takeRoll(auto = false) {
     const st = this.state;
     const p = st.current;
-    // Cược đang bật thì tự đặt trước khi lắc
-    await this.skills.beforeRoll(p);
+    // Có Cược Chẵn Lẻ thì hỏi cược trước khi lắc
+    await this.skills.beforeRoll(p, !auto);
     if (st.over || p.bankrupt) { await this.endTurn(); return; }
     // Xe Đạp: đi theo viên nhỏ hơn — nắn kết quả trước mọi hộp hỏi sau khi lắc
     const first = this.skills.shape(p, rollDice());

@@ -114,6 +114,28 @@ const r = await page.evaluate(async () => {
   out.autoRaise = raise.ok && st.players[1].money >= 300
     && raise.mortgaged.length > 0 && st.propertiesOf(1).length === before;
 
+  /* Gợi ý xoay tiền và cấn nợ tự động: cầm đất lẻ trước, bến ga / thuỷ điện
+     chỉ khi cầm hết đất lẻ vẫn thiếu. Bến 5 thế chấp 100$ vừa khít khoản 100$,
+     nhưng ba ô đất lẻ 1, 3, 6 cũng đủ nên không được đụng tới bến. */
+  {
+    const { raisePlan } = await import('/src/core/raisePlan.js');
+    const { snapshot, fromSnapshot } = await import('/src/core/serialize.js');
+    const sim = fromSnapshot(snapshot(st));
+    sim.owner.clear(); sim.houses.clear(); sim.mortgaged.clear();
+    for (const id of [1, 3, 5, 6, 12]) sim.owner.set(id, 1);
+    sim.players[1].money = 0;
+    const ids = (plan) => plan.steps.map((x) => x.id).sort((x, y) => x - y).join();
+    const lotsTotal = [1, 3, 6].reduce((n, id) => n + BOARD[id].mortgage, 0);
+    const small = raisePlan(sim, 1, BOARD[5].mortgage);
+    const big = raisePlan(sim, 1, lotsTotal + 1);
+    out.raiseLotsFirst = { small: ids(small), big: ids(big) };
+    out.raiseLotsFirstOk = small.ok && ids(small) === '1,3,6'
+      && big.ok && ids(big).startsWith('1,3,') && big.steps.some((x) => !['property'].includes(BOARD[x.id].type));
+    const sim2 = fromSnapshot(snapshot(sim));
+    const auto = ev.autoRaise(sim2, 1, lotsTotal);
+    out.autoLotsFirst = auto.ok && auto.mortgaged.every((id) => BOARD[id].type === 'property');
+  }
+
   // Mọi thẻ đều lập được kế hoạch, hoặc bị loại đúng lý do
   st.players.forEach((p) => { p.money = 3000; });
   const { EVENTS, EVENT_BY_ID } = await import('/src/data/events.js');
@@ -188,6 +210,8 @@ ok('giới nghiêm chặn xây nhà', r.buildBlocked);
 ok('mất mùa cắt nửa lương', r.salaryHalved);
 ok('hiệu ứng tự hết hạn theo lượt', r.modsExpire);
 ok('cấn nợ tự động thế chấp đủ tiền', r.autoRaise);
+ok('gợi ý thế chấp: đất lẻ trước, bến ga / thuỷ điện sau', r.raiseLotsFirstOk, JSON.stringify(r.raiseLotsFirst));
+ok('cấn nợ tự động: đất lẻ trước bến ga', r.autoLotsFirst);
 ok('mọi thẻ đều lập được kế hoạch', r.badPlan.length === 0, r.badPlan.join(','));
 ok('thẻ nhà đất rút được ngay từ đầu', r.heavyDrawnEarly && r.noEraField,
   r.drawnKinds.join(','));

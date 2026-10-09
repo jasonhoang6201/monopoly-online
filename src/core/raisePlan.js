@@ -10,6 +10,11 @@
  * tập ô có tổng tiền thế chấp vừa chạm khoản thiếu, dư ít nhất, chứ không cầm
  * lần lượt từ ô rẻ nhất — cầm ba ô rẻ trong khi một ô vừa đủ là mất thêm hai
  * ô đang thu tiền thuê.
+ *
+ * Trong đất cầm được lại chia hai tầng: đất lẻ trước, bến ga và thuỷ điện sau.
+ * Bến ga thu tiền thuê theo số bến cùng chủ, một bến đã ăn hơn đất lẻ thường;
+ * cầm một bến còn làm tụt giá thuê của mấy bến còn lại. Nên chỉ khi cầm hết
+ * đất lẻ vẫn thiếu mới tính tới hai loại này.
  */
 
 import { BOARD } from '../data/board.js';
@@ -71,7 +76,15 @@ export function raisePlan(st, seat, need) {
     const free = sim.propertiesOf(seat)
       .filter((id) => sim.canMortgage(seat, id).ok)
       .map((id) => ({ id, v: BOARD[id].mortgage }));
-    const pick = cheapestCover(free, left) ?? free.map((it) => it.id);
+    const lots = free.filter((it) => BOARD[it.id].type === 'property');
+    const rest = free.filter((it) => BOARD[it.id].type !== 'property');
+    const lotsSum = lots.reduce((s, it) => s + it.v, 0);
+    /* Đất lẻ đủ thì chỉ chọn trong đất lẻ; không đủ thì cầm hết đất lẻ, phần
+       còn thiếu mới chọn tổ hợp bến ga / thuỷ điện. */
+    const pick = lotsSum >= left
+      ? cheapestCover(lots, left)
+      : [...lots.map((it) => it.id),
+        ...(cheapestCover(rest, left - lotsSum) ?? rest.map((it) => it.id))];
     for (const id of pick) {
       const res = sim.mortgage(seat, id);
       if (res.ok) steps.push({ act: 'mortgage', id, gain: res.amount });
