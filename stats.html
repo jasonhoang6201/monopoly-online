@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cân bằng kỹ năng · Cờ Tỷ Phú</title>
+  <meta name="description" content="Số liệu cân bằng cây kỹ năng: ô nào hay được học, học ở điểm thứ mấy, mang về bao nhiêu tiền, tỉ lệ thắng." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%237C1E14'/%3E%3Cpath d='M16 5l2.6 7.4H26l-6 4.6 2.3 7.4L16 20l-6.3 4.4L12 17l-6-4.6h7.4z' fill='%23E9CE85'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/fonts/fonts.css" />
+  <link rel="stylesheet" href="/src/stats/stats.css" />
+</head>
+<body>
+  <header class="top">
+    <div>
+      <p class="eyebrow">Cờ Tỷ Phú · Sài Gòn · Gia Định</p>
+      <h1>Cân bằng kỹ năng</h1>
+      <p class="lede">Số liệu ghi từ ván thật: ô nào hay được học và học ở điểm thứ mấy, ô nào bị tẩy, mỗi ô mang về bao nhiêu tiền, người học có thắng nhiều hơn không.</p>
+    </div>
+    <a class="back" href="/">← Về bàn cờ</a>
+  </header>
+
+  <form id="filters" class="filters" autocomplete="off">
+    <label>Từ ngày <input type="date" name="from" /></label>
+    <label>Đến ngày <input type="date" name="to" /></label>
+    <label>Chế độ
+      <select name="mode">
+        <option value="">Tất cả</option>
+        <option value="online">Online</option>
+        <option value="offline">Một máy</option>
+        <option value="local">Nhiều tab một máy</option>
+      </select>
+    </label>
+    <label>Số người
+      <select name="players">
+        <option value="">Tất cả</option>
+        <option>2</option><option>3</option><option>4</option><option>5</option><option>6</option>
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" name="finished" checked /> Chỉ ván đã xong</label>
+    <label>n tối thiểu <input type="number" name="minN" min="0" value="3" /></label>
+    <button type="submit" class="btn">Lọc</button>
+  </form>
+
+  <p id="status" class="status" role="status"></p>
+
+  <main id="report" hidden>
+    <section id="overview" class="card">
+      <h2>Tổng quan</h2>
+      <div class="tiles" id="tiles"></div>
+    </section>
+
+    <section id="branches" class="card">
+      <h2>Nhánh</h2>
+      <p class="hint">Tỉ lệ người-ván học ít nhất một ô của nhánh, chạm tối thượng, tiền nhánh mang về, và tỉ lệ thắng có / không có nhánh. “Nhánh chính” là nhánh được đổ nhiều điểm nhất của mỗi người.</p>
+      <div class="legend" id="branch-legend"></div>
+      <div class="table-wrap"><table id="branch-table"></table></div>
+    </section>
+
+    <section id="skills" class="card">
+      <h2>Từng ô kỹ năng</h2>
+      <p class="hint">Bấm tiêu đề cột để sắp xếp. Dòng có n nhỏ hơn “n tối thiểu” được làm mờ — số của chúng chưa đáng tin. <b>Δ</b> là tiền có dấu ô mang về cho người giữ (âm là lỗ); ô mua đất để 0. “Điểm thứ” là điểm kỹ năng thứ mấy được tiêu để học ô (dải nhỏ bên cạnh: phân phối).</p>
+      <div class="table-wrap"><table id="skill-table"></table></div>
+    </section>
+
+    <section id="respec" class="card">
+      <h2>Tẩy điểm</h2>
+      <div class="tiles" id="respec-tiles"></div>
+      <div class="two">
+        <div><h3>Ô hay bị tẩy</h3><table id="wiped-table"></table></div>
+        <div><h3>Tẩy xong học gì (3 ô kế tiếp)</h3><table id="relearn-table"></table></div>
+      </div>
+    </section>
+
+    <section id="points" class="card">
+      <h2>Điểm kỹ năng</h2>
+      <div class="tiles" id="points-tiles"></div>
+      <div class="two">
+        <div><h3>Điểm thừa cuối ván</h3><table id="left-table"></table></div>
+        <div><h3>Điểm nhận được cả ván</h3><table id="earned-table"></table></div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/src/stats/stats.js"></script>
+</body>
+</html>
