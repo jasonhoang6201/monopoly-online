@@ -146,6 +146,18 @@ const ev = (seq, extra = {}) => ({ seq, t: seq * 10, kind: 'use', game_id: 'G1',
   check('đang tắt: push/flush/gameStart không làm gì', a.buffer.length === 0 && a.queue.length === 0 && a.fetch.calls.length === 0);
 }
 
+{
+  // Lỗi từng gặp: sendQueue lúc hàng đợi rỗng để lại promise đã xong trong `sending`, các lần sau không gửi nữa
+  const f = fakeFetch();
+  const a = make({ fetch: f });
+  await a.sendQueue();
+  await a.sendQueue();
+  a.push(ev(1)); await a.flush();
+  check('sendQueue rỗng rồi gọi lại: vẫn gửi', f.calls.length === 1 && a.queue.length === 0, `${f.calls.length} ${a.queue.length}`);
+  a.push(ev(2)); await a.flush();
+  check('ván sau vẫn gửi', f.calls.length === 2 && a.queue.length === 0);
+}
+
 /* ------------------------------------------------------------- tổng kết ván */
 {
   const S = await vite.ssrLoadModule('/src/core/state.js');
@@ -183,6 +195,7 @@ const ev = (seq, extra = {}) => ({ seq, t: seq * 10, kind: 'use', game_id: 'G1',
     && JSON.stringify(pa.skills) === JSON.stringify([{ id: 'cn1', lv: 1, off: false }, { id: 'cn2a', lv: 1, off: false }])
     && pa.skill_use && typeof pa.skill_use === 'object', JSON.stringify(pa));
   check('gameEnd gọi flush (đã cố gửi)', f.calls.length >= 1);
+  check('dòng end mang cùng mode với dòng start (online), không hỏi lại controller', ge.rows[0].mode === 'online', ge.rows[0].mode);
 }
 
 await vite.close();

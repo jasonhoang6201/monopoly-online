@@ -727,10 +727,6 @@ export class SkillPlay {
    */
   reconcileLearn() {
     if (!this.learnPending.length) return;
-    /* Máy mình vừa thành máy cầm lái: bản sao đã là bản gốc, không học lại —
-       học lại lúc này là một lần học thật, số liệu cân bằng sẽ đếm hai lần
-       cùng một ô (máy cầm lái cũ đã ghi trước khi rời). */
-    if (this.g.isDriver()) { this.learnPending = []; refreshSkillTree(); return; }
     const p = this.st.players[this.g.mySeat];
     const now = Date.now();
     this.learnPending = this.learnPending.filter((x) => {
@@ -744,6 +740,11 @@ export class SkillPlay {
       }
       return true;
     });
+    /* Máy mình vừa thành máy cầm lái: bản sao đã là bản gốc, hết gì để chờ.
+       Lần học lại ngay trên (nếu có) giờ là lần học thật và được ghi vào số
+       liệu — có thể trùng với dòng máy cầm lái cũ đã ghi trước khi rời; view
+       `v_learn` gộp theo (ván, ghế, ô, level, lần học thứ mấy) nên không đếm hai. */
+    if (this.g.isDriver()) this.learnPending = [];
     refreshSkillTree();
   }
 

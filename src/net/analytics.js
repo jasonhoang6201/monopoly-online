@@ -57,6 +57,8 @@ export class Analytics {
     /** Batch đang chờ gửi: `{id, table, rows}` — bản trong bộ nhớ của localStorage. */
     this.queue = this.enabled ? loadQueue(this.storage) : [];
     this.sending = null;
+    /** Chế độ của ván đang chạy, ghi ở `gameStart`; máy vào phòng giữa chừng thì hỏi controller. */
+    this.mode = null;
     if (this.enabled) this.hookPage();
   }
 
@@ -97,6 +99,9 @@ export class Analytics {
   /** Ván vừa dựng: một dòng `games` giai đoạn 'start' — ván bỏ dở vẫn để lại dấu. */
   gameStart(st, mode) {
     if (!this.enabled) return;
+    /* Ghi nhớ cho dòng 'end': máy hạ màn có thể không phải máy dựng ván, nhưng
+       chế độ (online / một máy) là của cả ván. */
+    this.mode = mode;
     this.enqueue('games', [gameRow(st, 'start', mode, this.clientId)]);
     this.sendQueue();
   }
@@ -108,7 +113,7 @@ export class Analytics {
    */
   gameEnd(st, win) {
     if (!this.enabled) return;
-    this.enqueue('games', [gameRow(st, 'end', this.modeOf(st), this.clientId, win)]);
+    this.enqueue('games', [gameRow(st, 'end', this.mode ?? this.modeOf(), this.clientId, win)]);
     const rank = finalRanking(st, win.player);
     this.enqueue('game_players', st.players.map((p) => playerRow(st, p, rank.indexOf(p) + 1, p === win.player)));
     return this.flush();
@@ -157,20 +162,23 @@ export class Analytics {
    *   và báo console; lỗi mạng / 5xx → giữ lại, dừng, lần sau gửi tiếp.
    */
   sendQueue(o = {}) {
-    if (!this.enabled) return Promise.resolve();
+    if (!this.enabled || !this.queue.length) return Promise.resolve();
     if (this.sending) return this.sending;
-    this.sending = (async () => {
-      try {
-        while (this.queue.length) {
-          const b = this.queue[0];
-          const ok = await this.post(b, o);
-          if (!ok) break;
-          this.queue.shift();
-          saveQueue(this.storage, this.queue);
-        }
-      } finally { this.sending = null; }
+    /* Gán qua biến cục bộ rồi mới xoá: hàm async chạy đồng bộ tới `await`
+       đầu tiên, nên `finally` có thể chạy **trước** phép gán vào `this.sending`
+       và để lại một promise đã xong ở đó — từ đấy không gửi gì nữa. */
+    const run = (async () => {
+      while (this.queue.length) {
+        const b = this.queue[0];
+        const ok = await this.post(b, o);
+        if (!ok) break;
+        this.queue.shift();
+        saveQueue(this.storage, this.queue);
+      }
     })();
-    return this.sending;
+    this.sending = run;
+    run.finally(() => { if (this.sending === run) this.sending = null; });
+    return run;
   }
 
   /** @returns {Promise<boolean>} true là batch đã xong (vào DB hoặc bị bỏ), false là phải thử lại */
