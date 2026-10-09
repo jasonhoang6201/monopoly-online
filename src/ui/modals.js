@@ -8,7 +8,7 @@ import { mountSkillTree } from './skillTree.js';
 import {
   BOARD, GROUPS, money, tileLabel, tileShortLabel, JAIL_FINE, START_MONEY,
 } from '../data/board.js';
-import { TOKENS, MAX_PLAYERS } from '../core/state.js';
+import { TOKENS, MAX_PLAYERS, finalRanking } from '../core/state.js';
 import { DECK_META } from '../data/cards.js';
 import { EVENT_LEVELS, DEFAULT_EVENT_LEVEL } from '../data/events.js';
 import { themePickHtml } from './lobby.js';
@@ -1315,23 +1315,6 @@ export function bankruptModal(state, playerId, forced, owed, raisable) {
   });
 }
 
-/**
- * Thứ hạng cuối ván: người thắng đứng đầu, kế đến những người còn trụ (so gia
- * sản), cuối cùng là người phá sản — ai vỡ nợ sau đứng trên ai vỡ nợ trước.
- *
- * Người phá sản đã trả hết tài sản về ngân hàng, gia sản ai cũng là 0$, nên
- * không đem tiền ra so được; thứ tự vỡ nợ (`outRank`) là thứ duy nhất phân
- * định họ. Ảnh chụp cũ chưa có `outRank` (0) thì xếp chót.
- */
-export function finalRanking(state, winner) {
-  const alive = state.players
-    .filter((p) => !p.bankrupt && p.id !== winner.id)
-    .sort((a, b) => state.netWorth(b.id) - state.netWorth(a.id));
-  const out = state.players
-    .filter((p) => p.bankrupt && p.id !== winner.id)
-    .sort((a, b) => (b.outRank || 0) - (a.outRank || 0));
-  return [winner, ...alive, ...out];
-}
 
 export function winnerModal(state, winner) {
   const rank = finalRanking(state, winner);

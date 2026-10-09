@@ -70,6 +70,96 @@ const json = (v) => JSON.stringify(v);
   check('singleton + track() tiện dụng', telemetry instanceof Telemetry && track('x', {}) === null);
 }
 
+/* ---------------------------------------------------------- móc trong luật */
+{
+  const { telemetry } = T;
+  const K = await vite.ssrLoadModule('/src/core/skills.js');
+  const S = await vite.ssrLoadModule('/src/core/state.js');
+  const Z = await vite.ssrLoadModule('/src/core/serialize.js');
+  const { GROUP_TILES } = await vite.ssrLoadModule('/src/data/board.js');
+
+  const st = new S.GameState(['A', 'B']);
+  const [p, q] = st.players;
+  check('GameState có gameId (uuid)', typeof st.gameId === 'string' && st.gameId.length === 36);
+  const snap = Z.snapshot(st);
+  check('snapshot mang gameId, fromSnapshot giữ nguyên', snap.gameId === st.gameId && Z.fromSnapshot(snap).gameId === st.gameId);
+
+  const evs = [];
+  telemetry.start({ startedAt: st.startedAt, gate: () => true, ctx: () => ({ game_id: st.gameId }), onPush: (e) => evs.push(e) });
+  const last = () => evs[evs.length - 1];
+  const ofKind = (k) => evs.filter((e) => e.kind === k);
+
+  K.grantLapPoint(p, 3);
+  check('grantLapPoint mặc định (qua ô Bắt Đầu) không phát sự kiện riêng', evs.length === 0);
+  K.learnSkill(p, 'cn1', st);
+  check('learn #1: nth=1, earned=3, point_no=1', last().kind === 'learn' && last().id === 'cn1' && last().nth === 1
+    && last().earned === 3 && last().point_no === 1 && last().level === 1 && last().cost === 1 && last().points_left === 2
+    && last().off_turn === false && last().game_id === st.gameId, json(last()));
+  K.learnSkill(p, 'cn2a', st, { offTurn: true });
+  check('learn #2 ngoài lượt: nth=2, point_no=2, off_turn', last().nth === 2 && last().point_no === 2 && last().off_turn === true);
+  K.learnSkill(p, 'cn3', st);
+  K.grantLapPoint(p, 2);
+  const r = K.learnSkill(p, 'cnU', st);
+  check('learn tối thượng giá 2: nth=4, earned=5, point_no=5', r.ok && last().cost === 2 && last().nth === 4
+    && last().earned === 5 && last().point_no === 5, json(last()));
+  check('learnCount lưu trên Player và đi theo snapshot', p.learnCount === 4 && Z.snapshot(st).players[0].learnCount === 4);
+
+  p.money = 1000;
+  const rs = K.respec(p);
+  check('respec: wiped 4 ô, refund 5, fee 250', rs.ok && last().kind === 'respec' && last().wiped.length === 4
+    && last().wiped.some((w) => w.id === 'cnU' && w.lv === 1) && last().refund === 5 && last().fee === 250
+    && last().points_after === 5, json(last()));
+  K.learnSkill(p, 'dh1', st);
+  check('học lại sau tẩy: nth tiếp tục (5), earned giữ (5), point_no đếm lại (1)',
+    last().nth === 5 && last().earned === 5 && last().point_no === 1, json(last()));
+
+  K.onLap(p);
+  check('onLap → lap {laps:1, points:1, points_now}', last().kind === 'lap' && last().laps === 1 && last().points === 1
+    && last().points_now === p.skillPoints && last().money === p.money, json(last()));
+  K.grantLapPoint(p, 1, 'card');
+  check('điểm từ thẻ → points {n:1, src:card}', last().kind === 'points' && last().n === 1 && last().src === 'card');
+
+  K.credit(p, 'dh1', 20);
+  check('credit dương → use delta 20, gain 20, counted', last().kind === 'use' && last().id === 'dh1' && last().delta === 20
+    && last().gain === 20 && last().counted === true && p.skillUse.dh1.n === 1 && p.skillUse.dh1.gain === 20);
+  K.credit(p, 'dh1', 0, { delta: -50 });
+  check('credit âm → delta -50, gain 0, n tăng', last().delta === -50 && last().gain === 0 && p.skillUse.dh1.n === 2 && p.skillUse.dh1.gain === 20);
+  K.tally(p, 'dh1', -7);
+  check('tally → counted=false, n không đổi', last().delta === -7 && last().counted === false && p.skillUse.dh1.n === 2);
+  const before = evs.length;
+  K.credit(p, 'cn1', 99);
+  check('credit skill chưa học: không ghi', evs.length === before);
+
+  K.grantLapPoint(p, 2);
+  K.learnSkill(p, 'dd1', st);
+  K.learnSkill(p, 'dd2a', st);
+  check('dd2a học xong nằm tắt', K.isOff(p, 'dd2a'));
+  K.setSkillOn(p, 'dd2a', true);
+  check('setSkillOn → toggle on, auto=false', last().kind === 'toggle' && last().id === 'dd2a' && last().on === true && last().auto === false);
+  p.cooldowns = { dd2a: 1 };
+  K.offSpent(p);
+  check('offSpent → toggle off, auto=true', last().kind === 'toggle' && last().id === 'dd2a' && last().on === false && last().auto === true);
+
+  // Xây nhà có Mái Ấm (ac1): credit trong state.js cũng phải phát sự kiện
+  const brown = GROUP_TILES[Object.keys(GROUP_TILES)[0]];
+  for (const id of brown) st.owner.set(id, q.id);
+  q.money = 2000;
+  K.grantLapPoint(q, 2);
+  K.learnSkill(q, 'acX2', st);
+  K.learnSkill(q, 'ac1', st);
+  const b = st.build(q.id, brown[0]);
+  check('st.build có Mái Ấm → use ac1 với delta = tiền được bớt', b.ok && last().kind === 'use' && last().id === 'ac1'
+    && last().seat === q.id && last().delta > 0, json(last()));
+
+  st.bankrupt(q.id);
+  check('bankrupt → sự kiện kèm cây kỹ năng lúc vỡ nợ', last().kind === 'bankrupt' && last().seat === q.id
+    && last().round === st.round && last().skills.length === 2 && last().skills[1].id === 'ac1' && last().skills[1].lv === 1, json(last()));
+  st.bankrupt(q.id);
+  check('bankrupt lần hai không ghi thêm', ofKind('bankrupt').length === 1);
+
+  telemetry.stop();
+}
+
 await vite.close();
 console.log(`\n${total - fails}/${total} đạt`);
 process.exit(fails ? 1 : 0);

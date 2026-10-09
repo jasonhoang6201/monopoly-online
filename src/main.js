@@ -11,6 +11,7 @@ import { loadLacBird } from './render/motifs.js';
 import { loadArtwork } from './render/artwork.js';
 import { initSidePanel } from './ui/sidepanel.js';
 import { DPR } from './dpr.js';
+import { telemetry } from './core/telemetry.js';
 
 /** Chờ font sẵn sàng — canvas đo chữ sai nếu font chưa nạp xong. */
 async function loadFonts() {
@@ -102,7 +103,7 @@ async function boot() {
     sceneRef = scene;
     fitCanvas();
     const controller = new Game(scene);
-    window.__monopoly = { game, scene, controller, DPR };
+    window.__monopoly = { game, scene, controller, DPR, telemetry };
     window.__audioProbe = audio;
     wireChrome();
     // Phiên chơi tự hỏi chơi một máy hay mở phòng online, rồi mới trao ván

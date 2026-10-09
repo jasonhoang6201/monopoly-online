@@ -12,7 +12,7 @@ import {
   skillById, has, param, roll, rolled, ready, usesLeft, spend, onLap, levyRate, levyEach, levelOf,
   freeHouseTarget, credit, rentGains, lateFee, lottoPrize, tollStops, forecloseOffers,
   tourPassed, leftoverOffers, isOff, setSkillOn, learnSkill, switchable, canSeize,
-  teleportTargets,
+  teleportTargets, tally,
 } from '../core/skills.js';
 import { cardType, isKeepable, moveDest, repairBill } from '../core/cards.js';
 import { cardName, cardEffect, CARD_KINDS, DECK_META } from '../data/cards.js';
@@ -705,7 +705,7 @@ export class SkillPlay {
     if (!g.isDriver()) return;
     const q = this.st.players[seat];
     if (!q || q.bankrupt || levelOf(q, id) !== level - 1) return;
-    if (!learnSkill(q, id, this.st).ok) return;
+    if (!learnSkill(q, id, this.st, { offTurn: true }).ok) return;
     g.hud.refresh();
     this.announceLearn(q, id, level);
     g.syncSoon();
@@ -727,6 +727,10 @@ export class SkillPlay {
    */
   reconcileLearn() {
     if (!this.learnPending.length) return;
+    /* Máy mình vừa thành máy cầm lái: bản sao đã là bản gốc, không học lại —
+       học lại lúc này là một lần học thật, số liệu cân bằng sẽ đếm hai lần
+       cùng một ô (máy cầm lái cũ đã ghi trước khi rời). */
+    if (this.g.isDriver()) { this.learnPending = []; refreshSkillTree(); return; }
     const p = this.st.players[this.g.mySeat];
     const now = Date.now();
     this.learnPending = this.learnPending.filter((x) => {
@@ -740,8 +744,6 @@ export class SkillPlay {
       }
       return true;
     });
-    // Máy mình vừa thành máy cầm lái: bản sao đã là bản gốc, hết gì để chờ
-    if (this.g.isDriver()) this.learnPending = [];
     refreshSkillTree();
   }
 
@@ -906,7 +908,7 @@ export class SkillPlay {
     if (!has(p, 'ddS2')) return { pay, note: '' };
     const win = Math.random() < param(p, 'ddS2').win;
     const out = win ? pay * 2 : Math.round(pay / 2);
-    credit(p, 'ddS2', Math.max(0, out - pay));
+    credit(p, 'ddS2', Math.max(0, out - pay), { delta: out - pay });
     return { pay: out, note: win ? ' · <b>Cò Quay trúng, lương ×2</b>' : ' · <b>Cò Quay trượt, lương còn một nửa</b>' };
   }
 
@@ -1423,6 +1425,8 @@ export class SkillPlay {
         credit(p, 'dd1', even);
         this.slip.push({ id: 'dd1', text: `tổng ${d.sum} chẵn`, n: even });
       } else if (odd > 0) {
+        // Khoản mất chỉ ghi cho số liệu cân bằng; `skillUse` không đếm — điều kiện lên level không thay đổi
+        tally(p, 'dd1', -odd);
         this.slip.push({ id: 'dd1', text: `tổng ${d.sum} lẻ`, n: -odd });
       }
     }
@@ -1474,7 +1478,7 @@ export class SkillPlay {
         this.slip.push({ id: txu ? 'ddX1' : 'dd2a', text: `đoán đúng cửa ${PARITY_NAME[bet.pick]}`, n });
       } else {
         // Tiền cược thua vào Quỹ Công; trả trong bản kê của lần lắc này (`flushSlip`)
-        credit(p, 'dd2a');
+        credit(p, 'dd2a', 0, { delta: -bet.amount });
         this.slip.push({ id: 'dd2a', text: `đoán sai cửa ${PARITY_NAME[bet.pick]}, tiền cược vào Quỹ Công`, n: -bet.amount, pot: bet.amount });
         if (has(p, 'ddX2')) {
           const back = Math.round(bet.amount * roll(param(p, 'ddX2').back));
@@ -1493,13 +1497,13 @@ export class SkillPlay {
         await this.bc(title('ddU'), `Ra ${d.sum}: ${named(p)} thắng! Mỗi người trả ${Math.round(win * 100)}% tiền mặt.`, { kind: 'trade', ms: 2800 });
         for (const q of others) {
           const n = Math.floor(q.money * win);
-          if (n > 0 && !q.bankrupt) await this.g.payPlayer(q.id, p.id, n);
+          if (n > 0 && !q.bankrupt && await this.g.payPlayer(q.id, p.id, n)) tally(p, 'ddU', n);
         }
       } else {
         const each = Math.floor(p.money * lose);
         await this.bc(title('ddU'), `Ra ${d.sum}: ${named(p)} thua, trả mỗi người <span class="down">${money(each)}</span>.`, { kind: 'bad', ms: 2800 });
         for (const q of others) {
-          if (each > 0 && !p.bankrupt && !q.bankrupt) await this.g.payPlayer(p.id, q.id, each);
+          if (each > 0 && !p.bankrupt && !q.bankrupt && await this.g.payPlayer(p.id, q.id, each)) tally(p, 'ddU', -each);
         }
       }
     }

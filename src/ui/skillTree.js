@@ -508,7 +508,8 @@ export function mountSkillTree(player, o = {}) {
     if (readOnly) return;
     const id = openId;
     const before = player.skillPoints;
-    const res = learnSkill(player, id, board());
+    // Ngoài lượt (`manage` tắt) là học trên bản sao rồi nhắn máy cầm lái — ghi chú vào số liệu
+    const res = learnSkill(player, id, board(), { offTurn: !manage });
     if (!res.ok) return;
     closeDetail();
     refresh();

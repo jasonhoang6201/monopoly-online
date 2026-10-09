@@ -11,7 +11,8 @@ import {
 import { CHANCE, CHEST, Deck } from '../data/cards.js';
 import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
 import { DEFAULT_THEME, themeKey } from '../data/themes.js';
-import { has, param, roll, ownerRentMult, ownerRentFlat, houseImmune, credit, miniRoom } from './skills.js';
+import { has, param, roll, ownerRentMult, ownerRentFlat, houseImmune, credit, miniRoom, levelOf } from './skills.js';
+import { uuid, track } from './telemetry.js';
 
 /**
  * Bảng màu quân — quân cờ chỉ phân biệt bằng MÀU, không mang biểu tượng riêng.
@@ -111,6 +112,8 @@ export class Player {
      * từ lúc học — điều kiện lên level (xem `credit` trong core/skills.js).
      */
     this.skillUse = {};
+    /** Số lần đã học / lên level trong ván — không về 0 khi tẩy (số liệu cân bằng). */
+    this.learnCount = 0;
     /** Tổng xí ngầu đã chọn cho Xổ Số Kiến Thiết; `null` là chưa chọn. */
     this.lotto = null;
     /** Cửa và tiền Cược Chẵn Lẻ tự đặt mỗi lượt; `null` là chưa chọn. @type {?{pick:string, amount:number}} */
@@ -251,6 +254,11 @@ export class GameState {
      */
     this.startedAt = Date.now();
     this.endedAt = null;
+    /**
+     * Mã ván cho số liệu cân bằng. Sinh ở máy dựng ván rồi đi theo ảnh chụp,
+     * để mọi máy từng cầm lái trong ván ghi về cùng một mã.
+     */
+    this.gameId = uuid();
   }
 
   // ------------------------------------------------- hiệu ứng đang hiệu lực
@@ -852,6 +860,10 @@ export class GameState {
       p.outRank = this.players.filter((x) => x.bankrupt).length + 1;
       p.outPos = p.pos;
       p.outRound = this.round;
+      track('bankrupt', {
+        seat: playerId, round: this.round, turn_no: this.turnNo,
+        skills: p.skills.map((id) => ({ id, lv: levelOf(p, id) })),
+      });
     }
     p.bankrupt = true;
     p.inJail = false;
@@ -940,3 +952,22 @@ export function rollDice() {
   const b = 1 + Math.floor(Math.random() * 6);
   return { a, b, sum: a + b, isDouble: a === b };
 }
+
+/**
+ * Thứ hạng cuối ván: người thắng đứng đầu, kế đến những người còn trụ (so gia
+ * sản), cuối cùng là người phá sản — ai vỡ nợ sau đứng trên ai vỡ nợ trước.
+ *
+ * Người phá sản đã trả hết tài sản về ngân hàng, gia sản ai cũng là 0$, nên
+ * không đem tiền ra so được; thứ tự vỡ nợ (`outRank`) là thứ duy nhất phân
+ * định họ. Ảnh chụp cũ chưa có `outRank` (0) thì xếp chót.
+ */
+export function finalRanking(state, winner) {
+  const alive = state.players
+    .filter((p) => !p.bankrupt && p.id !== winner.id)
+    .sort((a, b) => state.netWorth(b.id) - state.netWorth(a.id));
+  const out = state.players
+    .filter((p) => p.bankrupt && p.id !== winner.id)
+    .sort((a, b) => (b.outRank || 0) - (a.outRank || 0));
+  return [winner, ...alive, ...out];
+}
+
