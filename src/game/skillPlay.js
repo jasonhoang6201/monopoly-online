@@ -11,9 +11,10 @@ import { BOARD, money, tileLabel } from '../data/board.js';
 import {
   skillById, has, param, roll, rolled, ready, usesLeft, spend, onLap, levyRate, levyEach, levelOf,
   freeHouseTarget, credit, rentGains, lateFee, lottoPrize, tollStops, forecloseOffers,
-  tourPassed, leftoverOffers, isOff, setSkillOn, learnSkill, switchable,
+  tourPassed, leftoverOffers, isOff, setSkillOn, learnSkill, switchable, canSeize,
+  teleportTargets,
 } from '../core/skills.js';
-import { cardType, isKeepable, moveDest, repairBill, groupHasHouses } from '../core/cards.js';
+import { cardType, isKeepable, moveDest, repairBill } from '../core/cards.js';
 import { cardName, cardEffect, CARD_KINDS, DECK_META } from '../data/cards.js';
 import { RANKS, rankOf, shortLabel } from '../ui/caseOpen.js';
 import { SKILLS, BRANCHES } from '../data/skills.js';
@@ -178,8 +179,8 @@ export class SkillPlay {
     const liens = forecloseOffers(st, p).length;
     cell('dcV', usesLeft(p, 'dcV') <= 0 ? { ok: false, why: wait('dcV') }
       : jail ? { ok: false, why: 'Không dùng khi đang ở tù' }
-        : !liens ? { ok: false, why: 'Chưa có đất thế chấp nào của người khác mà bạn đủ tiền mua' }
-          : { once: true, on: (v) => `Siết nợ ${tileLabel(v)} khi Chốt`, off: `${liens} ô đang thế chấp`,
+        : !liens ? { ok: false, why: 'Chưa ai đang túng tiền, hoặc bạn chưa đủ tiền siết ô nào của họ' }
+          : { once: true, on: (v) => `Siết nợ ${tileLabel(v)} khi Chốt`, off: `${liens} ô của con nợ siết được`,
             choose: () => this.chooseTile(p, 'dcV') });
     cell('cnS2', this.canSit(p)
       ? { act: () => this.g.sitInJail(), on: () => `Bấm để ngồi yên, còn ${this.sitsLeft(p)} lượt` }
@@ -480,11 +481,11 @@ export class SkillPlay {
       dcV: {
         ids: forecloseOffers(st, p).map((x) => x.id),
         title: 'Siết nợ ô nào?',
-        sub: `Trả ngân hàng số tiền thế chấp và trả chủ cũ thêm ${pctText(param(p, 'dcV').premium)} số đó. Chủ cũ không được từ chối.`,
+        sub: `Ô sáng là đất của người đang có ô thế chấp hoặc tiền mặt dưới ${money(param(p, 'dcV').poor)}. Ô đang thế chấp: trả ngân hàng ${pctText(param(p, 'dcV').bank)} số thế chấp${param(p, 'dcV').premium ? `, trả chủ cũ thêm ${pctText(param(p, 'dcV').premium)} số đó` : ''}. Ô chưa thế chấp: trả chủ cũ ${pctText(param(p, 'dcV').debt)} giá gốc. Chủ cũ không được từ chối.`,
         confirm: 'Chọn ô này',
       },
       dhU: {
-        ids: BOARD.map((t) => t.id).filter((x) => x !== 30 && x !== p.pos),
+        ids: teleportTargets(st, p),
         title: 'Đi tới ô nào?',
         sub: 'Không lắc, đi thẳng tới ô bạn chọn. Đi ngang ô Bắt Đầu vẫn nhận lương.',
         confirm: 'Chọn ô này',
@@ -532,14 +533,14 @@ export class SkillPlay {
     const st = this.st;
     const o = forecloseOffers(st, p).find((x) => x.id === id);
     const owner = o && st.ownerOf(id);
-    if (!o || !owner || !st.isMortgaged(id)) return;
+    if (!o || !owner) return;
     spend(p, 'dcV');
     credit(p, 'dcV');
     await this.bc(title('dcV'),
-      `${named(p)} siết nợ <b>${tileLabel(id)}</b> của ${named(owner)}: trả ngân hàng
-       <span class="down">${money(o.bank)}</span>, trả ${named(owner)} <span class="down">${money(o.owner)}</span>.`,
+      `${named(p)} siết nợ <b>${tileLabel(id)}</b> của ${named(owner)}: ${o.bank > 0
+        ? `trả ngân hàng <span class="down">${money(o.bank)}</span>, ` : ''}trả ${named(owner)} <span class="down">${money(o.owner)}</span>.`,
       { kind: 'trade', ms: 3000 });
-    if (!(await this.g.payBank(p.id, o.bank))) return;
+    if (o.bank > 0 && !(await this.g.payBank(p.id, o.bank))) return;
     if (o.owner > 0 && !(await this.g.payPlayer(p.id, owner.id, o.owner))) return;
     // Chủ cũ có thể vừa phá sản trong lúc chờ — ô đã về ngân hàng thì thôi
     if (st.owner.get(id) === owner.id) {
@@ -555,12 +556,14 @@ export class SkillPlay {
 
   /** Chuyến Tàu Xuyên Việt tới ô đã chọn, thay cho lượt lắc. */
   async doTeleport(p, dest) {
-    spend(p, 'dhU');
     credit(p, 'dhU');
     await this.bc(title('dhU'), `${named(p)} đi thẳng tới <b>${tileLabel(dest)}</b>.`, { ms: 2200 });
     // Chuyến tàu thay cho lượt lắc — chốt trước khi đi, xem `GameState.rolled`
     this.st.rolled = true;
-    await this.g.advance(p, (dest - p.pos + 40) % 40, null);
+    /* Bắt chờ **sau** khi đi: chuyến tàu về ô Bắt Đầu là một lần đi ngang ô
+       ấy, bắt chờ trước thì lần qua này trừ luôn thời gian chờ — level 3 (chờ
+       1 lần) lượt nào cũng bay về lãnh lương và điểm. */
+    try { await this.g.advance(p, (dest - p.pos + 40) % 40, null); } finally { spend(p, 'dhU'); }
     if (this.st.over || p.bankrupt || p.inJail) { await this.g.endTurn(); return; }
     this.g.setTurnActions(true);
   }
@@ -1127,13 +1130,17 @@ export class SkillPlay {
     }
   }
 
-  /** Cò Đất: mọi giao dịch có đất đổi chủ, ai có kỹ năng này nhận tiền cò. */
-  async tradeFees(offer) {
+  /**
+   * Cò Đất: giao dịch có đất đổi chủ **giữa hai người khác**, ai có kỹ năng
+   * này nhận tiền cò. Người đứng ra giao dịch không được: ngân hàng trả cò cho
+   * cả hai bên thì hai người bán qua bán lại một miếng đất là in ra tiền.
+   */
+  async tradeFees(offer, A, B) {
     const ids = [...offer.give, ...offer.get];
     if (!ids.length) return;
     const worth = ids.reduce((n, id) => n + BOARD[id].price, 0);
     for (const q of this.st.alive()) {
-      if (!has(q, 'dc2a')) continue;
+      if (!has(q, 'dc2a') || q.id === A.id || q.id === B.id) continue;
       const { rate, cap } = rolled(q, 'dc2a');
       const fee = Math.min(cap, Math.round(worth * rate));
       await this.bc(title('dc2a'), `${named(q)} nhận tiền cò <span class="up">${money(fee)}</span>.`, { ms: 2000 });
@@ -1235,8 +1242,7 @@ export class SkillPlay {
     const st = this.st;
     const t = BOARD[tileId];
     const owner = st.ownerOf(tileId);
-    if (!owner || owner.id === p.id || !ready(p, 'dc3')) return false;
-    if (groupHasHouses(st, tileId)) return false;
+    if (!canSeize(st, p, tileId)) return false;
     // Level 1 rút giá trước khi hỏi: số hiện trên hộp là số sẽ trả
     const premium = roll(param(p, 'dc3').premium);
     const price = Math.round(t.price * premium);
@@ -1423,8 +1429,9 @@ export class SkillPlay {
   }
 
   /**
-   * Chốt cược và Tất Tay theo kết quả lắc cuối cùng (sau Xí Ngầu Gian). Cược
-   * chỉ ghi vào bản kê; `rollPerks` chạy ngay sau đó báo và trả cả bản kê.
+   * Chốt cược và Tất Tay theo cú lắc đầu tiên, trước Xí Ngầu Gian (xem
+   * `Game.takeRoll`). Cược chỉ ghi vào bản kê; `rollPerks` chạy sau hộp hỏi
+   * của Xí Ngầu Gian / Quay Đầu, báo và trả cả bản kê.
    */
   async settleBets(p, d) {
     const st = this.st;

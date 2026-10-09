@@ -87,13 +87,13 @@ check(await run(`const p = s.current; return s.salary(false, p);`) === 200, 'lư
 // Level 1 rút ngẫu nhiên trong khoảng, bước 5$: rút 40 lần, số nào cũng phải nằm trong khoảng
 const l1 = await run(`const p = s.current; p.skills = ['cn1','cn2a'];
   return Array.from({ length: 40 }, () => s.salary(false, p));`);
-check(l1.every((n) => n >= 220 && n <= 280 && n % 5 === 0) && new Set(l1).size > 1,
-  `Tăng Ca level 1: lương 220–280$, bước 5$, không phải một số cố định (${[...new Set(l1)].sort().join(',')})`);
-check(await run(`const p = s.current; p.skills = ['cn1','cn2a']; p.skillLv = { cn2a: 2 }; return s.salary(false, p);`) === 260, 'Tăng Ca level 2: $260');
-check(await run(`const p = s.current; p.skills = ['cn1','cn2a','cn3']; p.skillLv = { cn2a: 2, cn3: 2 }; p.laps = 8; return s.salary(false, p);`) === 420,
-  'Tăng Ca + Thâm Niên level 2, lần thứ 8: 200 + 60 + 160 = $420');
-check(await run(`const p = s.current; p.skills = ['cn1','cn2a','cn3']; p.skillLv = { cn3: 3 }; p.laps = 20; p.skillLv.cn2a = 3; return s.salary(false, p);`) === 590,
-  'Thâm Niên level 3 chạm trần +300$: 200 + 90 + 300 = $590');
+check(l1.every((n) => n >= 220 && n <= 250 && n % 5 === 0) && new Set(l1).size > 1,
+  `Tăng Ca level 1: lương 220–250$, bước 5$, không phải một số cố định (${[...new Set(l1)].sort().join(',')})`);
+check(await run(`const p = s.current; p.skills = ['cn1','cn2a']; p.skillLv = { cn2a: 2 }; return s.salary(false, p);`) === 240, 'Tăng Ca level 2: $240');
+check(await run(`const p = s.current; p.skills = ['cn1','cn2a','cn3']; p.skillLv = { cn2a: 2, cn3: 2 }; p.laps = 8; return s.salary(false, p);`) === 360,
+  'Tăng Ca + Thâm Niên level 2, lần thứ 8: 200 + 40 + 120 (trần) = $360');
+check(await run(`const p = s.current; p.skills = ['cn1','cn2a','cn3']; p.skillLv = { cn3: 3 }; p.laps = 20; p.skillLv.cn2a = 3; return s.salary(false, p);`) === 410,
+  'Thâm Niên level 3 chạm trần +150$: 200 + 60 + 150 = $410');
 check(await run(`const p = s.current; p.skills = ['dh1','dh2b']; return s.salary(true, p);`) === 400,
   'Về Nhà: dừng đúng ô Bắt Đầu ×2 = $400');
 check(await run(`const p = s.current; p.skills = ['dh1','dh2b']; p.skillLv = { dh2b: 3 }; return s.salary(true, p);`) === 500,
@@ -178,11 +178,11 @@ const rent = await run(`
   return { base, fever, payer, payer3, fever3, colors };
 `);
 check(rent.base === 50, `vé 2 bến ga gốc $50 (được ${rent.base})`);
-check(rent.fever === 125, `Cơn Sốt Đất ×2.5 → $125 (được ${rent.fever})`);
-check(rent.payer === 75, `Vé Tháng level 1 trả 60% của $125 → $75 (được ${rent.payer})`);
-check(rent.payer3 === 25, `Vé Tháng level 3 trả 20% của $125 → $25 (được ${rent.payer3})`);
-check(rent.fever3 === 150, `Cơn Sốt Đất level 3 ×3 → $150 (được ${rent.fever3})`);
-check(rent.colors === 54, `Đất Nhiều Màu level 1, 2 màu +8% → $54 (được ${rent.colors})`);
+check(rent.fever === 150, `Cơn Sốt Đất ×3 → $150 (được ${rent.fever})`);
+check(rent.payer === 90, `Vé Tháng level 1 trả 60% của $150 → $90 (được ${rent.payer})`);
+check(rent.payer3 === 30, `Vé Tháng level 3 trả 20% của $150 → $30 (được ${rent.payer3})`);
+check(rent.fever3 === 225, `Cơn Sốt Đất level 3 ×4.5 → $225 (được ${rent.fever3})`);
+check(rent.colors === 53, `Đất Nhiều Màu level 1, 2 màu +6% → $53 (được ${rent.colors})`);
 
 await reset();
 const build = await run(`
@@ -203,24 +203,33 @@ const build = await run(`
   const refund1 = s.canSellHouse(me, 21).refund;
   s.players[me].skillLv = { ac3: 3 };
   const refund3 = s.canSellHouse(me, 21).refund;
-  // Chung Cư Mini: đất lẻ tối đa 1 / 2 / 3 căn theo level
-  const caps = [1, 2, 3].map((lv) => {
+  // Chung Cư Mini: mỗi ô đất lẻ tối đa 1 / 2 / 2 căn theo level
+  const caps = [[1, 1], [2, 2], [3, 2]].map(([lv, cap]) => {
     s.players[me].skillLv = { ac3: 3, acS1: lv };
-    s.houses.set(21, lv - 1); const under = s.canBuild(me, 21).ok;
-    s.houses.set(21, lv); const over = s.canBuild(me, 21).ok;
+    s.houses.set(21, cap - 1); const under = s.canBuild(me, 21).ok;
+    s.houses.set(21, cap); const over = s.canBuild(me, 21).ok;
     return under && !over;
   });
+  // …và cộng mọi ô đất lẻ lại không quá 3 căn ở level 1: ô 21, 23 đã 3 căn thì ô 23 hết chỗ
+  s.players[me].skillLv = { ac3: 3 };
+  s.owner.set(26, me); s.owner.set(6, me);                  // thêm ô lẻ vàng, xanh nhạt
+  s.houses.set(21, 1); s.houses.set(23, 0); s.houses.set(26, 1);
+  const room1 = s.canBuild(me, 23).ok;                      // 2 căn trên đất lẻ: còn chỗ
+  s.houses.set(23, 1);
+  const total = s.canBuild(me, 6);                          // đã đủ 3 căn: ô thứ tư hết chỗ
+  for (const id of [26, 6]) { s.owner.delete(id); s.houses.delete(id); }
   // Sổ Hồng level 3: 12$ mỗi căn khi qua ô Bắt Đầu, khách sạn tính 5
   s.houses.set(21, 2); s.houses.set(23, 5);
   const deed = s.payslip(false, s.players[me]);
-  return { before, cost, after, ok: res.ok, contractor, gone, houses: 1, refund1, refund3, caps, deed: deed.parts.ac3, pay: deed.total };
+  return { before, cost, after, ok: res.ok, contractor, gone, houses: 1, refund1, refund3, caps, room1, total: total.ok, why: total.reason, deed: deed.parts.ac3, pay: deed.total };
 `);
 check(!build.before, 'Sổ Hồng không còn cho xây với 2/3 bộ');
-check(build.cost === 128, `Xây Rẻ level 1 giảm 15%: căn $150 còn $128, làm tròn lên (được ${build.cost})`);
+check(build.cost === 120, `Mái Ấm level 1 giảm 20%: căn $150 còn $120 (được ${build.cost})`);
 check(build.after && build.ok, 'Chung Cư Mini: đất lẻ xây được');
-check(build.caps.every(Boolean), `Chung Cư Mini level 1/2/3 xây tối đa 1/2/3 căn (${build.caps})`);
+check(build.caps.every(Boolean), `Chung Cư Mini level 1/2/3: mỗi ô đất lẻ tối đa 1/2/2 căn (${build.caps})`);
+check(build.room1 && !build.total && /3 căn/.test(build.why), `Chung Cư Mini level 1: cả bàn đất lẻ tối đa 3 căn (${build.why})`);
 check(build.deed === 84 && build.pay === 284, `Sổ Hồng level 3: 7 căn × 12$ = 84$ cộng vào lương (${build.deed}, ${build.pay})`);
-check(build.contractor === 25, `Thầu Vật Liệu level 2: người khác xây → +$25 (được ${build.contractor})`);
+check(build.contractor === 18, `Thầu Vật Liệu level 2: người khác xây → +$18 (được ${build.contractor})`);
 check(build.gone === 0 && build.houses === 1, 'Sổ Hồng: nhà không bị dỡ');
 check(build.refund1 === 75 && build.refund3 === 150, `Sổ Hồng: bán nhà level 1 lấy 50%, level 3 lấy 100% (${build.refund1}/${build.refund3})`);
 
@@ -439,27 +448,22 @@ check(JSON.stringify(xg.lit) === '[17]' && xg.dice && xg.acts === 0 && xg.modal 
 await clickDie(page, 1);
 const ar = await run('const r = await window.__ar; return { sum: r.d.sum, a: r.d.a, cd: s.current.cooldowns.dd3 };');
 check(ar.a === 3 && ar.sum >= 4 && ar.sum <= 9, `Xí Ngầu Gian: giữ viên 3, lắc lại viên kia (tổng ${ar.sum})`);
-check(ar.cd === 1, 'Xí Ngầu Gian: chờ 1 lần qua ô Bắt Đầu');
+check(ar.cd === 4, `Xí Ngầu Gian level 1: dùng xong chờ 4 lần qua ô Bắt Đầu (${ar.cd})`);
 
-// Level 2: dùng được 2 lần giữa hai lần qua ô Bắt Đầu
+// Level 2: vẫn 1 lần, chờ ngắn hơn (3 lần qua)
 await run(`
   const p = s.current; p.cooldowns = {}; p.lapUses = {}; p.skillLv = { dd3: 2 };
   window.__ar = c.skills.afterRoll(p, { a: 3, b: 4, sum: 7, isDouble: false });
 `);
 await page.locator('.tile-pick[data-quick]:not(.out)').waitFor({ timeout: 5000 });
+await page.evaluate(() => { window.__monopoly.scene.onTileClick(17); });
+const arGo = await run('const r = await window.__ar; return { sum: r.d.sum, cd: s.current.cooldowns.dd3 ?? 0 };');
+check(arGo.cd === 0, `bấm ô sáng là đi luôn, không tốn lượt Xí Ngầu Gian (${JSON.stringify(arGo)})`);
+await run(`window.__ar = c.skills.afterRoll(s.current, { a: 3, b: 4, sum: 7, isDouble: false });`);
+await page.locator('.tile-pick[data-quick]:not(.out)').waitFor({ timeout: 5000 });
 await clickDie(page, 1);
 const ar2 = await run('await window.__ar; return { cd: s.current.cooldowns.dd3 ?? 0, used: s.current.lapUses.dd3 ?? 0 };');
-check(ar2.cd === 0 && ar2.used === 1, `Xí Ngầu Gian level 2: dùng 1 lần chưa phải chờ (${JSON.stringify(ar2)})`);
-await run(`window.__ar = c.skills.afterRoll(s.current, { a: 3, b: 4, sum: 7, isDouble: false });`);
-await page.locator('.tile-pick[data-quick]:not(.out)').waitFor({ timeout: 5000 });
-await page.evaluate(() => { window.__monopoly.scene.onTileClick(17); });
-const arGo = await run('const r = await window.__ar; return { sum: r.d.sum, used: s.current.lapUses.dd3 ?? 0 };');
-check(arGo.used === 1, `bấm ô sáng là đi luôn, không tốn lượt Xí Ngầu Gian (${JSON.stringify(arGo)})`);
-await run(`window.__ar = c.skills.afterRoll(s.current, { a: 3, b: 4, sum: 7, isDouble: false });`);
-await page.locator('.tile-pick[data-quick]:not(.out)').waitFor({ timeout: 5000 });
-await clickDie(page, 0);
-const ar3 = await run('await window.__ar; return { cd: s.current.cooldowns.dd3 ?? 0, used: s.current.lapUses.dd3 ?? 0 };');
-check(ar3.cd === 1 && ar3.used === 0, `Xí Ngầu Gian level 2: lần thứ 2 thì chờ tới lần qua ô Bắt Đầu (${JSON.stringify(ar3)})`);
+check(ar2.cd === 3 && ar2.used === 0, `Xí Ngầu Gian level 2: dùng xong chờ 3 lần qua ô Bắt Đầu (${JSON.stringify(ar2)})`);
 await run('const p = s.current; p.cooldowns = { dd3: 1 }; p.skillLv = {};');
 
 // Quay Đầu: ô đi tới và ô đi lùi cùng sáng trên bàn cờ, bấm ô nào đi ô ấy
@@ -479,7 +483,7 @@ check(qd.dice && qd.extra === 0 && qd.cancel === 'Đi tới như thường',
 check(await page.locator('#modal-root .scrim.show').count() === 0, 'không mở hộp thoại nào che bàn cờ');
 await page.evaluate(() => { window.__monopoly.scene.onTileClick(3); });
 const qd1 = await run('const r = await window.__ar; return { back: r.back, used: s.current.cooldowns.dh3 ?? 0 };');
-check(qd1.back === true && qd1.used === 1, `bấm ô 3 là đi lùi luôn, không hỏi lại (${JSON.stringify(qd1)})`);
+check(qd1.back === true && qd1.used === 3, `bấm ô 3 là đi lùi luôn, không hỏi lại; Quay Đầu level 1 chờ 3 lần qua (${JSON.stringify(qd1)})`);
 check(await page.locator('.tile-pick:not(.out)').count() === 0, 'chọn xong thì bảng chọn đóng');
 await run(`const p = s.current; p.cooldowns = {};
   window.__ar = c.skills.afterRoll(p, { a: 3, b: 4, sum: 7, isDouble: false });`);
@@ -494,7 +498,7 @@ await clickDie(page, 1);
 await page.waitForTimeout(2600);
 await page.locator('.tile-pick:not(.out) .tp-cancel').click({ timeout: 8000 });
 const qd3 = await run('const r = await window.__ar; return { a: r.d.a, back: r.back, dd3: s.current.cooldowns.dd3 ?? 0 };');
-check(qd3.a === 3 && !qd3.back && qd3.dd3 === 1, `bấm viên phải chạy Xí Ngầu Gian rồi hỏi lại (${JSON.stringify(qd3)})`);
+check(qd3.a === 3 && !qd3.back && qd3.dd3 === 4, `bấm viên phải chạy Xí Ngầu Gian rồi hỏi lại (${JSON.stringify(qd3)})`);
 
 await run('c.restoreActions();');
 await openKit();
@@ -540,8 +544,8 @@ await clickModal('Thâu Tóm');
 await run('await window.__seize;');
 const seized = await run(`const me = s.current; return { owner: s.owner.get(21), me: me.id, money: me.money, cd: me.cooldowns.dc3 };`);
 check(seized.owner === seized.me, 'Thâu Tóm: lô 21 sang tên');
-check(seized.money === 1500 - 308, `Thâu Tóm level 2: trả 140% giá gốc $308 (còn ${seized.money})`);
-check(seized.cd === 2, 'Thâu Tóm: chờ 2 lần qua ô Bắt Đầu');
+check(seized.money === 1500 - 242, `Thâu Tóm level 2: trả 110% giá gốc $242 (còn ${seized.money})`);
+check(seized.cd === 1, 'Thâu Tóm level 2: chờ 1 lần qua ô Bắt Đầu');
 
 /* ------------------------------------------------ 4b. ăn tiền từ việc người khác làm */
 log('\n=== 4b. MÔI GIỚI · CÒ ĐẤT ===');
@@ -559,7 +563,7 @@ const fees = await run(`
   return { broke, cut: broker.money - m1, swapped: s.owner.get(1) === b.id && s.owner.get(3) === a.id };
 `);
 check(fees.broke === 72, `Môi Giới level 2: người khác mua lô 400$ → +18% = 72$ (được ${fees.broke})`);
-check(fees.swapped && fees.cut === 30, `Cò Đất level 2: hai người khác đổi 2 lô 60$ → +25% = 30$ (được ${fees.cut})`);
+check(fees.swapped && fees.cut === 42, `Cò Đất level 2: hai người khác đổi 2 lô 60$ → +35% = 42$ (được ${fees.cut})`);
 
 /* ------------------------------------------------ 4c. Chuyến Tàu Xuyên Việt */
 log('\n=== 4c. XUYÊN VIỆT ===');
@@ -588,7 +592,7 @@ check((await item('Chuyến Tàu Xuyên Việt').textContent()).includes('khi Ch
 await topBtn('Chốt').click();
 for (let i = 0; i < 20 && !(await run('return s.current.pos === 20 && !c.busy;')); i++) await wait(500);
 const tele = await run('return { pos: s.current.pos, cd: s.current.cooldowns.dhU };');
-check(tele.pos === 20 && tele.cd === 3, `đi thẳng tới Bến Đậu, chờ 3 lần qua ô Bắt Đầu (${JSON.stringify(tele)})`);
+check(tele.pos === 20 && tele.cd === 5, `đi thẳng tới Bến Đậu, level 1 chờ 5 lần qua ô Bắt Đầu (${JSON.stringify(tele)})`);
 check(await page.locator('#actions button', { hasText: 'Kết thúc lượt' }).count() === 1, 'xong thì chỉ còn nút Kết thúc lượt');
 
 /* ------------------------------------------------ 5. kỹ năng tự chạy mỗi lần qua ô Bắt Đầu */
@@ -598,10 +602,10 @@ const lapEnd = await run(`
   const me = s.current;
   for (const id of [16, 18, 19]) s.owner.set(id, me.id);
   me.skills = ['ac1','ac2a','ac3','acU','cn1','cn2a','cn3','cnU'];
-  // tỉ lệ = 3% + 1% × 5 lần qua − 3% × 1 lần vào tù = 5% của 1000$ = 50$ mỗi người
+  // tỉ lệ = 2% + 1% × 5 lần qua − 3% × 1 lần vào tù = 4% của 1000$ = 40$, trần 6$ × 5 lần = 30$ mỗi người
   me.money = 1000; me.laps = 5; me.jails = 1;
   const others = s.players.filter((q) => q.id !== me.id);
-  others[0].money = 20;                         // không đủ 50$ thì nộp hết số đang có
+  others[0].money = 20;                         // không đủ 30$ thì nộp hết số đang có
   const before = others.map((q) => q.money);
   await c.skills.lapEnd(me);
   return {
@@ -611,9 +615,9 @@ const lapEnd = await run(`
     left0: others[0].money,
   };
 `);
-check(lapEnd.houses.reduce((a, b) => a + b, 0) === 1, `Phố Cổ: xây 1 căn miễn phí (${lapEnd.houses})`);
-check(JSON.stringify(lapEnd.paid) === '[20,50]' && lapEnd.got === 70 && lapEnd.left0 === 0,
-  `Liên Đoàn 5%: người đủ tiền nộp 50$, người chỉ có 20$ nộp hết 20$, không âm (${JSON.stringify(lapEnd)})`);
+check(lapEnd.houses.reduce((a, b) => a + b, 0) === 3, `Phố Cổ level 1: xây 3 căn miễn phí (${lapEnd.houses})`);
+check(JSON.stringify(lapEnd.paid) === '[20,30]' && lapEnd.got === 50 && lapEnd.left0 === 0,
+  `Liên Đoàn 4%, trần 30$: người đủ tiền nộp 30$, người chỉ có 20$ nộp hết 20$, không âm (${JSON.stringify(lapEnd)})`);
 
 const rates = await run(`
   const K = await import('/src/core/skills.js');
@@ -628,19 +632,19 @@ const rates = await run(`
 const each = await run(`
   const K = await import('/src/core/skills.js');
   const p = { skills: ['cnU'], skillLv: {}, laps: 5, jails: 1, money: 10000 };
-  const l1 = K.levyEach(p);                 // 5% của 10000$ = 500$, trần 12$ × 5 = 60$
+  const l1 = K.levyEach(p);                 // 4% của 10000$ = 400$, trần 6$ × 5 = 30$
   p.skillLv = { cnU: 3 };
-  const l3 = K.levyEach(p);                 // trần 18$ × 5 = 90$
+  const l3 = K.levyEach(p);                 // trần 8$ × 5 = 40$
   p.money = 400;
-  const low = K.levyEach(p);                // 5% của 400$ = 20$, dưới trần
+  const low = K.levyEach(p);                // 4% của 400$ = 16$, dưới trần
   return { l1, l3, low };
 `);
-check(each.l1 === 60 && each.l3 === 90 && each.low === 20,
-  `Liên Đoàn: mỗi người nộp không quá 12$/18$ × số lần qua (level 1/3), tiền ít thì theo % (${JSON.stringify(each)})`);
-check(rates.cap1 === 0.12 && rates.cap3 === 0.2 && rates.floor === 0,
-  `Liên Đoàn: trần 12% ở level 1, 20% ở level 3, vào tù nhiều thì về 0% chứ không âm (${JSON.stringify(rates)})`);
+check(each.l1 === 30 && each.l3 === 40 && each.low === 16,
+  `Liên Đoàn: mỗi người nộp không quá 6$/8$ × số lần qua (level 1/3), tiền ít thì theo % (${JSON.stringify(each)})`);
+check(rates.cap1 === 0.07 && rates.cap3 === 0.1 && rates.floor === 0,
+  `Liên Đoàn: trần 7% ở level 1, 10% ở level 3, vào tù nhiều thì về 0% chứ không âm (${JSON.stringify(rates)})`);
 
-// Phố Cổ level 3: 2 căn miễn phí mỗi lần
+// Phố Cổ level 3: 4 căn miễn phí mỗi lần
 await reset();
 const two = await run(`
   const me = s.current;
@@ -649,7 +653,7 @@ const two = await run(`
   await c.skills.lapEnd(me);
   return [16, 18, 19].map((id) => s.housesOn(id));
 `);
-check(two.reduce((a, b) => a + b, 0) === 2 && Math.max(...two) === 1, `Phố Cổ level 3: 2 căn miễn phí, xây đều tay (${two})`);
+check(two.reduce((a, b) => a + b, 0) === 4 && Math.max(...two) === 2 && Math.min(...two) === 1, `Phố Cổ level 3: 4 căn miễn phí, xây đều tay (${two})`);
 
 // Vào tù thì đếm thêm một lần — Liên Đoàn trừ tỉ lệ theo số này
 await reset();
@@ -945,11 +949,11 @@ const rentx = await run(`
   return { late: late.total, lateFee: late.late, both: both.total, bothLate: both.late, rich: rich.total, richLate: rich.late,
            note: c.skills.rentNote(me, 39, both), dcU: owner.skillUse.dcU };
 `);
-check(rentx.late === 150 && rentx.lateFee === 25, `Chủ Nợ: thuê 125$ (Cơn Sốt ×2.5), người trả có ô thế chấp → +20% = 150$ (${rentx.late})`);
-check(rentx.both === 76 && rentx.bothLate === 13, `Sống Sót dưới 200$ trả 50% = 63$, Chủ Nợ phạt 20% phần còn lại = 76$ (${rentx.both})`);
-check(rentx.rich === 125 && rentx.richLate === 0, 'không còn ô thế chấp, đủ tiền thì không phạt, không giảm');
+check(rentx.late === 225 && rentx.lateFee === 75, `Chủ Nợ: thuê 150$ (Cơn Sốt ×3), người trả có ô thế chấp → +50% = 225$ (${rentx.late})`);
+check(rentx.both === 90 && rentx.bothLate === 30, `Sống Sót dưới 250$ trả 40% = 60$, Chủ Nợ phạt 50% phần còn lại = 90$ (${rentx.both})`);
+check(rentx.rich === 150 && rentx.richLate === 0, 'không còn ô thế chấp, đủ tiền thì không phạt, không giảm');
 check(rentx.note.includes('Sống Sót') && rentx.note.includes('Chủ Nợ'), 'dòng loan tin ghi cả giảm và tiền thêm của Chủ Nợ');
-check(rentx.dcU.gain === 75, `Cơn Sốt Đất ghi 75$ tiền thuê thu thêm (${JSON.stringify(rentx)})`);
+check(rentx.dcU.gain === 100, `Cơn Sốt Đất ghi 100$ tiền thuê thu thêm (${JSON.stringify(rentx)})`);
 
 // Lão Làng: đếm lần qua từ lúc học, tặng điểm theo nhịp
 await reset();
@@ -983,8 +987,8 @@ const buy2 = await run(`
            owner: s.owner.get(39) === me.id };
 `);
 check(buy.locked !== 'locked' && buy2.owner, `Khách Sộp học được ngay sau Nhặt Hàng Thừa; mua ô trống qua hộp Mua (${JSON.stringify(buy2)})`);
-check(buy2.back === Math.round(buy2.price * 0.18) && buy2.use.gain === buy2.back,
-  `Khách Sộp level 2: hoàn 18% giá mua, ghi vào tiến độ (${buy2.back})`);
+check(buy2.back === Math.round(buy2.price * 0.35) && buy2.use.gain === buy2.back,
+  `Khách Sộp level 2: hoàn 35% giá mua, ghi vào tiến độ (${buy2.back})`);
 
 // Chủ Nhà: dừng trên đất của mình
 await reset();
@@ -998,7 +1002,7 @@ const home = await run(`
   return { gotFirst: m1 - 1500, got: me.money - m1, use: me.skillUse.acX2 };
 `);
 check(home.gotFirst === 0, `dừng trên đất mình chưa học Chủ Nhà thì không có tiền (${JSON.stringify(home)})`);
-check(home.got === 30 && home.use.gain === 30, 'Chủ Nhà level 3: +30$, ghi vào tiến độ');
+check(home.got === 40 && home.use.gain === 40, 'Chủ Nhà level 3: +40$, ghi vào tiến độ');
 
 // Ảnh chụp mang tiến độ
 const snapUse = await run(`
@@ -1030,11 +1034,11 @@ const overlap = await page.evaluate(() => {
 });
 check(!overlap.length, `không có ô nào đè lên nhau (${overlap.join(', ') || 'không'})`);
 check(await page.locator('.st-node[data-id="dhX1"].is-ready').count() === 1, 'Hai Ngón học được ngay khi có Về Nhà');
-/* Liên Đoàn lần qua tới (lần 7): 3% + 7% − 3% = 7% của 1000 + 200 = 84$, trần 12 × 7 = 84$;
+/* Liên Đoàn lần qua tới (lần 7): 2% + 7% − 3% = 6% của 1000 + 200 = 72$, trần 6 × 7 = 42$;
    hai đối thủ chỉ còn 30$ nên thu về 60$ */
 await page.locator('.st-node[data-id="cnU"]').click();
 const nowTxt = await page.locator('.sd-now').textContent();
-check(nowTxt.includes('6 lần') && nowTxt.includes('1 lần') && nowTxt.includes('7%') && nowTxt.includes('84$') && nowTxt.includes('60$'),
+check(nowTxt.includes('6 lần') && nowTxt.includes('1 lần') && nowTxt.includes('6%') && nowTxt.includes('42$') && nowTxt.includes('60$'),
   `Liên Đoàn: thẻ ghi số lần qua, vào tù, tỉ lệ, mỗi người nộp, tổng thu (${nowTxt})`);
 check(nowTxt.includes('Tổng số lần đã chạy') && nowTxt.includes('420$'), 'thẻ ghi tổng số lần đã chạy và tổng tiền đã mang về');
 await page.screenshot({ path: 'test-result/skills-now.png' });
@@ -1042,6 +1046,100 @@ await page.keyboard.press('Escape');
 await page.waitForTimeout(300);
 await page.keyboard.press('Escape');
 await page.waitForTimeout(3200);
+
+/* ------------------------------------------------ 8. luật cân bằng (tests/gamesim.mjs) */
+log('\n=== 8. LUẬT CÂN BẰNG ===');
+await reset();
+const bal = await run(`
+  const me = s.current, a = s.players[(s.turn + 1) % 3], b = s.players[(s.turn + 2) % 3];
+  const n = s.alive().length;
+
+  // Nhặt Hàng Thừa: đầu ván không nhặt ô làm đủ bộ (người khác đang đứng ở ô 39)
+  me.skills = ['dcS1'];
+  const pos0 = a.pos; a.pos = 39;
+  s.owner.set(37, me.id); me.laps = 2;
+  const earlySet = K.leftoverOffers(s, me).some((x) => x.id === 39);
+  me.laps = 3;
+  const lateSet = K.leftoverOffers(s, me).some((x) => x.id === 39);
+  s.owner.delete(37); me.laps = 2;
+  const lone = K.leftoverOffers(s, me).some((x) => x.id === 39);
+  a.pos = pos0; me.laps = 0;
+
+  // Thâu Tóm: không phá bộ đã đủ màu, ô lẻ và bến/ga thì được
+  me.skills = ['dcS1', 'dc2a', 'dc3'];
+  for (const id of [1, 3]) s.owner.set(id, a.id);            // bộ nâu đủ màu
+  s.owner.set(6, a.id); s.owner.set(5, a.id);
+  const seize = { full: K.canSeize(s, me, 1), lone: K.canSeize(s, me, 6), station: K.canSeize(s, me, 5) };
+
+  // Xuyên Việt: không đáp xuống đất chưa có chủ
+  me.skills = ['dh1', 'dh2a', 'dh3', 'dhU'];
+  const tp = K.teleportTargets(s, me);
+  const tele = { unowned: tp.includes(39), owned: tp.includes(1), go: tp.includes(0), jail: tp.includes(30) };
+
+  // Thuê An Cư cộng dồn: Đất Nhiều Màu +6% (2 màu) và Hàng Xóm +25% → ×1.31, không phải ×1.06 × 1.25
+  for (const id of [1, 3, 5, 6]) s.owner.delete(id);
+  for (const id of [1, 6, 8, 9]) s.owner.set(id, me.id);     // xanh nhạt đủ bộ + 1 ô nâu
+  s.houses.set(9, 4);
+  me.skills = ['acX2', 'ac2b', 'ac1', 'acS2'];
+  const rent3 = s.rentFor(9, 7);                               // 565$ × 1.31 = 740$ (nhân chồng ra 749$)
+  const gains = Object.fromEntries(K.rentGains(s, 9, rent3).map(([id, g]) => [id, Math.round(g)]));
+  s.houses.delete(9);
+
+  // Siết Nợ: nhắm cả ô chưa thế chấp của người cạn tiền
+  for (const id of [1, 6, 8, 9]) s.owner.delete(id);
+  me.skills = ['dcS1', 'dc2b', 'dcX1', 'dcV'];
+  s.owner.set(21, a.id); s.owner.set(26, b.id);
+  a.money = 100; b.money = 1500;
+  const poor = K.forecloseOffers(s, me).map((x) => [x.id, x.bank, x.owner]);
+  s.mortgaged.add(26);
+  const lien = K.forecloseOffers(s, me).find((x) => x.id === 26);
+  return { earlySet, lateSet, lone, seize, tele, rent3, gains, poor, lien };
+`);
+check(!bal.earlySet && bal.lateSet && bal.lone, `Nhặt Hàng Thừa: chưa qua ô Bắt Đầu 3 lần thì không nhặt ô làm đủ bộ; ô không làm đủ bộ vẫn nhặt (${JSON.stringify(bal)})`);
+check(!bal.seize.full && bal.seize.lone && bal.seize.station, `Thâu Tóm: không phá bộ đủ màu, ô lẻ và bến/ga thì được (${JSON.stringify(bal.seize)})`);
+check(!bal.tele.unowned && bal.tele.owned && bal.tele.go && !bal.tele.jail, `Xuyên Việt: không tới đất chưa có chủ, ô Vào Tù (${JSON.stringify(bal.tele)})`);
+check(bal.rent3 === 740 && bal.gains.ac2b === 34 && bal.gains.acS2 === 141,
+  `thuê An Cư cộng dồn: 565$ × (1 + 6% + 25%) = 740$, mỗi kỹ năng ghi phần của mình (${bal.rent3}, ${JSON.stringify(bal.gains)})`);
+check(JSON.stringify(bal.poor) === '[[21,0,121]]' && bal.lien && bal.lien.bank === 65 && bal.lien.owner === 13,
+  `Siết Nợ: ô của người dưới 200$ trả chủ 55% giá; ô thế chấp trả ngân hàng 50% + chủ 10% (${JSON.stringify(bal)})`);
+
+// Cò Đất: người đứng ra giao dịch không ăn tiền cò
+await reset();
+const selfCut = await run(`
+  const [a, b] = [s.players[s.turn], s.players[(s.turn + 1) % 3]];
+  a.skills = ['dcS1', 'dc2a']; a.skillLv = { dc2a: 2 };
+  s.owner.set(39, a.id);
+  const m0 = a.money;
+  await c.executeTrade({ give: [39], get: [], giveMoney: 0, getMoney: 400 }, a, b);
+  return a.money - m0;
+`);
+check(selfCut === 400, `Cò Đất: tự bán đất không được tiền cò, chỉ nhận đúng 400$ (${selfCut})`);
+
+// Xuyên Việt về ô Bắt Đầu: chính chuyến ấy không trừ thời gian chờ
+await reset();
+const loop = await run(`
+  const p = s.current; p.pos = 30 + 5; p.skills = ['dh1', 'dh2a', 'dh3', 'dhU']; p.skillLv = { dhU: 3 };
+  await c.skills.doTeleport(p, 0);
+  return { pos: p.pos, cd: p.cooldowns.dhU };
+`);
+check(loop.pos === 0 && loop.cd === 3, `Xuyên Việt level 3 về ô Bắt Đầu: vẫn chờ đủ 3 lần qua (${JSON.stringify(loop)})`);
+
+// Cược và Tất Tay chốt theo cú lắc đầu: đoán chẵn, ra 3 + 4 = 7 là thua, Xí Ngầu Gian sau đó không cứu được
+await reset();
+const allInLost = await run(`
+  const p = s.current; p.pos = 10; p.skills = ['dd1', 'dd2b', 'dd3', 'ddU'];
+  c.skills.allIn = { turnNo: s.turnNo, seat: p.id, pick: 'even' };
+  const m0 = p.money;
+  await c.skills.settleBets(p, { a: 3, b: 4, sum: 7, isDouble: false });
+  return { lost: m0 - p.money, left: c.skills.allIn };
+`);
+check(allInLost.lost > 0 && allInLost.left === null, `Tất Tay chốt ngay ở cú lắc đầu (lẻ) → thua (${JSON.stringify(allInLost)})`);
+const order = await run(`
+  const src = c.takeRoll.toString();
+  return src.indexOf('settleBets(p, first)') > 0 && src.indexOf('settleBets(p, first)') < src.indexOf('afterRoll(p, first)');
+`);
+check(order, 'Game.takeRoll chốt cược trước hộp hỏi Xí Ngầu Gian / Quay Đầu');
+await reset();
 
 log('\nLỗi console:', errors.length ? errors : 'không có');
 if (errors.length) fails += errors.length;

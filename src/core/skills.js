@@ -9,7 +9,7 @@ import {
   SKILLS, BRANCHES, TIER_COST, LEVEL_COST, MAX_LEVEL, RESPEC_FEE, ULT_MIX, ULT_SPECIAL,
   WAYS, GROW_BY,
 } from '../data/skills.js';
-import { BOARD, money, tileLabel, GO_SALARY } from '../data/board.js';
+import { BOARD, GROUP_TILES, money, tileLabel, GO_SALARY } from '../data/board.js';
 
 const BY_ID = new Map(SKILLS.map((s) => [s.id, s]));
 
@@ -472,7 +472,27 @@ export function colorsOwned(st, seat) {
  * tính riêng ở `payerRentMult`, vì cùng một ô mỗi người trả một giá.
  */
 export function ownerRentMult(st, tileId, at = {}) {
-  return Object.values(ownerRentParts(st, tileId, at)).reduce((k, f) => k * f, 1);
+  return combineRent(ownerRentParts(st, tileId, at));
+}
+
+/**
+ * Ba kỹ năng tăng thuê của nhánh An Cư **cộng** phần tăng với nhau rồi mới
+ * nhân một lần, chứ không nhân chồng: nhân chồng thì Nhà Lâu Năm +60%, Đất
+ * Nhiều Màu +30%, Hàng Xóm +50% ra ×3.5 thay vì ×2.4, và nhánh này bỏ xa mọi
+ * nhánh khác ở cuối ván (tests/gamesim.mjs). Cơn Sốt Đất và Di Sản vẫn nhân —
+ * hai hệ số ấy không bao giờ chạy cùng ô với Nhà Lâu Năm (đất trống / khách sạn).
+ */
+const RENT_ADDS = new Set(['ac2a', 'ac2b', 'acS2']);
+
+/** Gộp các hệ số của `ownerRentParts` thành một số nhân, theo luật ở `RENT_ADDS`. */
+export function combineRent(parts) {
+  let add = 1;
+  let mul = 1;
+  for (const [id, f] of Object.entries(parts)) {
+    if (RENT_ADDS.has(id)) add += f - 1;
+    else mul *= f;
+  }
+  return add * mul;
 }
 
 /**
@@ -495,7 +515,10 @@ export function ownerRentParts(st, tileId, at = {}) {
     const { perLap, cap } = param(owner, 'ac2a');
     out.ac2a = 1 + Math.min(cap, perLap * (owner.laps ?? 0));
   }
-  if (has(owner, 'ac2b')) out.ac2b = 1 + param(owner, 'ac2b').perColor * colorsOwned(st, owner.id);
+  if (has(owner, 'ac2b')) {
+    const { perColor, max } = param(owner, 'ac2b');
+    out.ac2b = 1 + perColor * Math.min(max, colorsOwned(st, owner.id));
+  }
   if (has(owner, 'acS2') && hasNeighbor(st, tileId, owner.id)) out.acS2 = 1 + param(owner, 'acS2').bonus;
   if (st.heritage?.has(tileId)) out.heritage = param(owner, 'acU').mult;
   return out;
@@ -531,10 +554,14 @@ export function rentGains(st, tileId, rent) {
   const flat = Object.entries(ownerRentFlat(st, tileId)).filter(([, n]) => n > 0);
   const flatSum = flat.reduce((n, [, x]) => n + x, 0);
   const core = Math.max(0, rent - flatSum);
+  const parts = ownerRentParts(st, tileId);
+  const all = combineRent(parts);
+  // Phần của một kỹ năng = số thu được trừ số sẽ thu nếu bỏ riêng hệ số ấy
+  const without = (id) => { const rest = { ...parts }; delete rest[id]; return combineRent(rest); };
   return [
-    ...Object.entries(ownerRentParts(st, tileId))
+    ...Object.entries(parts)
       .filter(([id, f]) => id !== 'heritage' && f > 1)
-      .map(([id, f]) => [id, core - core / f]),
+      .map(([id]) => [id, core - (core * without(id)) / all]),
     ...flat.map(([id, n]) => [id, Math.min(n, rent)]),
   ];
 }
@@ -639,6 +666,46 @@ export function tourPassed(st, p, from, steps) {
 }
 
 /**
+ * Chuyến Tàu Xuyên Việt đi tới được những ô nào: mọi ô trừ ô Vào Tù, ô đang
+ * đứng và **đất chưa có chủ**. Cho đáp xuống đất trống thì thành cách mua đúng
+ * ô còn thiếu của bộ màu mỗi lần hồi xong — tỉ lệ thắng gấp đôi mọi tối thượng
+ * khác (tests/gamesim.mjs). Ô này là để chạy: về ô Bắt Đầu lãnh lương, né dãy
+ * khách sạn, ghé ô thẻ.
+ * @returns {number[]}
+ */
+export function teleportTargets(st, p) {
+  return BOARD.map((t) => t.id).filter((id) => id !== 30 && id !== p.pos && !(BOARD[id].ownable && !st.owner.has(id)));
+}
+
+/**
+ * Thâu Tóm ép mua được ô này không. Không đụng bộ màu chủ đất đã có nhà, và
+ * không đụng bộ màu chủ đất **đã gom đủ**: phá được bộ vừa đủ màu thì cả bàn
+ * không ai dám gom bộ khi có người học ô này — mà gom bộ là trục của cả ván.
+ */
+export function canSeize(st, p, tileId) {
+  const owner = st.ownerOf(tileId);
+  const t = BOARD[tileId];
+  if (!owner || owner.id === p.id || !ready(p, 'dc3') || !t.ownable) return false;
+  // Bến/ga, công ty không có bộ màu: ép mua được như đất lẻ
+  if (!t.color_group) return true;
+  if (st.groupBuilt(owner.id, t.color_group)) return false;
+  return !st.hasFullGroup(owner.id, t.color_group);
+}
+
+/**
+ * Chung Cư Mini: còn xây được mấy căn trên đất lẻ (ô chưa đủ bộ màu). Trần
+ * tính cho **cả bàn** chứ không chỉ mỗi ô: trần từng ô thôi thì giữ sáu bảy ô
+ * lẻ là có sáu bảy ô thu thuê ba căn, mạnh hơn hẳn người gom đủ bộ.
+ */
+export function miniRoom(st, p) {
+  if (!has(p, 'acS1')) return 0;
+  const used = st.propertiesOf(p.id)
+    .filter((id) => BOARD[id].type === 'property' && !st.hasFullGroup(p.id, BOARD[id].color_group))
+    .reduce((n, id) => n + st.housesOn(id), 0);
+  return Math.max(0, param(p, 'acS1').total - used);
+}
+
+/**
  * Nhặt Hàng Thừa: ô chưa có chủ mà một người khác **đang đứng** trên đó, người
  * này đủ tiền mua với giá kỹ năng. Đang là lượt mình thì người đứng đó đã xong
  * lượt mà ô vẫn trống, nên họ từ chối hay thiếu tiền đều như nhau. Người đó đi
@@ -647,27 +714,58 @@ export function tourPassed(st, p, from, steps) {
  */
 export function leftoverOffers(st, p) {
   if (!has(p, 'dcS1')) return [];
-  const { price } = param(p, 'dcS1');
+  const { price, early } = param(p, 'dcS1');
+  /* Đầu ván không nhặt ô làm đủ bộ cho mình: ô 39 giá 400$ mà mỗi người mới
+     có 750$ nên hay bị bỏ ngỏ, mua ô 37 rồi nhặt ô 39 là đủ bộ Chàm Ngự từ
+     vòng 2, xây hai căn là thuê bằng cả tiền khởi đầu. Ca này hiếm mà thắng
+     gấp ba (tests/gamesim.mjs). Giữa ván ai cũng có đất, gom bộ nhờ nhặt là
+     chuyện thường nên không cấm. */
+  const completes = (id) => {
+    const g = BOARD[id].color_group;
+    return g && GROUP_TILES[g].every((x) => x === id || st.owner.get(x) === p.id);
+  };
   const ids = new Set(st.alive().filter((q) => q.id !== p.id).map((q) => q.pos));
   return [...ids]
     .filter((id) => BOARD[id].ownable && !st.owner.has(id))
+    .filter((id) => (p.laps ?? 0) >= early || !completes(id))
     .map((id) => ({ id, price: Math.round(BOARD[id].price * price) }))
     .filter((x) => x.price <= p.money);
 }
 
 /**
- * Siết Nợ: các ô đang thế chấp của người khác mà người này đủ tiền mua đứt.
- * Giá = số thế chấp trả ngân hàng + `premium` × số đó trả chủ cũ.
+ * Siết Nợ: các ô của **con nợ** — người khác đang có ít nhất một ô thế chấp,
+ * hoặc tiền mặt dưới `poor` — mà người này đủ tiền mua đứt.
+ *  - ô đang thế chấp: trả ngân hàng `bank` × số thế chấp, trả chủ cũ thêm
+ *    `premium` × số đó; ô về tay hết thế chấp
+ *  - ô chưa thế chấp, chưa có nhà trong bộ: trả chủ cũ `debt` × giá gốc
+ * Chỉ nhắm ô đang thế chấp thì ô này hiếm khi có việc: bot chơi 1500 ván chỉ
+ * 22% số lượt có ô để siết, tối thượng yếu nhất bàn dù giá đã rẻ tới đâu
+ * (tests/gamesim.mjs). Nhắm cả đất của người đang túng tiền thì vẫn đúng
+ * nghĩa siết nợ mà có việc để làm.
  * @returns {Array<{id:number, bank:number, owner:number}>}
  */
 export function forecloseOffers(st, p) {
   if (!has(p, 'dcV')) return [];
-  const { premium } = param(p, 'dcV');
-  return [...st.mortgaged]
-    .filter((id) => { const o = st.ownerOf(id); return o && o.id !== p.id && !o.bankrupt; })
-    .map((id) => ({ id, bank: BOARD[id].mortgage, owner: Math.round(BOARD[id].mortgage * premium) }))
+  const { premium, bank, debt, poor } = param(p, 'dcV');
+  const debtors = new Set(st.alive()
+    .filter((q) => q.id !== p.id && (q.money < poor || st.propertiesOf(q.id).some((id) => st.isMortgaged(id))))
+    .map((q) => q.id));
+  return [...st.owner]
+    .filter(([id, seat]) => debtors.has(seat) && (st.isMortgaged(id) || !groupLocked(st, id)))
+    .map(([id]) => {
+      const m = BOARD[id].mortgage;
+      return st.isMortgaged(id)
+        ? { id, bank: Math.round(m * bank), owner: Math.round(m * premium) }
+        : { id, bank: 0, owner: Math.round(BOARD[id].price * debt) };
+    })
     .filter((x) => x.bank + x.owner <= p.money);
 }
+
+/** Ô có nhà, hoặc cùng bộ màu với ô có nhà của chính chủ — không siết được. */
+const groupLocked = (st, id) => {
+  const g = BOARD[id].color_group;
+  return g ? st.groupBuilt(st.owner.get(id), g) : st.housesOn(id) > 0;
+};
 
 /**
  * Màu các nhánh người này đã học tới tối thượng. BoardScene dùng danh sách này
@@ -848,7 +946,7 @@ export function skillNow(st, p, s) {
     case 'ac2b': {
       const c = colorsOwned(st, p.id);
       row('Màu đất đang có', `${c}`);
-      row('Mọi tiền thuê', `+${pctOf(P.perColor * c)}`);
+      row('Mọi tiền thuê', `+${pctOf(P.perColor * Math.min(P.max, c))}${c > P.max ? ` (tính tối đa ${P.max} màu)` : ''}`);
       break;
     }
     case 'ac3': {
@@ -874,6 +972,7 @@ export function skillNow(st, p, s) {
     case 'acS1': {
       const n = mine.filter((id) => BOARD[id].type === 'property' && !st.hasFullGroup(p.id, BOARD[id].color_group)).length;
       row('Đất lẻ xây được', `${n} ô, mỗi ô tối đa ${P.cap} căn`);
+      if (p.skills.includes('acS1')) row('Còn xây được trên đất lẻ', `${miniRoom(st, p)}/${P.total} căn`);
       break;
     }
     case 'acS2':

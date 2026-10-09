@@ -11,7 +11,7 @@ import {
 import { CHANCE, CHEST, Deck } from '../data/cards.js';
 import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
 import { DEFAULT_THEME, themeKey } from '../data/themes.js';
-import { has, param, roll, ownerRentMult, ownerRentFlat, houseImmune, credit } from './skills.js';
+import { has, param, roll, ownerRentMult, ownerRentFlat, houseImmune, credit, miniRoom } from './skills.js';
 
 /**
  * Bảng màu quân — quân cờ chỉ phân biệt bằng MÀU, không mang biểu tượng riêng.
@@ -537,6 +537,9 @@ export class GameState {
       group = [tileId];
       if (this.housesOn(tileId) >= param(p, 'acS1').cap) {
         return { ok: false, reason: `Đất lẻ chỉ xây được ${param(p, 'acS1').cap} căn (Chung Cư Mini).` };
+      }
+      if (!o.free && miniRoom(this, p) <= 0) {
+        return { ok: false, reason: `Đã xây đủ ${param(p, 'acS1').total} căn trên đất lẻ (Chung Cư Mini).` };
       }
     }
     if (!group.length) {
