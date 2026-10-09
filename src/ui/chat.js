@@ -15,6 +15,7 @@
  */
 import { TOKENS } from '../core/state.js';
 import { audio } from '../audio/audio.js';
+import { onTheme } from '../theme/theme.js';
 
 /** Dài hơn mức này thì cắt — khung hẹp, một tin dài là chiếm hết chỗ. */
 export const CHAT_MAX = 200;
@@ -43,6 +44,10 @@ export function cleanText(s) {
     .slice(0, CHAT_MAX);
 }
 
+/* Màu tên đọc lúc vẽ chứ không chép sẵn vào tin: đổi chủ đề thì màu quân đổi
+   (Halloween làm sáng hẳn lên), tên trong tin cũ phải đổi theo. */
+const tokenColor = (token) => TOKENS[token]?.css ?? 'var(--gold-light)';
+
 const prune = (stamps, now) => {
   while (stamps.length && now - stamps[0] > WINDOW_MS) stamps.shift();
   return stamps;
@@ -51,7 +56,7 @@ const prune = (stamps, now) => {
 class ChatDock {
   constructor() {
     this.room = null;
-    /** @type {Array<{seat:number,name:string,color:string,text:string,mine:boolean,t:number}>} */
+    /** @type {Array<{seat:number,name:string,token:number,text:string,mine:boolean,t:number}>} */
     this.log = [];
     this.unread = 0;
     this.sent = [];
@@ -59,6 +64,9 @@ class ChatDock {
     this.heard = new Map();
     this.peekTimer = 0;
     this.#build();
+    onTheme(() => {
+      for (const b of this.list.querySelectorAll('b[data-tok]')) b.style.color = tokenColor(+b.dataset.tok);
+    });
   }
 
   #build() {
@@ -187,7 +195,7 @@ class ChatDock {
     const entry = {
       seat,
       name: s?.name || `Người chơi ${seat + 1}`,
-      color: TOKENS[s?.token]?.css ?? 'var(--gold-light)',
+      token: s?.token,
       text,
       mine,
       t: Date.now(),
@@ -196,7 +204,7 @@ class ChatDock {
 
     const li = document.createElement('li');
     li.className = `chat-msg${mine ? ' mine' : ''}`;
-    li.innerHTML = `<b style="color:${entry.color}">${escapeHtml(entry.name)}</b>`
+    li.innerHTML = `<b data-tok="${entry.token}" style="color:${tokenColor(entry.token)}">${escapeHtml(entry.name)}</b>`
       + `<span>${escapeHtml(text)}</span>`;
     this.list.append(li);
     while (this.log.length > KEEP) {
@@ -238,7 +246,7 @@ class ChatDock {
 
   /** Khung đang đóng mà có tin mới → trích một dòng cạnh nút cho kịp đọc. */
   #peek(entry) {
-    this.peekEl.innerHTML = `<b style="color:${entry.color}">${escapeHtml(entry.name)}</b>`
+    this.peekEl.innerHTML = `<b style="color:${tokenColor(entry.token)}">${escapeHtml(entry.name)}</b>`
       + `<span>${escapeHtml(entry.text)}</span>`;
     this.peekEl.hidden = false;
     clearTimeout(this.peekTimer);

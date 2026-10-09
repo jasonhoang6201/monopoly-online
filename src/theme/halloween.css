@@ -543,3 +543,34 @@
 :root[data-theme="halloween"] .mg-btns .btn-ico[data-act="redeem"] .gi {
   filter: drop-shadow(0 0 4px rgba(143, 240, 210, .85));
 }
+
+/* ------------------------------------------------- chat phòng online */
+/* Cùng nền với hộp thoại, vì khung chat hay nằm cạnh một hộp đang mở. Nút gửi
+   dùng tím chứ không dùng cam: cam bí ngô chỉ dành cho Lắc và Mua. */
+:root[data-theme="halloween"] #chat-btn {
+  background: var(--h-glass);
+  border-color: var(--h-line-strong);
+  color: var(--gold-light);
+}
+:root[data-theme="halloween"] #chat-btn:hover,
+:root[data-theme="halloween"] #chat-btn.on { border-color: var(--gold-light); }
+:root[data-theme="halloween"] .chat-badge { border-color: #0E0A16; }
+:root[data-theme="halloween"] #chat-peek,
+:root[data-theme="halloween"] #chat-dock {
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, .05), transparent 42%),
+    linear-gradient(180deg, #24163A 0%, #120B1D 100%);
+  border-color: var(--h-line-strong);
+}
+:root[data-theme="halloween"] #chat-dock { box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, .1); }
+:root[data-theme="halloween"] .chat-head,
+:root[data-theme="halloween"] .chat-form { border-color: var(--h-line); }
+:root[data-theme="halloween"] .chat-x:hover { background: rgba(183, 155, 224, .16); }
+:root[data-theme="halloween"] .chat-input { border-color: var(--h-line); background: rgba(8, 4, 14, .4); }
+:root[data-theme="halloween"] .chat-input:focus { border-color: var(--h-line-strong); }
+:root[data-theme="halloween"] .chat-send {
+  background: var(--h-violet);
+  border-color: var(--h-line-strong);
+  color: var(--gold-pale);
+}
+:root[data-theme="halloween"] .chat-note { color: var(--h-rose); }
