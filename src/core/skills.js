@@ -695,19 +695,16 @@ export function teleportTargets(st, p) {
 }
 
 /**
- * Thâu Tóm ép mua được ô này không. Không đụng bộ màu chủ đất đã có nhà, và
- * không đụng bộ màu chủ đất **đã gom đủ**: xây nhà, thuê gấp đôi đất trống và
- * điều kiện thắng đều cần đủ bộ, phá được bộ vừa đủ màu thì cả bàn không ai
- * dám gom bộ khi có người học ô này.
+ * Thâu Tóm ép mua được ô này không. Chỉ không đụng bộ màu chủ đất đã có nhà
+ * — cùng luật với Siết Nợ và thẻ Thâu Tóm (`GameState.groupHasHouses`). Bộ đủ
+ * màu mà chưa xây vẫn bị lấy được, nên gom đủ bộ rồi phải xây ngay mới giữ.
  */
 export function canSeize(st, p, tileId) {
   const owner = st.ownerOf(tileId);
   const t = BOARD[tileId];
   if (!owner || owner.id === p.id || !ready(p, 'dc3') || !t.ownable) return false;
   // Bến/ga, công ty không có bộ màu: ép mua được như đất lẻ
-  if (!t.color_group) return true;
-  if (st.groupBuilt(owner.id, t.color_group)) return false;
-  return !st.hasFullGroup(owner.id, t.color_group);
+  return !st.groupHasHouses(tileId);
 }
 
 /**

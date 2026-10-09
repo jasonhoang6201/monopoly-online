@@ -651,8 +651,8 @@ export const SKILLS = [
       { premium: 1.0, cooldown: 1 },
     ],
     grow: { by: 'uses', at: [1, 2], say: 'Thâu tóm {n} lần' },
-    short: 'Ép mua đất chưa xây nhà của người khác, trừ bộ đã đủ màu.',
-    effect: 'Dừng trên đất chưa có nhà, bến/ga hay công ty của người khác: mua lại với giá {%premium} giá gốc, chủ đất nhận tiền và không được từ chối. Không dùng được nếu chủ đất đã xây nhà trong bộ màu đó, hoặc đã gom đủ bộ màu đó. Dùng xong phải qua ô Bắt Đầu {cooldown} lần mới dùng lại được.',
+    short: 'Ép mua đất chưa xây nhà của người khác.',
+    effect: 'Dừng trên đất chưa có nhà, bến/ga hay công ty của người khác: mua lại với giá {%premium} giá gốc, chủ đất nhận tiền và không được từ chối. Không dùng được nếu chủ đất đã xây nhà trong bộ màu đó. Dùng xong phải qua ô Bắt Đầu {cooldown} lần mới dùng lại được.',
     lvText: 'Giá {%premium}, chờ {cooldown} lần',
   },
   {

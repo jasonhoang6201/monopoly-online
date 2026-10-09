@@ -1065,11 +1065,14 @@ const bal = await run(`
   const lone = K.leftoverOffers(s, me).some((x) => x.id === 39);
   a.pos = pos0; me.laps = 0;
 
-  // Thâu Tóm: không phá bộ đã đủ màu, ô lẻ và bến/ga thì được
+  // Thâu Tóm: bộ đủ màu chưa xây vẫn lấy được, ô lẻ và bến/ga cũng được, bộ có nhà thì không
   me.skills = ['dcS1', 'dc2a', 'dc3'];
   for (const id of [1, 3]) s.owner.set(id, a.id);            // bộ nâu đủ màu
   s.owner.set(6, a.id); s.owner.set(5, a.id);
   const seize = { full: K.canSeize(s, me, 1), lone: K.canSeize(s, me, 6), station: K.canSeize(s, me, 5) };
+  s.houses.set(3, 1);
+  seize.built = K.canSeize(s, me, 1);
+  s.houses.delete(3);
 
   // Xuyên Việt: không đáp xuống đất chưa có chủ
   me.skills = ['dh1', 'dh2a', 'dh3', 'dhU'];
@@ -1114,7 +1117,7 @@ const bal = await run(`
   return { earlySet, lateSet, lone, seize, tele, rent3, gains, poor, lien, miniFree, heldCd, staleCd };
 `);
 check(!bal.earlySet && bal.lateSet && bal.lone, `Nhặt Hàng Thừa: chưa qua ô Bắt Đầu 3 lần thì không nhặt ô làm đủ bộ; ô không làm đủ bộ vẫn nhặt (${JSON.stringify(bal)})`);
-check(!bal.seize.full && bal.seize.lone && bal.seize.station, `Thâu Tóm: không phá bộ đủ màu, ô lẻ và bến/ga thì được (${JSON.stringify(bal.seize)})`);
+check(bal.seize.full && bal.seize.lone && bal.seize.station && !bal.seize.built, `Thâu Tóm: bộ đủ màu chưa xây, ô lẻ, bến/ga lấy được; bộ có nhà thì không (${JSON.stringify(bal.seize)})`);
 check(!bal.tele.unowned && bal.tele.owned && bal.tele.go && !bal.tele.jail, `Xuyên Việt: không tới đất chưa có chủ, ô Vào Tù (${JSON.stringify(bal.tele)})`);
 check(bal.rent3 === 740 && bal.gains.ac2b === 34 && bal.gains.acS2 === 141,
   `thuê An Cư cộng dồn: 565$ × (1 + 6% + 25%) = 740$, mỗi kỹ năng ghi phần của mình (${bal.rent3}, ${JSON.stringify(bal.gains)})`);
