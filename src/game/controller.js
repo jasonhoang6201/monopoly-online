@@ -3072,7 +3072,7 @@ export class Game {
     /* Gửi nốt số liệu trước khi người chơi bấm gì: bản online sẽ rời trang
        ngay sau hộp này. Máy ngồi xem cũng gửi — nó có thể còn batch từ lúc
        chính nó cầm lái. */
-    await this.analytics.flushNow({ keepalive: true, timeoutMs: 1500 });
+    await this.analytics.flushNow({ keepalive: true, timeoutMs: 500 });
     const again = await winnerModal(this.state, winner);
 
     /* Ván online hạ màn thì phòng cũng hết việc: mã phòng cũ đã mang trạng

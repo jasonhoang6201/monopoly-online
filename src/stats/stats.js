@@ -195,7 +195,7 @@ const state = { data: null, minN: 3 };
 async function load() {
   const status = $('#status');
   if (!configured()) {
-    status.textContent = 'Chưa có khoá Supabase (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY) — trang này đọc số liệu từ đó.';
+    status.textContent = 'Chưa có khoá Supabase (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY), trang này đọc số liệu từ đó.';
     status.classList.add('err');
     return;
   }

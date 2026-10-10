@@ -1505,13 +1505,20 @@ export class SkillPlay {
         await this.bc(title('ddU'), `Ra ${d.sum}: ${named(p)} thắng! Mỗi người trả ${Math.round(win * 100)}% tiền mặt.`, { kind: 'trade', ms: 2800 });
         for (const q of others) {
           const n = Math.floor(q.money * win);
-          if (n > 0 && !q.bankrupt && await this.g.payPlayer(q.id, p.id, n)) tally(p, 'ddU', n);
+          if (n <= 0 || q.bankrupt) continue;
+          /* Ghi cả khi `payPlayer` trả false: con nợ vỡ nợ thì `coverDebt` cho
+             ngân hàng trả thay đủ `n`, người giữ Tất Tay vẫn nhận trọn. */
+          await this.g.payPlayer(q.id, p.id, n);
+          tally(p, 'ddU', n);
         }
       } else {
         const each = Math.floor(p.money * lose);
         await this.bc(title('ddU'), `Ra ${d.sum}: ${named(p)} thua, trả mỗi người <span class="down">${money(each)}</span>.`, { kind: 'bad', ms: 2800 });
         for (const q of others) {
-          if (each > 0 && !p.bankrupt && !q.bankrupt && await this.g.payPlayer(p.id, q.id, each)) tally(p, 'ddU', -each);
+          if (each <= 0 || p.bankrupt || q.bankrupt) continue;
+          // Vỡ nợ giữa chừng thì khoản này vẫn là cái giá của lần thua: ghi đủ `-each`
+          await this.g.payPlayer(p.id, q.id, each);
+          tally(p, 'ddU', -each);
         }
       }
     }

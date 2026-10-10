@@ -56,6 +56,8 @@ h3 { font-size: 15px; margin: 12px 0 6px; }
 .filters label.check { flex-direction: row; align-items: center; padding-bottom: 8px; }
 .filters input, .filters select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
   border-radius: 6px; padding: 6px 8px; min-width: 120px; }
+/* Không thì checkbox ăn luôn `min-width` ở trên, giãn 120px và đẩy chữ ra xa. */
+.filters input[type="checkbox"] { min-width: 0; margin: 0 6px 0 0; }
 .filters input[type="number"] { min-width: 70px; width: 80px; }
 .btn { font: inherit; font-weight: 600; background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer; }
 :root[data-theme="dark"] .btn { color: #1F1912; }
