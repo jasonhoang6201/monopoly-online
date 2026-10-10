@@ -2418,6 +2418,9 @@ html, body {
 }
 .name-row .seat-kind:hover { border-color: var(--gold-light); }
 .name-row .seat-kind.on { color: #1A0E08; background: var(--gold-light); border-color: var(--gold-light); }
+/* Ba cấp máy ba sắc: ngọc dễ, vàng vừa, son khó — nhìn hàng ghế là biết bàn nặng cỡ nào */
+.name-row .seat-kind.lv-easy { background: #7ED0A6; border-color: #7ED0A6; }
+.name-row .seat-kind.lv-hard { color: #FFF4E0; background: #C0392B; border-color: #E0604F; }
 .name-row .seat-kind:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
 
 /* Rules blurb */

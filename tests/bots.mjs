@@ -1,8 +1,9 @@
 /**
- * Chơi với máy: một người thật ngồi ghế 0, hai ghế còn lại giao cho bot.
+ * Chơi với máy: một người thật ngồi ghế 0, ghế 1 bot Khó, ghế 2 bot Dễ.
  *
  * Kiểm:
- *   1. Hộp bày bàn có nút 🙂 / 🤖 cho từng ghế, ghế máy đổi tên mặc định.
+ *   1. Hộp bày bàn có nút ghế xoay vòng Người → Dễ → Vừa → Khó, ghế máy đổi
+ *      tên mặc định, controller nhận đúng cấp từng ghế.
  *   2. Lượt của bot tự chạy hết — không ai bấm hộ hộp thoại nào của nó.
  *   3. Người thật học kỹ năng được **trong lượt bot** bằng nút cây kỹ năng ở
  *      hàng tiện ích, và hộp cây ấy không bị bot đóng hộ.
@@ -29,12 +30,25 @@ await page.locator('.count-btn[data-n="3"]').waitFor();
 
 console.log('▸ 1. Bày bàn');
 await page.locator('.count-btn[data-n="3"]').click();
-await page.locator('.seat-kind[data-b="1"]').click();
-await page.locator('.seat-kind[data-b="2"]').click();
-ok(await page.locator('.seat-kind.on').count() === 2, 'hai ghế bật 🤖 Máy');
+const kind = (i) => page.locator(`.seat-kind[data-b="${i}"]`);
+await kind(1).click();
+ok((await kind(1).textContent()).includes('Dễ'), 'bấm một lần: 🤖 Dễ');
+await kind(1).click();
+ok((await kind(1).textContent()).includes('Vừa'), 'bấm hai lần: 🤖 Vừa');
+await kind(1).click();
+ok((await kind(1).textContent()).includes('Khó'), 'bấm ba lần: 🤖 Khó');
+await kind(2).click();
+for (let k = 0; k < 4; k++) await kind(0).click();
+ok((await kind(0).textContent()).includes('Người'), 'bấm bốn lần: quay về 🙂 Người');
+ok(await page.locator('.seat-kind.on').count() === 2, 'hai ghế giao cho máy');
 ok(await page.locator('#name-list input').nth(1).inputValue() === 'Máy 2', 'ghế máy đổi tên mặc định thành "Máy 2"');
 await page.locator('#name-list input').nth(0).fill('Tôi');
 await page.getByRole('button', { name: 'Khai cuộc' }).click();
+await page.waitForFunction(() => window.__monopoly?.controller?.state);
+ok(await page.evaluate(() => {
+  const b = window.__monopoly.controller.bot;
+  return !b.is(0) && b.lv(1).key === 'hard' && b.lv(2).key === 'easy';
+}), 'controller nhận đúng cấp: ghế 1 Khó, ghế 2 Dễ');
 
 const S = () => page.evaluate(() => {
   const c = window.__monopoly?.controller;

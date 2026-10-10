@@ -2293,7 +2293,7 @@ export class Game {
     if (p.money >= amount) return true;
 
     // Bot xoay tiền theo đúng cách ngân hàng cấn nợ hộ: cầm đất rẻ trước, giữ nhà
-    if (this.bot.is(playerId)) return this.autoCover(playerId, amount, true);
+    if (this.bot.is(playerId)) return this.autoCover(playerId, amount, this.bot.raiser(playerId));
 
     // Con nợ ngồi máy khác → hỏi sang đó; ván gốc vẫn nằm lại máy này.
     if (this.net && playerId !== this.net.mySeat) {
@@ -2545,13 +2545,16 @@ export class Game {
    * Con nợ không trả lời kịp (hết giờ, rớt mạng) → ngân hàng cấn nợ hộ.
    *
    * Cùng thứ tự với `autoRaise` của thẻ Thời Cuộc: thế chấp ô rẻ nhất trước,
-   * giữ nhà tới cùng. Cấn hết mà vẫn thiếu thì mới tới cửa vỡ nợ.
+   * giữ nhà tới cùng. Cấn hết mà vẫn thiếu thì mới tới cửa vỡ nợ. Bot truyền
+   * `raiser` của nó vào để xoay theo luật riêng.
    * @returns {Promise<boolean>} false nếu đã phá sản
    */
-  async autoCover(playerId, amount, bot = false) {
+  async autoCover(playerId, amount, raiser = null) {
     const st = this.state;
     const p = st.players[playerId];
-    const { ok, mortgaged, sold } = autoRaise(st, playerId, amount);
+    // Bot xoay theo luật của cấp nó (core/botPolicy.js), không theo ngân hàng
+    const bot = !!raiser;
+    const { ok, mortgaged, sold } = (raiser ?? autoRaise)(st, playerId, amount);
     this.hud.refresh();
     this.scene.refresh(st);
     this.sync();

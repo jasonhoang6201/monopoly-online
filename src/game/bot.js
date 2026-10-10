@@ -1,27 +1,31 @@
 /**
- * Máy chơi thay một ghế — chỉ có ở bản một máy.
+ * Máy chơi thay một ghế — chỉ có ở bản một máy. Ba cấp Dễ / Vừa / Khó.
  *
  * Bot không có đường đi riêng qua luật: nó bấm đúng những nút người chơi bấm
  * (`takeRoll`, `payOutOfJail`, `endTurn`…) và trả lời đúng những câu hỏi người
  * chơi được hỏi. Nhờ vậy mọi luật, mọi kỹ năng, mọi hoạt cảnh chạy y như lượt
  * của người, không có bản luật thứ hai để lệch nhau.
  *
+ * Quyết định nằm ở core/botPolicy.js (mua, xây, tù, đấu giá, giao dịch, kỹ
+ * năng, xoay tiền) cùng phần dự đoán xí ngầu ở core/predict.js — thuần dữ
+ * liệu, để `npm run sim:bots` chơi cả nghìn ván bằng đúng bộ luật ấy mà chỉnh
+ * số. Tệp này chỉ nối luật ấy vào ván thật.
+ *
  * Ba cửa bot nhận việc:
  *   1. **Thanh nút** — `Game.setTurnActions` gặp ghế máy thì gọi `schedule`,
- *      bot tự chọn nước đi (lắc, ra tù, xây nhà, kết thúc lượt).
+ *      bot tự chọn nước đi (học kỹ năng, lo tài sản, hỏi mua đất, lắc…).
  *   2. **Câu hỏi có tên** — mua đất, đấu giá, chống đỡ thiên tai, duyệt giao
  *      dịch, xoay tiền: controller hỏi thẳng bot thay vì mở hộp thoại.
  *   3. **Hộp thoại còn lại** (Thâu Tóm, Tàu Tốc Hành, bóc thẻ…) — nhịp canh
  *      `tick` đóng hộ bằng lựa chọn mặc định, đúng đường hết giờ của bản online
  *      (`dismissTopModal`), sau một quãng đủ cho người ngồi xem kịp đọc.
- *
- * Luật quyết định lấy theo bot của tests/gamesim.mjs — đơn giản, ghi ngay cạnh
- * từng chỗ — để ván với bot cân như ván mô phỏng dùng đo kỹ năng.
  */
-import { BOARD, GROUP_TILES, JAIL_FINE, tileLabel } from '../data/board.js';
-import { SKILLS } from '../data/skills.js';
-import { canLearn, has, learnSkill, levelOf } from '../core/skills.js';
+import { BOARD, tileLabel } from '../data/board.js';
+import { has, skillById, levelOf, learnSkill } from '../core/skills.js';
+import * as BP from '../core/botPolicy.js';
 import { dismissTopModal, setHandoffSkip } from '../ui/modal.js';
+import { describe, tradeReviewModal } from '../ui/modals.js';
+import { litTiles } from '../ui/tilePicker.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -29,27 +33,20 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const STEP_MS = 650;
 /** Hộp thoại của bot nằm chừng này mới bị đóng hộ, để người ta kịp đọc. */
 const READ_MS = 1500;
-/** Mua đất xong phải còn chừng này tiền mặt (gamesim: "mua nếu còn dư 100$"). */
-const BUY_RESERVE = 100;
-/** Xây nhà xong phải còn chừng này (gamesim: 200$). */
-const BUILD_RESERVE = 200;
-/** Chuộc đất khi chuộc xong còn hơn chừng này (gamesim: 400$). */
-const REDEEM_RESERVE = 400;
-
-const NAMES = Object.fromEntries(SKILLS.map((s) => [s.id, s.name]));
-const BRANCH_KEYS = [...new Set(SKILLS.map((s) => s.branch))];
 
 export class Bot {
   /** @param {import('./controller.js').Game} game */
   constructor(game) {
     this.g = game;
-    /** Ghế giao cho máy. @type {Set<number>} */
-    this.seats = new Set();
-    /** Nhánh kỹ năng mỗi bot theo đuổi — chọn ngẫu nhiên lúc khai cuộc. */
-    this.branch = new Map();
+    /** Ghế → cấp (`LEVELS` của core/botPolicy.js). @type {Map<number, object>} */
+    this.levels = new Map();
+    /** Ghế → trí nhớ dài hạn của bot (nhánh / lối học) cho `nextSkill`. */
+    this.memo = new Map();
+    /** Ghế → ô đã hỏi mua ở lượt nào, để không hỏi đi hỏi lại. */
+    this.tried = new Map();
     /**
-     * Đang hỏi một **người** giữa lượt của bot (đấu giá, thiếu tiền, chống đỡ
-     * thiên tai): nhịp canh không được đóng hộ hộp của họ.
+     * Đang hỏi một **người** giữa lượt của bot (đấu giá, thiếu tiền, duyệt đề
+     * nghị bot gửi): nhịp canh không được đóng hộ hộp của họ.
      */
     this.humanAsks = 0;
     /** Lượt bot đã hẹn nước kế tiếp — chặn hẹn chồng hai lần. */
@@ -61,27 +58,32 @@ export class Bot {
 
   get st() { return this.g.state; }
 
-  /** Bày ván mới. `flags[i]` true là ghế i do máy chơi. */
-  reset(flags = []) {
-    this.seats = new Set(flags.flatMap((on, i) => (on ? [i] : [])));
-    this.branch = new Map([...this.seats].map((s) => [
-      s, BRANCH_KEYS[Math.floor(Math.random() * BRANCH_KEYS.length)],
-    ]));
+  /**
+   * Bày ván mới. `kinds[i]` là cấp của ghế i (`'easy' | 'normal' | 'hard'`),
+   * null là người.
+   */
+  reset(kinds = []) {
+    this.levels = new Map(kinds.flatMap((k, i) => (k ? [[i, BP.levelOfKey(k)]] : [])));
+    this.memo = new Map([...this.levels.keys()].map((s) => [s, {}]));
+    this.tried = new Map([...this.levels.keys()].map((s) => [s, new Map()]));
     this.humanAsks = 0;
     this.queued = false;
     this.home = null;
     const st = this.st;
-    const botNames = new Set(st.players.filter((p) => this.seats.has(p.id)).map((p) => p.name));
-    const humans = st.players.length - this.seats.size;
+    const botNames = new Set(st.players.filter((p) => this.levels.has(p.id)).map((p) => p.name));
+    const humans = st.players.length - this.levels.size;
     /* Chuyền máy chỉ có nghĩa giữa hai người thật cùng ngồi quanh máy: sang ghế
        máy thì không ai cầm, còn bàn một người thật thì chẳng có ai để chuyền. */
     setHandoffSkip(this.active ? (name) => humans <= 1 || botNames.has(name) : null);
   }
 
   /** Ván này có ghế máy không. Bản online không có bot. */
-  get active() { return this.seats.size > 0 && !this.g.net; }
+  get active() { return this.levels.size > 0 && !this.g.net; }
 
-  is(seat) { return this.active && this.seats.has(seat); }
+  is(seat) { return this.active && this.levels.has(seat); }
+
+  /** Cấp của ghế máy. */
+  lv(seat) { return this.levels.get(seat) ?? BP.LEVELS.normal; }
 
   /**
    * Ghế của người ngồi trước màn hình, khi ván có bot: người tới lượt nếu là
@@ -138,46 +140,37 @@ export class Bot {
     go();
   }
 
-  /** Một nước của bot: học kỹ năng, lo tài sản, rồi lắc hoặc kết thúc lượt. */
+  /** Một nước của bot: học kỹ năng, lo tài sản, hỏi mua đất, rồi lắc hoặc kết thúc lượt. */
   async step(p) {
     const st = this.st;
     const g = this.g;
+    const lv = this.lv(p.id);
     await this.learn(p);
 
     if (p.inJail) {
-      if (st.jailCardAt(p.id) >= 0) return g.useJailCard();
-      /* Đầu ván đất còn trống nhiều, ra sớm để mua; tiền dư thì nộp luôn cho
-         khỏi kẹt. Cuối ván bàn dày nhà thì ngồi tù lại là chỗ an toàn nhất. */
-      const crowded = [...st.houses.values()].reduce((n, h) => n + h, 0) >= 8;
-      // Khách Quen Nhà Đá ra tù không mất tiền thì chẳng có gì phải tính
-      const pay = has(p, 'cnX2') || (!crowded && p.money >= JAIL_FINE + 250);
-      return pay ? g.payOutOfJail() : g.rollInJail();
+      // Khách Quen Nhà Đá ra tù không mất tiền
+      const how = BP.jailChoice(st, p, lv, has(p, 'cnX2'));
+      if (how === 'card') return g.useJailCard();
+      if (how === 'pay') return g.payOutOfJail();
+      return g.rollInJail();
     }
 
     await this.manage(p);
+    if (!st.rolled) await this.propose(p);
+    if (st.over || p.bankrupt) return;
     if (st.rolled) return g.endTurn();
     return g.takeRoll(true);
   }
 
-  /**
-   * Tiêu điểm kỹ năng. Bot chỉ học kỹ năng tự động (`passive`): kỹ năng bấm
-   * để dùng cần người chọn đúng lúc, bot học vào là phí điểm. Ưu tiên nhánh đã
-   * chọn, mở ô mới trước khi nâng level.
-   */
+  /** Tiêu điểm kỹ năng theo cấp — xem `nextSkill` trong core/botPolicy.js. */
   async learn(p) {
     const st = this.st;
-    const pref = this.branch.get(p.id);
     const got = [];
     for (let n = 0; n < 12 && p.skillPoints > 0; n++) {
-      const pick = SKILLS
-        .filter((s) => s.kind === 'passive' && canLearn(p, s.id, st).ok)
-        .sort((a, b) => score(a) - score(b))[0];
-      if (!pick || !learnSkill(p, pick.id, st).ok) break;
-      const lv = levelOf(p, pick.id);
-      got.push(`<b>${NAMES[pick.id]}</b>${lv > 1 ? ` lên level ${lv}` : ''}`);
-    }
-    function score(s) {
-      return (s.branch === pref ? 0 : 100) + (levelOf(p, s.id) ? 10 : 0) + s.tier;
+      const id = BP.nextSkill(st, p, this.lv(p.id), this.memo.get(p.id));
+      if (!id || !learnSkill(p, id, st).ok) break;
+      const lv = levelOf(p, id);
+      got.push(`<b>${skillById(id).name}</b>${lv > 1 ? ` lên level ${lv}` : ''}`);
     }
     if (!got.length) return;
     this.g.hud.refresh();
@@ -185,105 +178,84 @@ export class Bot {
       `<b style="color:${p.token.css}">${p.name}</b> học ${got.join(', ')}.`, { ms: 2200 });
   }
 
-  /** Chuộc đất, rồi xây nhà ở ô lời nhất trên mỗi đồng bỏ ra (gamesim `manage`). */
+  /** Chuộc, cầm đất lấy vốn, xây nhà — rồi loan tin một lần cho cả loạt. */
   async manage(p) {
     const st = this.st;
     const g = this.g;
-    const words = [];
-    const touched = [];
-
-    for (const id of st.propertiesOf(p.id)) {
-      if (!st.isMortgaged(id) || p.money - BOARD[id].redeem <= REDEEM_RESERVE) continue;
-      if (!st.redeem(p.id, id).ok) continue;
-      words.push(`chuộc <b>${tileLabel(id)}</b>`);
-      touched.push(id);
-    }
-
-    for (let n = 0; n < 40; n++) {
-      const opts = st.propertiesOf(p.id)
-        .map((id) => ({ id, c: st.canBuild(p.id, id) }))
-        .filter((x) => x.c.ok && p.money - x.c.cost >= BUILD_RESERVE);
-      if (!opts.length) break;
-      const gain = (x) => (BOARD[x.id].rents[Math.min(5, st.housesOn(x.id) + 1)] - st.rentFor(x.id, 7)) / Math.max(1, x.c.cost);
-      opts.sort((a, b) => gain(b) - gain(a));
-      const res = st.build(p.id, opts[0].id);
-      if (!res.ok) break;
-      words.push(res.isHotel ? `lên khách sạn ở <b>${tileLabel(opts[0].id)}</b>` : `xây nhà ở <b>${tileLabel(opts[0].id)}</b>`);
-      touched.push(opts[0].id);
-      await g.skills.contractorNote(res.payouts);
-    }
-
-    if (!touched.length) return;
+    const acts = BP.manage(st, p, this.lv(p.id));
+    if (!acts.length) return;
+    const words = acts.map(({ act, id, res }) => {
+      const at = `<b>${tileLabel(id)}</b>`;
+      if (act === 'redeem') return `chuộc ${at}`;
+      if (act === 'mortgage') return `cầm ${at} lấy vốn`;
+      return res.isHotel ? `lên khách sạn ở ${at}` : `xây nhà ở ${at}`;
+    });
     g.hud.refresh();
     g.scene.refresh(st);
     g.hud.flashMoney(p.id, false);
     await g.bc.show('LO TÀI SẢN', `<b style="color:${p.token.css}">${p.name}</b> ${words.join(' · ')}.`, { ms: 2600 });
-    await g.spot([...new Set(touched)], 1400);
+    for (const { res } of acts) await g.skills.contractorNote(res.payouts);
+    await g.spot([...new Set(acts.map((a) => a.id))], 1400);
+  }
+
+  /**
+   * Bot hỏi mua ô còn thiếu của bộ (cấp có `propose`). Người thật nhận hộp
+   * duyệt y như đề nghị của người khác; bot khác duyệt bằng luật của nó.
+   */
+  async propose(p) {
+    const st = this.st;
+    const g = this.g;
+    const o = BP.proposeTrade(st, p, this.lv(p.id), this.tried.get(p.id));
+    if (!o) return;
+    const B = st.players[o.to];
+    const offer = { from: p.id, to: o.to, give: o.give, giveMoney: o.giveMoney, get: o.get, getMoney: o.getMoney };
+    await g.bc.show('ĐỀ NGHỊ GIAO DỊCH',
+      `<b style="color:${p.token.css}">${p.name}</b> đưa: ${describe(st, offer.give, offer.giveMoney)}
+       <br><b style="color:${B.token.css}">${B.name}</b> đưa: ${describe(st, offer.get, offer.getMoney)}`,
+      { kind: 'trade', ms: 3600 });
+    const accepted = this.is(B.id)
+      ? await this.reviewTrade(offer, B.id, p.id)
+      : await this.human(() => litTiles(g.scene, offer.get, () => tradeReviewModal(st, offer)));
+    // Soát lại trước khi chốt: hộp duyệt có thể nằm đó khá lâu
+    if (!accepted || p.bankrupt || B.bankrupt || p.money < offer.giveMoney
+      || offer.get.some((id) => st.owner.get(id) !== B.id)) {
+      await g.bc.show('TỪ CHỐI GIAO DỊCH',
+        `<b>${B.name}</b> không bán <b>${offer.get.map((id) => tileLabel(id)).join(', ')}</b> cho <b>${p.name}</b>.`,
+        { kind: 'bad', ms: 2600 });
+      return;
+    }
+    await g.executeTrade(offer, p, B);
   }
 
   /* ================================================================
      Trả lời câu hỏi
      ================================================================ */
 
-  /** Ô này giúp `seat` gom thêm vào bộ màu (hoặc chặn bộ của người khác). */
-  setValue(seat, tileId) {
-    const st = this.st;
-    const grp = BOARD[tileId].color_group;
-    const ids = grp ? GROUP_TILES[grp] : [];
-    if (!ids.length) return 0;
-    const mine = ids.filter((id) => st.owner.get(id) === seat).length;
-    const owners = new Set(ids.map((id) => st.owner.get(id)).filter((o) => o !== undefined && o !== seat));
-    if (mine === ids.length - 1) return 2;                      // mua là đủ bộ
-    if (owners.size === 1 && ids.filter((id) => st.owner.get(id) !== undefined && st.owner.get(id) !== seat).length === ids.length - 1) return 1;   // chặn bộ người khác
-    return mine ? 0.5 : 0;
-  }
-
   /** Dừng ở đất trống: mua không? */
   async buyChoice(p, tileId) {
     await wait(STEP_MS);
-    const price = BOARD[tileId].price;
-    const v = this.setValue(p.id, tileId);
-    const reserve = v >= 2 ? 0 : v >= 1 ? BUY_RESERVE / 2 : BUY_RESERVE;
-    return p.money - price >= reserve ? 'buy' : 'skip';
+    return BP.wantBuy(this.st, p, tileId, this.lv(p.id)) ? 'buy' : 'skip';
   }
 
-  /** Giá trị một ô, để cân giao dịch: giá gốc trừ nợ chuộc, nhà tính nửa giá xây. */
-  worth(id) {
-    const st = this.st;
-    const t = BOARD[id];
-    const base = st.isMortgaged(id) ? t.price - t.redeem : t.price;
-    const houses = st.housesOn(id) * (t.house_cost ?? 0) * 0.5;
-    return base + houses;
-  }
-
-  /**
-   * Duyệt đề nghị người khác gửi. `give` / `giveMoney` là phần bot nhận,
-   * `get` / `getMoney` là phần bot đưa. Chịu khi lời ít nhất 10% phần đưa đi,
-   * và không bao giờ đưa ô làm đối phương đủ bộ nếu không được trả thật đậm.
-   */
+  /** Duyệt đề nghị gửi tới bot. `fromSeat` là người gửi. */
   async reviewTrade(offer, seat, fromSeat) {
     const st = this.st;
-    const g = this.g;
     const me = st.players[seat];
-    await g.bc.show('CÂN NHẮC', `<b style="color:${me.token.css}">${me.name}</b> đang tính toán đề nghị…`, { kind: 'trade', ms: 1600 });
-    if (me.money < offer.getMoney) return false;
-    let gain = offer.giveMoney - offer.getMoney;
-    // Ô giúp mình đủ bộ đáng hơn giá gốc
-    for (const id of offer.give) gain += this.worth(id) * (this.setValue(seat, id) >= 2 ? 1.8 : 1);
-    let cost = 0;
-    for (const id of offer.get) {
-      // Ô cuối cùng đối phương cần để đủ bộ: đòi gấp đôi
-      cost += this.worth(id) * (this.setValue(fromSeat, id) >= 2 ? 2 : 1);
-    }
-    gain -= cost;
-    return gain >= Math.max(20, cost * 0.1);
+    await this.g.bc.show('CÂN NHẮC',
+      `<b style="color:${me.token.css}">${me.name}</b> đang tính toán đề nghị…`, { kind: 'trade', ms: 1600 });
+    return BP.acceptTrade(st, offer, seat, fromSeat, this.lv(seat));
   }
 
   /** Nhận đất đang thế chấp sau giao dịch: chuộc luôn nếu dư dả. */
   redeemChoice(seat, ids) {
     const p = this.st.players[seat];
     const total = ids.reduce((s, id) => s + BOARD[id].redeem, 0);
-    return p.money - total > 300 ? 'all' : null;
+    return p.money - total > this.lv(seat).redeemReserve ? 'all' : null;
+  }
+
+  /** Thiếu tiền: xoay theo luật của cấp (cấp có dự đoán giữ lại ô đang sinh lời). */
+  raiser(seat) {
+    return (st, s, need) => BP.raise(st, st.players[s], need, this.lv(seat));
   }
 
   /**
@@ -293,29 +265,18 @@ export class Bot {
   async answer(q) {
     const st = this.st;
     const p = st.players[q.seat];
+    const lv = this.lv(q.seat);
     await wait(STEP_MS);
     const lots = q.data?.lots ?? [];
-    const spare = (key) => {
-      const total = lots.reduce((s, l) => s + (l[key] ?? 0), 0);
-      return p.money - total >= 150;
-    };
+    // Chi tiền cứu nhà khi còn dư sau đó — Dễ giữ tiền chặt tay hơn
+    const spare = (key) => p.money - lots.reduce((s, l) => s + (l[key] ?? 0), 0) >= lv.buyReserve + 50;
     switch (q.name) {
       case 'ev-brace': return spare('brace') ? 'brace' : null;
       case 'ev-fire':
       case 'ev-snow': return spare('save') ? 'save' : null;
       case 'ev-zombie': return spare('cost') ? 'pay' : null;
-      case 'ev-bid': return this.bid(p, q.data.tileId);
+      case 'ev-bid': return BP.bidFor(st, p, q.data.tileId, lv);
       default: return q.fallback;
     }
-  }
-
-  /** Giá ghi kín cho một phiên đấu giá: quanh giá gốc, đẩy cao khi ô gom bộ. */
-  bid(p, tileId) {
-    const price = BOARD[tileId].price;
-    const v = this.setValue(p.id, tileId);
-    const mult = (v >= 2 ? 1.25 : v >= 1 ? 1 : 0.7) * (0.85 + Math.random() * 0.3);
-    const cap = p.money - BUY_RESERVE;
-    const n = Math.floor(Math.min(cap, price * mult) / 5) * 5;
-    return Math.max(0, n);
   }
 }

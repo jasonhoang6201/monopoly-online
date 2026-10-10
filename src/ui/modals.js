@@ -23,6 +23,7 @@ import { paintSkeletonToken } from '../render/pieces.js';
 import { raisePlan } from '../core/raisePlan.js';
 import { has, param, skillById, ownerRentParts, ownerRentFlat, lateFee } from '../core/skills.js';
 import { modLabel } from '../core/events.js';
+import { LEVELS, LEVEL_KEYS } from '../core/botPolicy.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -54,9 +55,12 @@ export function setupModal() {
   const counts = Array.from({ length: MAX_PLAYERS - 1 }, (_, i) => i + 2);   // 2…6
   /** Màu quân từng chỗ ngồi. Mặc định là sáu sắc đầu bảng, bấm chấm màu để đổi. */
   const picks = Array.from({ length: MAX_PLAYERS }, (_, i) => i);
-  /** Ghế nào giao cho máy chơi. Mặc định ghế đầu là người, các ghế sau cũng là
+  /** Ghế nào giao cho máy chơi, cấp nào (`null` là người). Mặc định cả bàn là
       người — bàn ngồi quanh một máy vẫn là kiểu chơi quen nhất. */
-  const bots = Array.from({ length: MAX_PLAYERS }, () => false);
+  const bots = Array.from({ length: MAX_PLAYERS }, () => null);
+  /** Bấm nút ghế: Người → Máy Dễ → Vừa → Khó → Người. */
+  const KINDS = [null, ...LEVEL_KEYS];
+  const kindLabel = (k) => (k ? `🤖 ${LEVELS[k].name}` : '🙂 Người');
 
   /**
    * Bấm chấm màu: nhảy tới sắc kế tiếp chưa ai trong bàn giữ, vòng hết bảng
@@ -87,7 +91,7 @@ export function setupModal() {
     eyebrow: 'CỜ TỶ PHÚ · SÀI GÒN – GIA ĐỊNH',
     title: 'Bày bàn cờ',
     sub: `Từ 2 đến ${MAX_PLAYERS} người, mỗi người bắt đầu với ${money(START_MONEY)}.
-          Chơi luân phiên trên cùng một máy; bấm 🙂 / 🤖 để giao ghế cho máy chơi.`,
+          Chơi luân phiên trên cùng một máy; bấm 🙂 để giao ghế cho máy (Dễ · Vừa · Khó).`,
     dismissible: false, // chưa bày xong bàn thì không có gì để quay về
     peekable: false,    // ván chưa mở, ngó bàn cờ cũng chẳng thấy gì
     body: '<div id="setup-inner"></div>',
@@ -138,9 +142,9 @@ export function setupModal() {
                       aria-label="Đổi màu quân của người chơi ${i + 1}"></button>
               <input type="text" maxlength="14" value="${esc(n)}" data-i="${i}" />
               <span style="font-size:11px;opacity:.6">${TOKENS[picks[i]].name}</span>
-              <button type="button" class="seat-kind ${bots[i] ? 'on' : ''}" data-b="${i}"
-                      title="${bots[i] ? 'Máy chơi ghế này — bấm để giao lại cho người' : 'Người chơi ghế này — bấm để giao cho máy'}"
-                      aria-pressed="${bots[i]}">${bots[i] ? '🤖 Máy' : '🙂 Người'}</button>
+              <button type="button" class="seat-kind ${bots[i] ? `on lv-${bots[i]}` : ''}" data-b="${i}"
+                      title="Bấm để đổi: Người → Máy Dễ → Vừa → Khó"
+                      aria-label="Ghế ${i + 1}: ${bots[i] ? `máy, cấp ${LEVELS[bots[i]].name}` : 'người chơi'}">${kindLabel(bots[i])}</button>
             </div>`).join('');
 
           list.querySelectorAll('input').forEach((inp) => {
@@ -152,7 +156,7 @@ export function setupModal() {
           list.querySelectorAll('.seat-kind').forEach((b) => {
             b.addEventListener('click', () => {
               const i = +b.dataset.b;
-              bots[i] = !bots[i];
+              bots[i] = KINDS[(KINDS.indexOf(bots[i]) + 1) % KINDS.length];
               /* Tên mặc định đổi theo cho dễ nhận ra ghế máy trên bàn; tên
                  người chơi đã tự gõ thì giữ nguyên. */
               if (names[i] === `Người chơi ${i + 1}` && bots[i]) names[i] = `Máy ${i + 1}`;
