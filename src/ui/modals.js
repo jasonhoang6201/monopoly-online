@@ -54,6 +54,9 @@ export function setupModal() {
   const counts = Array.from({ length: MAX_PLAYERS - 1 }, (_, i) => i + 2);   // 2…6
   /** Màu quân từng chỗ ngồi. Mặc định là sáu sắc đầu bảng, bấm chấm màu để đổi. */
   const picks = Array.from({ length: MAX_PLAYERS }, (_, i) => i);
+  /** Ghế nào giao cho máy chơi. Mặc định ghế đầu là người, các ghế sau cũng là
+      người — bàn ngồi quanh một máy vẫn là kiểu chơi quen nhất. */
+  const bots = Array.from({ length: MAX_PLAYERS }, () => false);
 
   /**
    * Bấm chấm màu: nhảy tới sắc kế tiếp chưa ai trong bàn giữ, vòng hết bảng
@@ -84,7 +87,7 @@ export function setupModal() {
     eyebrow: 'CỜ TỶ PHÚ · SÀI GÒN – GIA ĐỊNH',
     title: 'Bày bàn cờ',
     sub: `Từ 2 đến ${MAX_PLAYERS} người, mỗi người bắt đầu với ${money(START_MONEY)}.
-          Chơi luân phiên trên cùng một máy.`,
+          Chơi luân phiên trên cùng một máy; bấm 🙂 / 🤖 để giao ghế cho máy chơi.`,
     dismissible: false, // chưa bày xong bàn thì không có gì để quay về
     peekable: false,    // ván chưa mở, ngó bàn cờ cũng chẳng thấy gì
     body: '<div id="setup-inner"></div>',
@@ -135,6 +138,9 @@ export function setupModal() {
                       aria-label="Đổi màu quân của người chơi ${i + 1}"></button>
               <input type="text" maxlength="14" value="${esc(n)}" data-i="${i}" />
               <span style="font-size:11px;opacity:.6">${TOKENS[picks[i]].name}</span>
+              <button type="button" class="seat-kind ${bots[i] ? 'on' : ''}" data-b="${i}"
+                      title="${bots[i] ? 'Máy chơi ghế này — bấm để giao lại cho người' : 'Người chơi ghế này — bấm để giao cho máy'}"
+                      aria-pressed="${bots[i]}">${bots[i] ? '🤖 Máy' : '🙂 Người'}</button>
             </div>`).join('');
 
           list.querySelectorAll('input').forEach((inp) => {
@@ -142,6 +148,17 @@ export function setupModal() {
           });
           list.querySelectorAll('.dot[data-c]').forEach((b) => {
             b.addEventListener('click', () => { nextColor(+b.dataset.c); renderNames(); });
+          });
+          list.querySelectorAll('.seat-kind').forEach((b) => {
+            b.addEventListener('click', () => {
+              const i = +b.dataset.b;
+              bots[i] = !bots[i];
+              /* Tên mặc định đổi theo cho dễ nhận ra ghế máy trên bàn; tên
+                 người chơi đã tự gõ thì giữ nguyên. */
+              if (names[i] === `Người chơi ${i + 1}` && bots[i]) names[i] = `Máy ${i + 1}`;
+              else if (names[i] === `Máy ${i + 1}` && !bots[i]) names[i] = `Người chơi ${i + 1}`;
+              renderNames();
+            });
           });
         };
         renderNames();
@@ -166,13 +183,17 @@ export function setupModal() {
         close({
           names: names.slice(0, count).map((n, i) => (n.trim() || `Người chơi ${i + 1}`)),
           tokens: picks.slice(0, count),
+          bots: bots.slice(0, count),
           settings: { events, theme },
         });
       }, { once: true, capture: true });
     },
   }).then((v) => (v?.names
     ? v
-    : { names: names.slice(0, count), tokens: picks.slice(0, count), settings: { events, theme } }));
+    : {
+      names: names.slice(0, count), tokens: picks.slice(0, count),
+      bots: bots.slice(0, count), settings: { events, theme },
+    }));
 }
 
 /* ==================================================================
@@ -1153,6 +1174,7 @@ export function tileModal(state, tileId, viewerSeat = -1) {
     </div>`;
 
   return openModal({
+    manual: true,   // người chơi tự mở để xem — bot cầm lái không đóng hộ
     eyebrow: `Ô SỐ ${tileId} · ${TYPE_LABEL[t.type].toUpperCase()}`,
     title: esc(t.name.split(' (')[0]),
     sub: t.current_name ? esc(t.current_name) : null,
@@ -1246,6 +1268,7 @@ export function playerModal(state, playerId) {
     <div class="ppane ppane-skills" data-pane="skills" hidden></div>`;
 
   return openModal({
+    manual: true,   // người chơi tự mở để xem — bot cầm lái không đóng hộ
     eyebrow: 'BẢNG TÀI SẢN',
     title: esc(p.name),
     sub: 'Bấm vào một thẻ đất để xem chi tiết ô đó.',

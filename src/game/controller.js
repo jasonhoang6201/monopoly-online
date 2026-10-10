@@ -21,6 +21,7 @@ import { cardOf, CARD_KINDS, cardName, cardEffect, DECKS } from '../data/cards.j
 import { inventoryModal } from '../ui/inventory.js';
 import { EventRunner } from './eventRunner.js';
 import { SkillPlay } from './skillPlay.js';
+import { Bot } from './bot.js';
 import { has, offSpent, grantLapPoint } from '../core/skills.js';
 import { snapshot, fromSnapshot, applySnapshot } from '../core/serialize.js';
 import { Hud, Broadcast } from '../ui/hud.js';
@@ -93,6 +94,8 @@ export class Game {
     this.events = new EventRunner(this);
     /** Kỹ năng trong lượt chơi — xem `game/skillPlay.js`. */
     this.skills = new SkillPlay(this);
+    /** Ghế giao cho máy chơi (bản một máy) — xem `game/bot.js`. */
+    this.bot = new Bot(this);
     /** Phòng online, hoặc null khi cả bàn ngồi chung một máy. */
     this.net = null;
     /**
@@ -213,9 +216,13 @@ export class Game {
     // Nhạc nền chỉ sống ở màn hình chờ; khai cuộc xong là nhường chỗ
     // cho tiếng xí ngầu và tiếng quân cờ.
     audio.startMusic();
-    const { names, tokens, settings } = await setupModal();
+    const { names, tokens, bots, settings } = await setupModal();
     audio.stopMusic();
     this.state = new GameState(names, tokens ?? null, settings);
+    this.bot.reset(bots);
+    /* Có bot thì người ngồi trước màn hình học kỹ năng được cả lúc máy đang
+       đi, y như bản online — nút cây kỹ năng ở hàng tiện ích mở cho ghế ấy. */
+    if (this.skillBtn) this.skillBtn.hidden = !this.bot.active;
     /* Hộp bày bàn đã áp chủ đề lúc người chơi chọn; gọi lại theo `settings`
        đã chốt cho chắc, trước khi dựng quân cờ (quân đội mũ theo chủ đề). */
     applyTheme(this.state.settings.theme);
@@ -429,6 +436,7 @@ export class Game {
    */
   async askRollOff(seat, rolls) {
     const st = this.state;
+    if (this.bot.is(seat)) { await wait(500); return; }
     if (!this.net || seat === this.net.mySeat) {
       if (this.net) audio.sfx('turn');
       await rollOffModal(st, seat, rolls, this.net ? this.tradeMs : 0);
@@ -510,7 +518,7 @@ export class Game {
   }
 
   /** Ghế của mình trong ván (−1 khi chơi một máy). */
-  get mySeat() { return this.net ? this.net.mySeat : -1; }
+  get mySeat() { return this.net ? this.net.mySeat : this.bot.homeSeat(); }
 
   /**
    * Meme thả ra thì bong bóng hiện trên đầu ai.
@@ -520,7 +528,10 @@ export class Game {
    * lời hợp lý: người đang tới lượt.
    */
   memeSeat() {
-    return this.net ? this.net.mySeat : (this.state?.turn ?? -1);
+    if (this.net) return this.net.mySeat;
+    // Bàn có bot: bàn phím là của người thật, kể cả lúc máy đang đi
+    if (this.bot.active) return this.bot.homeSeat();
+    return this.state?.turn ?? -1;
   }
 
   /**
@@ -1181,6 +1192,13 @@ export class Game {
     st.rolled = rolled;
     this.refreshSkillBtn();
 
+    // Ghế máy: không bày nút, bot tự chọn nước đi
+    if (this.bot.is(p.id)) {
+      this.hud.clearActions();
+      this.bot.schedule();
+      return;
+    }
+
     /* Thanh nút bày ra lại nghĩa là người này vừa làm xong một việc — cho họ
        trọn hạn mới. Nhờ đặt ở đây mà lắc xong, đóng hộp thoại xong, đổi lượt…
        đều được tính là còn sống, không phải rắc lời gọi khắp nơi. */
@@ -1518,7 +1536,7 @@ export class Game {
           `<b>${p.name}</b> dừng ở <b>${tileLabel(t.id)}</b> nhưng chỉ có ${money(p.money)}.`, { ms: 2600 });
         return;
       }
-      const choice = await buyModal(t.id, p);
+      const choice = this.bot.is(p.id) ? await this.bot.buyChoice(p, t.id) : await buyModal(t.id, p);
       if (choice === 'buy') {
         audio.sfx('buy');
         st.buy(p.id, t.id);
@@ -2274,6 +2292,9 @@ export class Game {
     await this.skills.insure(p, amount);
     if (p.money >= amount) return true;
 
+    // Bot xoay tiền theo đúng cách ngân hàng cấn nợ hộ: cầm đất rẻ trước, giữ nhà
+    if (this.bot.is(playerId)) return this.autoCover(playerId, amount, true);
+
     // Con nợ ngồi máy khác → hỏi sang đó; ván gốc vẫn nằm lại máy này.
     if (this.net && playerId !== this.net.mySeat) {
       return this.ensureFundsRemote(playerId, amount);
@@ -2290,7 +2311,7 @@ export class Game {
       await handoff(p.name, p.token.css,
         `${p.name} đang thiếu tiền. Chuyền máy cho họ bán nhà hoặc thế chấp.`);
     }
-    const { bankrupt } = await this.runRaise(playerId, amount);
+    const { bankrupt } = await this.bot.human(() => this.runRaise(playerId, amount));
     if (relay) {
       const cur = st.players[st.turn];
       await handoff(cur.name, cur.token.css, `Xong. Chuyền máy lại cho ${cur.name}.`);
@@ -2527,7 +2548,7 @@ export class Game {
    * giữ nhà tới cùng. Cấn hết mà vẫn thiếu thì mới tới cửa vỡ nợ.
    * @returns {Promise<boolean>} false nếu đã phá sản
    */
-  async autoCover(playerId, amount) {
+  async autoCover(playerId, amount, bot = false) {
     const st = this.state;
     const p = st.players[playerId];
     const { ok, mortgaged, sold } = autoRaise(st, playerId, amount);
@@ -2537,8 +2558,10 @@ export class Game {
 
     if (mortgaged.length || sold.length) {
       const gone = [...mortgaged, ...sold].map((id) => tileLabel(id));
-      await this.bc.show('CẤN NỢ',
-        `<b>${p.name}</b> chưa xoay tiền. Ngân hàng cấn nợ hộ cho đủ
+      await this.bc.show(bot ? 'XOAY TIỀN' : 'CẤN NỢ',
+        bot
+          ? `<b>${p.name}</b> xoay cho đủ <span class="down">${money(amount)}</span>: ${gone.join(' · ')}.`
+          : `<b>${p.name}</b> chưa xoay tiền. Ngân hàng cấn nợ hộ cho đủ
          <span class="down">${money(amount)}</span>: ${gone.join(' · ')}.`,
         { kind: 'bad', ms: 3600 });
       await this.spot([...mortgaged, ...sold]);
@@ -2792,7 +2815,10 @@ export class Game {
        online thì bên B ngồi máy khác, phải hỏi sang đó rồi chờ họ bấm. Bên B
        rớt mạng giữa chừng thì `ask` trả về `false` chứ không treo lượt của A. */
     let accepted;
-    if (this.net) {
+    if (this.bot.is(B.id)) {
+      accepted = await litTiles(this.scene, offerTiles(offer),
+        () => this.bot.reviewTrade(offer, B.id, A.id));
+    } else if (this.net) {
       await this.bc.show('CHỜ TRẢ LỜI',
         `Đang chờ <b>${B.name}</b> xem xét đề nghị…`, { kind: 'trade', ms: 3000 });
       /* Đồng hồ chuyển sang B — giờ cả bàn chờ họ, không chờ A nữa. Hạn của B
@@ -2824,7 +2850,7 @@ export class Game {
       addPressure(st, PRESSURE.tradeRefused);
       await this.bc.show('TỪ CHỐI GIAO DỊCH',
         `<b>${B.name}</b> không đồng ý với đề nghị của <b>${A.name}</b>.`, { kind: 'bad', ms: 4200 });
-      if (!this.net) {
+      if (!this.net && !this.bot.is(B.id)) {
         await handoff(A.name, A.token.css, `Đề nghị bị từ chối. Chuyền máy lại cho ${A.name}.`);
       }
       this.restoreActions();
@@ -2837,19 +2863,19 @@ export class Game {
        cũng bị gạch, lúc ấy đất đem đổi đã về ngân hàng cả rồi. */
     if (A.bankrupt || B.bankrupt) {
       await this.bc.show('GIAO DỊCH HỎNG', 'Một bên đã rời bàn trước khi chốt.', { kind: 'bad' });
-      if (!this.net) await handoff(A.name, A.token.css);
+      if (!this.net && !this.bot.is(B.id)) await handoff(A.name, A.token.css);
       this.restoreActions();
       return;
     }
     if (A.money < offer.giveMoney || B.money < offer.getMoney) {
       await this.bc.show('GIAO DỊCH HỎNG', 'Một bên không còn đủ tiền mặt như đã đề nghị.', { kind: 'bad' });
-      if (!this.net) await handoff(A.name, A.token.css);
+      if (!this.net && !this.bot.is(B.id)) await handoff(A.name, A.token.css);
       this.restoreActions();
       return;
     }
 
     await this.executeTrade(offer, A, B);
-    if (!this.net) {
+    if (!this.net && !this.bot.is(B.id)) {
       await handoff(A.name, A.token.css, `Giao dịch xong. Chuyền máy lại cho ${A.name} tiếp tục lượt.`);
     }
     this.restoreActions();
@@ -2906,7 +2932,9 @@ export class Game {
     const p = st.players[playerId];
 
     let choice;
-    if (this.net && playerId !== this.net.mySeat) {
+    if (this.bot.is(playerId)) {
+      choice = this.bot.redeemChoice(playerId, ids);
+    } else if (this.net && playerId !== this.net.mySeat) {
       await this.bc.show('CHỜ TRẢ LỜI',
         `Đang chờ <b>${p.name}</b> quyết định có chuộc ${ids.length} ô vừa nhận không…`,
         { kind: 'trade', ms: 2600 });
@@ -2918,7 +2946,8 @@ export class Game {
         await handoff(p.name, p.token.css,
           `${p.name} vừa nhận đất đang thế chấp. Chuyền máy cho họ quyết định.`);
       }
-      choice = await litTiles(this.scene, ids, () => redeemPromptModal(st, playerId, ids));
+      choice = await this.bot.human(
+        () => litTiles(this.scene, ids, () => redeemPromptModal(st, playerId, ids)));
     }
 
     const total = ids.reduce((s, id) => s + BOARD[id].redeem, 0);

@@ -288,6 +288,7 @@ export function caseOpenModal(kind, card, pool, o = {}) {
     dismissible: false,
     peekable: false,
     yieldToNext: o.yieldToNext,
+    manual: o.manual,
     enter: false,                       // Enter chỉ mở khoá sau khi dải dừng
     buttons: o.buttons ?? [{
       label: o.label ?? 'Nhận thẻ',
@@ -500,6 +501,9 @@ export function eventCase(card, o = {}) {
   return caseOpenModal('event', card, inTheme(EVENTS), {
     yieldToNext: true,
     dismissAfter: true,
+    /* Thẻ Thời Cuộc không chặn mạch sự kiện, nên bot cầm lái không cần đóng
+       hộ — để người ngồi xem đọc cho hết các dòng áp dụng. */
+    manual: true,
     ...o,
     faceHtml: eventCardBody(card, o.detail ?? ''),
     buttons: [{ label: o.label ?? 'Đã rõ', value: true, cls: 'btn-gold' }],

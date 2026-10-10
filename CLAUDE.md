@@ -36,6 +36,7 @@ src/
   game/controller.js     điều phối lượt chơi, nối luật ↔ hình ảnh ↔ giao diện
   game/eventRunner.js    thi hành thẻ Thời Cuộc, hỏi nhiều người cùng lúc
   game/skillPlay.js      phần kỹ năng phải hỏi người chơi hoặc có hoạt cảnh
+  game/bot.js            máy chơi thay một ghế (chỉ bản một máy)
   scenes/BoardScene.js   Phaser: bàn cờ, quân, xí ngầu
   render/                hình học bàn cờ, hoa văn, biểu tượng, quân cờ, trang trí theo mùa
   ui/                    HUD, hộp thoại, bảng xem nhanh, cây kỹ năng (HTML phủ lên canvas)

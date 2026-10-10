@@ -2409,6 +2409,16 @@ html, body {
   font-family: var(--serif); font-size: 15px; color: var(--paper);
 }
 .name-row input::placeholder { color: var(--paper-deep); opacity: .45; }
+.name-row .seat-kind {
+  flex: none; padding: 3px 9px; border-radius: 999px; cursor: pointer;
+  font: 600 11.5px var(--sans); white-space: nowrap;
+  color: var(--paper-warm); background: transparent;
+  border: 1px solid rgba(200, 160, 72, .35);
+  transition: background .14s, border-color .14s, color .14s;
+}
+.name-row .seat-kind:hover { border-color: var(--gold-light); }
+.name-row .seat-kind.on { color: #1A0E08; background: var(--gold-light); border-color: var(--gold-light); }
+.name-row .seat-kind:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 2px; }
 
 /* Rules blurb */
 .rules { font-size: 12.5px; line-height: 1.75; color: var(--paper-warm); }
@@ -3579,6 +3589,7 @@ html, body {
   .name-row { gap: 7px; padding: 4px 9px; margin-bottom: 0; }
   .name-row .dot { width: 18px; height: 18px; }
   .name-row input { font-size: 13px; }
+  .name-row .seat-kind { padding: 2px 7px; font-size: 10.5px; }
   .handoff { padding: 4px 0; }
   .handoff-eye { font-size: 30px; margin-bottom: 7px; }
   .handoff-name { font-size: 17px; }
