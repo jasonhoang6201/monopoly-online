@@ -80,15 +80,23 @@ const g1 = await playGame({ winnerSeat: 0, respecSeat0: false });
 console.log('sau ván 1:', JSON.stringify({ g: rowsByTable.games.length, p: rowsByTable.game_players.length, e: rowsByTable.skill_events.length, queue: a.queue.length, buffer: a.buffer.length }));
 clock += 3600_000;
 const g2 = await playGame({ winnerSeat: 1, respecSeat0: true });
+// Ván 3 bỏ dở: chỉ có 'start' và vài sự kiện, không có game_players — A học cn1 rồi thôi
+clock += 3600_000;
+const g3 = new S.GameState(['A', 'B', 'C']);
+g3.startedAt = clock; telemetry.now = () => clock;
+telemetry.start({ startedAt: g3.startedAt, gate: () => true, ctx: () => ({ game_id: g3.gameId, turn_no: 0, round: 1, turn: 0 }), onPush: (e) => a.push(e) });
+a.gameStart(g3, 'online');
+K.onLap(g3.players[0]); K.learnSkill(g3.players[0], 'cn1', g3); clock += 5000;
+await a.flush(); telemetry.stop();
 console.log('sau ván 2:', JSON.stringify({ g: rowsByTable.games.length, p: rowsByTable.game_players.length, e: rowsByTable.skill_events.length, queue: a.queue.length, buffer: a.buffer.length, tm: telemetry.size }));
 await vite.close();
 
-check('đã gom dòng: 4 games, 6 game_players, nhiều skill_events',
-  rowsByTable.games.length === 4 && rowsByTable.game_players.length === 6 && rowsByTable.skill_events.length > 40,
+check('đã gom dòng: 5 games (2 ván đủ start+end, 1 ván dở), 6 game_players, nhiều skill_events',
+  rowsByTable.games.length === 5 && rowsByTable.game_players.length === 6 && rowsByTable.skill_events.length > 40,
   JSON.stringify({ g: rowsByTable.games.length, p: rowsByTable.game_players.length, e: rowsByTable.skill_events.length }));
 
 /* ------------------------------------------------------------- bơm vào Postgres như anon */
-const ids = [g1.gameId, g2.gameId].map((x) => `'${x}'`).join(',');
+const ids = [g1.gameId, g2.gameId, g3.gameId].map((x) => `'${x}'`).join(',');
 /* Dọn mọi ván của ngày mẫu (2026-10-01) còn sót từ lần chạy dở trước — đây là DB dev, không phải DB thật. */
 const wipe = () => sql(`with g as (select game_id from public.games where started_at >= '2026-10-01' and started_at < '2026-10-02')
   delete from public.skill_events where game_id in (select game_id from g);
@@ -111,7 +119,7 @@ catch (e) { check('chèn lại dòng cũ → trùng khoá (23505)', /duplicate k
 /* ------------------------------------------------------------- soi số liệu (lọc theo 2 ván này) */
 const F = `'2026-10-01T00:00:00Z','2026-10-02T00:00:00Z'`;
 const games = sqlJson(`select to_jsonb(array_agg(g)) from (select * from public.v_games where game_id in (${ids}) order by started_at) g`, { role: 'anon' });
-check('v_games: 2 ván đã xong, duration đúng, win_by last', games.length === 2 && games.every((g) => g.finished && g.win_by === 'last') && games[0].duration_s > 100,
+check('v_games: 2 ván đã xong (duration, win_by last) + 1 ván dở', games.length === 3 && games.slice(0, 2).every((g) => g.finished && g.win_by === 'last') && games[0].duration_s > 100 && games[2].finished === false,
   JSON.stringify(games.map((g) => [g.finished, g.win_by, g.duration_s])));
 
 const ov = sqlJson(`select stats_overview(${F})`, { role: 'anon' });
@@ -139,6 +147,14 @@ const bb = Object.fromEntries(br.map((b) => [b.branch, b]));
 check('stats_branches: 5 nhánh; congnhan 2 người-ván, doden 2, duhanh 3 (B ×2 + A sau tẩy), ancu 0',
   br.length === 5 && bb.congnhan.n_picked === 2 && bb.doden.n_picked === 2 && bb.duhanh.n_picked === 3 && bb.ancu.n_picked === 0, JSON.stringify(br.map((b) => [b.branch, b.n_picked])));
 check('doden: delta_total 120', bb.doden.delta_total === 120);
+check('nhánh chưa ai học: win_rate_with null chứ không phải 0', bb.ancu.win_rate_with === null && bb.ancu.n_with === 0, JSON.stringify([bb.ancu.win_rate_with, bb.ancu.n_with]));
+// Kể cả ván bỏ dở (p_finished=false): người-ván không có hạng không được tính là thua
+const brAll = Object.fromEntries(sqlJson(`select to_jsonb(array_agg(b)) from stats_branches(${F}, null, null, false) b`, { role: 'anon' }).map((b) => [b.branch, b]));
+check('p_finished=false: congnhan có 3 người-ván học nhưng chỉ 2 có hạng → n_with 2, win_rate_with 0.5, win_rate_main không tụt',
+  brAll.congnhan.n_picked === 3 && brAll.congnhan.n_with === 2 && Number(brAll.congnhan.win_rate_with) === 0.5 && Number(brAll.congnhan.win_rate_main) === 1,
+  JSON.stringify([brAll.congnhan.n_picked, brAll.congnhan.n_with, brAll.congnhan.win_rate_with, brAll.congnhan.win_rate_main]));
+const ovAll = sqlJson(`select stats_overview(${F}, null, null, false)`, { role: 'anon' });
+check('p_finished=false: 3 ván, 2 đã xong', ovAll.n_games === 3 && ovAll.n_finished === 2);
 
 const rs = sqlJson(`select stats_respec(${F})`, { role: 'anon' });
 check('stats_respec: 1 lần, tẩy cn1 lv2, học lại dh1', rs.n_respec === 1 && rs.wiped[0].skill_id === 'cn1' && rs.relearned[0].skill_id === 'dh1', JSON.stringify(rs));

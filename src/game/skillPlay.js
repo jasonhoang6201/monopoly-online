@@ -12,7 +12,7 @@ import {
   skillById, has, param, roll, rolled, ready, usesLeft, spend, onLap, levyRate, levyEach, levelOf,
   freeHouseTarget, credit, rentGains, lateFee, lottoPrize, tollStops, forecloseOffers,
   tourPassed, leftoverOffers, isOff, setSkillOn, learnSkill, switchable, canSeize,
-  teleportTargets, tally,
+  teleportTargets, tally, recordLearn,
 } from '../core/skills.js';
 import { cardType, isKeepable, moveDest, repairBill } from '../core/cards.js';
 import { cardName, cardEffect, CARD_KINDS, DECK_META } from '../data/cards.js';
@@ -729,11 +729,18 @@ export class SkillPlay {
     if (!this.learnPending.length) return;
     const p = this.st.players[this.g.mySeat];
     const now = Date.now();
+    const driver = this.g.isDriver();
     this.learnPending = this.learnPending.filter((x) => {
       if (!p || p.bankrupt || now - x.t0 > 20000) return false;
       const lv = levelOf(p, x.id);
-      if (lv >= x.level) return false;
-      if (lv !== x.level - 1 || !learnSkill(p, x.id, this.st).ok) return false;
+      if (lv >= x.level) {
+        /* Máy mình vừa thành máy cầm lái mà ô này còn chờ xác nhận: lần học
+           trên bản sao (lúc cổng ghi tắt) giờ là lần học thật, ghi bù kẻo số
+           liệu thiếu một dòng `learn` trong khi cây cuối ván vẫn có ô. */
+        if (driver) recordLearn(p, x.id, x.level, { offTurn: true, late: true });
+        return false;
+      }
+      if (lv !== x.level - 1 || !learnSkill(p, x.id, this.st, { offTurn: true }).ok) return false;
       if (now - x.sent > 3000) {
         x.sent = now;
         this.g.netEmit('learn', { seat: p.id, id: x.id, level: x.level });
@@ -744,7 +751,7 @@ export class SkillPlay {
        Lần học lại ngay trên (nếu có) giờ là lần học thật và được ghi vào số
        liệu — có thể trùng với dòng máy cầm lái cũ đã ghi trước khi rời; view
        `v_learn` gộp theo (ván, ghế, ô, level, lần học thứ mấy) nên không đếm hai. */
-    if (this.g.isDriver()) this.learnPending = [];
+    if (driver) this.learnPending = [];
     refreshSkillTree();
   }
 

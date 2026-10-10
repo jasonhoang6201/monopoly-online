@@ -157,6 +157,18 @@ const json = (v) => JSON.stringify(v);
   st.bankrupt(q.id);
   check('bankrupt lần hai không ghi thêm', ofKind('bankrupt').length === 1);
 
+  // Ghi bù một lần học đã xảy ra lúc cổng tắt (máy ngồi xem học ngoài lượt rồi mới thành máy cầm lái)
+  let open = false;
+  telemetry.start({ startedAt: st.startedAt, gate: () => open, ctx: () => ({ game_id: st.gameId }), onPush: (e) => evs.push(e) });
+  K.grantLapPoint(p, 1);
+  const n0 = evs.length;
+  const rl = K.learnSkill(p, 'dh2b', st);
+  check('học lúc cổng tắt: không ghi', rl.ok && evs.length === n0);
+  open = true;
+  K.recordLearn(p, 'dh2b', 1, { offTurn: true, late: true });
+  check('recordLearn ghi bù đúng level, nth, point_no, off_turn, late', last().kind === 'learn' && last().id === 'dh2b' && last().level === 1
+    && last().nth === p.learnCount && last().point_no === K.spentTotal(p) && last().cost === 1 && last().off_turn === true && last().late === true
+    && last().points_left === p.skillPoints, json(last()));
   telemetry.stop();
 }
 

@@ -216,14 +216,30 @@ export function learnSkill(player, id, st, o = {}) {
     if (switchable(skillById(id))) player.skillOff = [...(player.skillOff ?? []), id];
   } else player.skillLv = { ...player.skillLv, [id]: check.level };
   player.learnCount = (player.learnCount ?? 0) + 1;
+  recordLearn(player, id, check.level, { ...o, earned });
+  return check;
+}
+
+/**
+ * Ghi một lần học / lên level vào số liệu cân bằng. `learnSkill` gọi ngay sau
+ * khi học; `SkillPlay.reconcileLearn` gọi **bù** (`late`) cho lần học ngoài
+ * lượt đã xảy ra trên bản sao lúc cổng ghi còn tắt, khi máy ấy vừa thành máy
+ * cầm lái mà chưa máy nào kịp ghi. Trùng với dòng máy cũ đã ghi thì cùng
+ * `nth` — view `v_learn` gộp lại.
+ */
+export function recordLearn(player, id, level, o = {}) {
+  const s = skillById(id);
   track('learn', {
-    seat: player.id, id, level: check.level, cost: check.cost, points_left: player.skillPoints,
-    lap: player.laps ?? 0, off_turn: !!o.offTurn,
+    seat: player.id, id, level,
+    cost: level === 1 ? skillCost(s) : LEVEL_COST,
+    points_left: player.skillPoints,
+    lap: player.laps ?? 0, off_turn: !!o.offTurn, late: !!o.late,
     /* Ba toạ độ "học lúc nào": lần học thứ mấy trong ván, tổng điểm đã nhận,
        và điểm thứ mấy vừa tiêu (bước giá 2 là điểm `point_no-1` và `point_no`). */
-    nth: player.learnCount, earned, point_no: spentTotal(player),
+    nth: player.learnCount ?? 0,
+    earned: o.earned ?? spentTotal(player) + player.skillPoints,
+    point_no: spentTotal(player),
   });
-  return check;
 }
 
 /**

@@ -82,6 +82,8 @@ create table if not exists public.skill_events (
   primary key (game_id, client_id, seq)
 );
 create index if not exists skill_events_game_seat on public.skill_events (game_id, seat, seq);
+-- v_hold / v_player_skill dò theo (ván, ghế, loại, thời điểm) — chỉ mục trên có seq, không phủ
+create index if not exists skill_events_game_seat_kind on public.skill_events (game_id, seat, kind, t_ms);
 create index if not exists skill_events_kind_skill on public.skill_events (kind, skill_id);
 
 -- ====================================================================== quyền
@@ -182,6 +184,7 @@ create or replace view public.v_player_skill as
 with learned as (
   select game_id, seat, skill_id,
     max(level) as max_lv, min(lap) as lap_learned, min(t_ms) as first_ms,
+    sum(cost) as points_in,
     min(nth) filter (where level = 1) as nth_lv1,
     min(point_no) filter (where level = 1) as point_no_lv1,
     min(point_no) filter (where level = 2) as point_no_lv2,
@@ -206,7 +209,7 @@ wiped as (
 )
 select l.game_id, g.started_at, g.mode, g.players, g.finished, g.duration_s,
   l.seat, l.skill_id, m.branch, m.tier, m.kind,
-  l.max_lv, l.lap_learned, l.first_ms, l.nth_lv1, l.point_no_lv1, l.point_no_lv2, l.point_no_lv3,
+  l.max_lv, l.lap_learned, l.first_ms, l.points_in, l.nth_lv1, l.point_no_lv1, l.point_no_lv2, l.point_no_lv3,
   coalesce(h.held_ms, 0) as held_ms, coalesce(h.turns_held, 0) as turns_held,
   coalesce(u.uses, 0) as uses, coalesce(u.delta_sum, 0) as delta_sum,
   coalesce(u.gain_sum, 0) as gain_sum, coalesce(u.loss_sum, 0) as loss_sum,
@@ -405,7 +408,7 @@ language sql stable security definer set search_path = public as $$
     select ps.game_id, ps.seat, ps.branch,
       count(*) as n_skills,
       bool_or(ps.tier = 4 and ps.held_at_end) as has_ult,
-      sum(case when ps.held_at_end then (select coalesce(sum(cost), 0) from v_learn l where l.game_id = ps.game_id and l.seat = ps.seat and l.skill_id = ps.skill_id) else 0 end) as points_in,
+      sum(case when ps.held_at_end then ps.points_in else 0 end) as points_in,
       sum(ps.delta_sum) as delta,
       max(ps.money_end) as money_end, bool_or(ps.won) as won, max(ps.rank) as rank
     from ps group by ps.game_id, ps.seat, ps.branch
@@ -423,14 +426,15 @@ language sql stable security definer set search_path = public as $$
     round(sum(p.delta)::numeric / nullif(count(p.*), 0), 1),
     round(sum(p.delta)::numeric / nullif(sum(p.money_end), 0), 4),
     count(*) filter (where p.won is not null),
-    round(avg(case when p.won then 1 else 0 end), 4),
+    -- avg bỏ qua null: người-ván chưa có hạng (ván bỏ dở) không bị tính là thua
+    round(avg(p.won::int), 4),
     round(avg(p.rank), 2),
-    (select round(avg(case when g.won then 1 else 0 end), 4) from pg g
+    (select round(avg(g.won::int), 4) from pg g
        where not exists (select 1 from per_pb x where x.game_id = g.game_id and x.seat = g.seat and x.branch = b.branch)),
     (select round(avg(g.rank), 2) from pg g
        where not exists (select 1 from per_pb x where x.game_id = g.game_id and x.seat = g.seat and x.branch = b.branch)),
     (select count(*) from main m where m.branch = b.branch),
-    (select round(avg(case when m.won then 1 else 0 end), 4) from main m where m.branch = b.branch)
+    (select round(avg(m.won::int), 4) from main m where m.branch = b.branch)
   from br b
   cross join tot t
   left join per_pb p on p.branch = b.branch
