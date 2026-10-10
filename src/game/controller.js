@@ -580,6 +580,22 @@ export class Game {
   }
 
   /**
+   * Cảnh bộ xương diễn giữa nghĩa địa (chủ đề Halloween) — trên mọi máy.
+   * Không chờ: cảnh chạy song song với lượt, không bắt ai đứng đợi. Chủ đề
+   * khác thì `playSkit` tự bỏ qua. Xây nhà không gọi ở đây: bàn cờ tự nhận ra
+   * từ ảnh chụp (`BoardScene.diffTileFx`).
+   * @param {string} kind khoá trong `render/skits.js`
+   * @param {number} seat người diễn chính
+   * @param {number} [owner] chủ đất, cho cảnh trả tiền thuê
+   */
+  skit(kind, seat, owner) {
+    // Ván chủ đề khác không có nghĩa địa: khỏi tốn một tin trên đường truyền
+    if (this.state?.settings.theme !== 'halloween') return;
+    this.netEmit('skit', { kind, seat, owner });
+    this.scene.playSkit?.(kind, seat, owner);
+  }
+
+  /**
    * Nháy sáng ô mà nước vừa rồi đụng tới — trên **mọi máy**, không riêng máy
    * cầm lái.
    *
@@ -669,6 +685,8 @@ export class Game {
       await sc.spotTiles(data.ids, data.ms);
     } else if (name === 'zombies') {
       sc.zombieMarch?.(data.ids);
+    } else if (name === 'skit') {
+      sc.playSkit?.(data.kind, data.seat, data.owner);
     } else if (name === 'witch') {
       await sc.witchFly?.(data.a, data.b);
     } else if (name === 'tilefx') {
@@ -1484,6 +1502,10 @@ export class Game {
     const st = this.state;
     const t = BOARD[p.pos];
 
+    // Dừng ở nhà ga, Thuỷ Cục (ô 12), Nhà Máy Điện (ô 28): diễn trước, mua / trả thuê xếp sau
+    if (t.type === 'station') this.skit('station', p.id);
+    else if (t.type === 'utility') this.skit(t.id === 28 ? 'power' : 'hydro', p.id);
+
     switch (t.type) {
       case 'property':
       case 'station':
@@ -1499,6 +1521,7 @@ export class Game {
 
       case 'tax': {
         const tax = this.skills.cut(p, t.tax_amount);
+        this.skit('tax', p.id);
         await this.bc.show(t.name.split(' (')[0].toUpperCase(),
           `<b>${p.name}</b> phải nộp <span class="down">${money(tax)}</span> cho ngân hàng${this.skills.cutNote(p)}.`,
           { kind: 'bad' });
@@ -1547,6 +1570,7 @@ export class Game {
       if (choice === 'buy') {
         audio.sfx('buy');
         st.buy(p.id, t.id);
+        this.skit('buy', p.id);
         this.hud.refresh();
         this.sync();
         this.hud.flashMoney(p.id, false);
@@ -1595,6 +1619,7 @@ export class Game {
     const rent = bill.total;
     // Thâu Tóm: ép mua lô này thay vì trả thuê
     if (await this.skills.trySeize(p, t.id, rent)) return;
+    this.skit('rent', p.id, ownerId);
     await this.bc.show('TRẢ TIỀN THUÊ',
       `<b>${p.name}</b> trả <span class="down">${money(rent)}</span> cho <b>${owner.name}</b>
        tại <b>${tileLabel(t.id)}</b>${this.skills.rentNote(p, t.id, bill)}.`, { kind: 'bad' });

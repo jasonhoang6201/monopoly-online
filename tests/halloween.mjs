@@ -307,6 +307,54 @@ const swapped = await page.evaluate(() => {
 ok('Phù Thuỷ: ô 6 và ô 8 đổi chủ cho nhau', swapped[0] === swap.b && swapped[1] === swap.a,
   JSON.stringify({ swap, swapped }));
 
+/* ------------------------------------- cảnh bộ xương diễn giữa nghĩa địa */
+
+const skit = await page.evaluate(async () => {
+  const c = window.__monopoly.controller;
+  const st = c.state;
+  const sc = c.scene;
+  const out = {};
+  sc.stopSkits();
+  // Xây nhà nhận ra từ ảnh chụp: 0 → 1 nhà là cảnh khiêng nhà, 4 → 5 là khiêng lâu đài
+  st.owner.set(11, 1); sc.refresh(st);
+  st.houses.set(11, 1); sc.refresh(st);
+  out.build = sc.skit?.kind;
+  sc.stopSkits();
+  st.houses.set(11, 4); sc.refresh(st);
+  sc.stopSkits();
+  st.houses.set(11, 5); sc.refresh(st);
+  out.hotel = sc.skit?.kind;
+  st.houses.delete(11); st.owner.delete(11); sc.refresh(st);
+  // Hàng chờ giữ tối đa hai cảnh sau cảnh đang diễn
+  c.skit('rent', 0, 1); c.skit('tax', 2); c.skit('buy', 0);
+  out.queue = sc.skitQ.map((j) => j.kind);
+  // Đang diễn thì hàng nhảy mờ đi và ảnh cảnh hiện trên lòng bàn
+  sc.tickSkit(1.5);
+  sc.tickSpooky(performance.now(), 0);
+  out.drawn = !!sc.skitImg?.visible && sc.textures.exists('skit');
+  out.rowAlpha = Math.max(...sc.walkers.map((w) => w.img.alpha));
+  // Hết giờ thì cảnh kế trong hàng chờ lên thay
+  sc.tickSkit(60);
+  out.next = sc.skit?.kind;
+  sc.stopSkits();
+  // Dừng ở Nhà Máy Điện của chính mình: chỉ diễn cảnh, không hỏi gì
+  const p = st.current;
+  const pos = p.pos;
+  st.owner.set(28, p.id);
+  p.pos = 28;
+  await c.resolveTile(p, [3, 4]);
+  out.power = sc.skit?.kind;
+  p.pos = pos; st.owner.delete(28); sc.refresh(st);
+  sc.stopSkits();
+  return out;
+});
+ok('xây nhà diễn cảnh khiêng nhà, lên khách sạn diễn cảnh khiêng lâu đài',
+  skit.build === 'build' && skit.hotel === 'hotel', JSON.stringify(skit));
+ok('cảnh xếp hàng tối đa hai, cảnh thứ ba bị bỏ', JSON.stringify(skit.queue) === '["rent","tax"]', JSON.stringify(skit.queue));
+ok('đang diễn thì ảnh cảnh hiện và hàng bộ xương nhảy mờ đi', skit.drawn && skit.rowAlpha < 0.05, String(skit.rowAlpha));
+ok('hết cảnh thì cảnh kế trong hàng chờ lên thay', skit.next === 'rent', String(skit.next));
+ok('dừng ở Nhà Máy Điện thì diễn cảnh bị điện giật', skit.power === 'power', String(skit.power));
+
 /* ------------------------------------------- phá sản: bia mộ mọc ở đúng ô */
 
 const tomb = await page.evaluate(async () => {

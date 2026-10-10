@@ -35,6 +35,7 @@ import {
 } from '../render/halloweenArt.js';
 import { graveLayout, pumpkinSpots, pumpkinSize } from '../render/halloweenDeco.js';
 import { MOVES, movePose, danceAt, STILL_AT } from '../render/dance.js';
+import { SKITS, paintSkit, skitRowAlpha, skitFrame } from '../render/skits.js';
 import { batSwarm } from '../ui/batSwarm.js';
 
 /* Người dùng xin bớt chuyển động thì ô đổi trạng thái ngay, không diễn */
@@ -340,6 +341,13 @@ export default class BoardScene extends Phaser.Scene {
     this.fogs = [];
     this.moonRed = null;
     this.walkKey = '';
+    /* Cảnh bộ xương diễn khi có chuyện trên bàn (`render/skits.js`): mỗi lúc
+       một cảnh, cảnh tới sau xếp hàng. Ảnh cảnh nằm ngoài `graveLayer` vì
+       `layoutSpooky` xoá sạch lớp ấy mỗi lần đổi cỡ, mà cảnh đang diễn dở. */
+    this.skit = null;
+    this.skitQ = [];
+    this.skitTex = null;
+    this.skitImg = null;
     /** Bia mộ đang dựng: khoá `ghế:ô` → ảnh. */
     this.tombs = new Map();
     this.tombState = null;
@@ -1442,13 +1450,19 @@ export default class BoardScene extends Phaser.Scene {
       this.startTileFx(kind, id, { ...extra, sound: !sound.has(kind) });
       sound.add(kind);
     };
+    let built = null;
     for (const [id, now] of view) {
       const was = prev.get(id);
       if (!was || was.o !== now.o) continue;
-      if (now.h > was.h) play('build', id, { from: was.h, to: now.h });
+      if (now.h > was.h) {
+        play('build', id, { from: was.h, to: now.h });
+        // Xây nhiều ô một lần thì diễn một cảnh; có khách sạn thì khiêng lâu đài
+        if (!built || now.h === 5) built = { seat: now.o, hotel: now.h === 5 };
+      }
       if (now.m && !was.m) play('mortgage', id);
       else if (!now.m && was.m) play('redeem', id);
     }
+    if (built) this.playSkit(built.hotel ? 'hotel' : 'build', built.seat);
   }
 
   /**
@@ -1811,11 +1825,17 @@ export default class BoardScene extends Phaser.Scene {
 
   /** Mỗi khung hình: hàng bộ xương nhảy, dơi bay, sương trôi, trăng máu thở. */
   tickSpooky(time, dt) {
-    if (!this.spooky || !this.walkers) return;
+    if (!this.spooky) {
+      // Đổi sang chủ đề khác giữa lúc diễn thì bỏ cả cảnh lẫn hàng chờ
+      if (this.skit || this.skitImg?.visible) this.stopSkits();
+      return;
+    }
+    if (!this.walkers) return;
     const L = graveLayout(TEX);
     const still = REDUCED_MOTION();
     const step = still ? 0 : dt;
     const sec = still ? STILL_AT : time / 1000;
+    const rowA = this.tickSkit(step);
     // Vị trí cả hàng theo đồng hồ chung, không trễ, để hàng trượt thẳng tắp
     const shift = danceAt(sec).glide * (this.danceGlide ?? 0);
     for (const w of this.walkers) {
@@ -1825,7 +1845,8 @@ export default class BoardScene extends Phaser.Scene {
       const ww = hh * DANCE_W / DANCE_H;
       w.img.setTexture(w.frames[d.move][d.k])
         .setFlipX(d.sx < 0).setPosition(p.x, p.y)
-        .setDisplaySize(ww * Math.max(0.12, Math.abs(d.sx)), hh);
+        .setDisplaySize(ww * Math.max(0.12, Math.abs(d.sx)), hh)
+        .setAlpha(rowA);
     }
     for (const b of this.bats) {
       b.x += b.sp * step;
@@ -1843,6 +1864,68 @@ export default class BoardScene extends Phaser.Scene {
       f.img.setPosition(p.x, p.y).setDisplaySize(L.size * 0.55 * this.scaleF, L.size * 0.2 * this.scaleF);
     }
     if (this.moonRed?.visible) this.moonRed.setAlpha(0.82 + 0.18 * Math.sin(time * 0.002));
+  }
+
+  /**
+   * Xếp một cảnh bộ xương diễn giữa nghĩa địa (`render/skits.js`). Chỉ chủ đề
+   * Halloween; người xin bớt chuyển động thì bỏ qua. Hàng chờ giữ tối đa hai
+   * cảnh: lượt dồn dập (đổ đôi, máy cầm lái đẩy nhiều tin một lúc) thì cảnh
+   * tới sau bị bỏ, kẻo nghĩa địa còn diễn chuyện của mấy lượt trước.
+   * @param {string} kind khoá trong `SKITS`
+   * @param {number} seat người diễn chính (màu mũ)
+   * @param {number} [ownerSeat] chủ đất, màu mũ đội khiêng quan tài
+   */
+  playSkit(kind, seat, ownerSeat) {
+    if (!this.spooky || REDUCED_MOTION() || !SKITS[kind]) return;
+    const css = (i) => this.state?.players?.[i]?.token.css;
+    const actor = css(seat);
+    if (!actor) return;
+    const job = { kind, actor, owner: css(ownerSeat) ?? actor, t: 0 };
+    if (!this.skit) this.skit = job;
+    else if (this.skitQ.length < 2) this.skitQ.push(job);
+  }
+
+  stopSkits() {
+    this.skit = null;
+    this.skitQ = [];
+    this.skitImg?.setVisible(false);
+  }
+
+  /**
+   * Tiến đồng hồ cảnh đang diễn rồi vẽ lại lên texture phủ lòng bàn.
+   * @returns {number} độ hiện của hàng bộ xương nhảy (1 khi không có cảnh)
+   */
+  tickSkit(dt) {
+    let sk = this.skit;
+    if (sk) {
+      sk.t += dt;
+      if (sk.t >= SKITS[sk.kind].dur) sk = this.skit = this.skitQ.shift() ?? null;
+    }
+    if (!sk) { this.skitImg?.setVisible(false); return 1; }
+    /* Texture cỡ đúng lòng bàn trên màn hình (game chạy theo điểm ảnh thật,
+       xem `zoom: 1 / DPR`), chặn trên 1100 cho máy màn lớn khỏi vẽ thừa. */
+    const L = graveLayout(TEX);
+    const side = Math.max(64, Math.min(1100, Math.round(L.size * this.scaleF)));
+    if (this.skitTex?.width !== side) {
+      this.skitImg?.destroy();
+      if (this.textures.exists('skit')) this.textures.remove('skit');
+      this.skitTex = this.textures.createCanvas('skit', side, side);
+      this.skitImg = this.add.image(0, 0, 'skit').setOrigin(0, 0).setDepth(0.55);
+    }
+    const ctx = this.skitTex.getContext();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, side, side);
+    try {
+      paintSkit(ctx, sk.kind, sk.t, skitFrame(side, sk.actor, sk.owner));
+    } catch (err) {
+      // Một cảnh vẽ hỏng thì bỏ cảnh ấy, đừng để mỗi khung hình ném lỗi
+      console.error(err);
+      this.skit = this.skitQ.shift() ?? null;
+    }
+    this.skitTex.refresh();
+    const p = this.toScreen(L.x, L.y);
+    this.skitImg.setVisible(true).setPosition(p.x, p.y).setDisplaySize(L.size * this.scaleF, L.size * this.scaleF);
+    return skitRowAlpha(sk.kind, sk.t);
   }
 
   /**
