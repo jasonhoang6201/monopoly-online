@@ -160,6 +160,19 @@ bấm F5 thì thấy khung trống.
   vẫn nhắn được. Vì thế hộp thoại bỏ qua Enter/Esc gõ từ ô nhập nằm ngoài nó —
   không thì Enter gửi tin cũng bấm luôn nút "Mua".
 - Enter (lúc không có hộp thoại) mở khung; Esc trong ô gõ đóng khung.
+- Mọi chỗ nghe `keydown` ở **pha bắt** trên `window` (hộp thoại, cây kỹ năng,
+  băng chuyền bóc thẻ, phiên chọn ô trên bàn cờ) chạy *trước* ô chat, nên
+  `stopPropagation` của ô chat không chặn được chúng. Mỗi chỗ ấy phải tự bỏ qua
+  phím gõ trong ô nhập bằng `isTyping()` xuất từ `src/ui/modal.js`. Thiếu dòng
+  ấy thì Enter gửi tin bấm luôn nút "Học" của thẻ kỹ năng đang mở, hoặc chốt
+  phiên chọn ô, còn tin nhắn thì mất (`preventDefault` chặn form gửi). Thêm
+  người nghe phím ở pha bắt mới thì nhớ thêm điều kiện này.
+- Khung giữ 80 tin gần nhất. Tin tới lúc khung đóng thì nút hiện số chưa đọc
+  (quá 9 ghi `9+`), một dòng trích hiện 4,2 giây bên cạnh nút, kèm tiếng `click`.
+- Tên và màu chốt lúc tin tới: đổi tên sau đó thì tin cũ giữ tên cũ. Màu quân
+  thì đọc lại khi đổi chủ đề.
+- Đổi phòng (`attach` phòng mới) thì khung trống lại. Chơi một máy không có
+  phòng nên nút không hiện.
 
 ## Hai đường truyền
 

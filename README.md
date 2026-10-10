@@ -51,6 +51,7 @@ mục **Đưa lên mạng** trong [`ONLINE.md`](ONLINE.md).
 | Bấm vào **thẻ người chơi** ở cột trái | Bảng tài sản: tiền mặt, tổng giá trị, các ô đất dạng thẻ bài xếp **hai cột theo nhóm màu / loại đất**, số nhà, ô đang thế chấp. Bấm tiếp một thẻ để xem chi tiết ô đó |
 | Nút **⛶** cuối cột trái | Toàn màn hình (phím **F**) — bàn cờ tự dựng lại bố cục cho kín màn hình |
 | Nút **♪** / **🔔** | Bật tắt riêng nhạc nền (phím **M**) và hiệu ứng âm thanh |
+| Nút **💬** góc phải dưới (chỉ bản online) | Khung chat với cả bàn, dùng được từ phòng chờ tới hết ván. Khung đang đóng mà có tin mới thì nút hiện số tin chưa đọc và một dòng trích bên cạnh |
 
 **Nút hành động nằm giữa lòng bàn cờ** — ngay chỗ mắt đang nhìn, trên một tấm bảng sơn mài
 viền vàng: nút chính chiếm trọn hàng đầu, các nút phụ chia hàng dưới. Hết việc (lúc quân đang
@@ -70,9 +71,11 @@ Mỗi nút hành động đeo sẵn con dấu phím tắt ở góc phải, khỏ
 | **P** | Phá sản (vẫn hỏi lại một lần trước khi chốt) |
 | **F** · **M** | Toàn màn hình · bật tắt nhạc nền |
 | **Space** (giữ) | Tạm ẩn hộp thoại để ngó bàn cờ |
+| **Enter** · **Esc** | Bản online: mở khung chat (lúc không có hộp thoại nào mở) · đóng khung khi đang gõ |
 
 Phím tắt chỉ ăn khi thanh nút đang hiện: đang gõ tên, đang mở hộp thoại, hay đang chạy hiệu ứng
-thì bàn phím im — không sợ lỡ tay đá nhầm một lượt. Nút mờ (như *Nộp tiền ra tù* lúc hết tiền)
+thì bàn phím im — không sợ lỡ tay đá nhầm một lượt. Gõ trong ô chat cũng vậy: Enter là gửi tin,
+không bấm nút của hộp thoại, không chốt phiên chọn ô trên bàn cờ. Nút mờ (như *Nộp tiền ra tù* lúc hết tiền)
 cũng không nhận phím.
 
 **Cột trái** giữ phần tra cứu: hiệu bài, danh sách người chơi (người đang tới lượt được tô sáng
@@ -381,6 +384,7 @@ node tests/online.mjs --full     # thêm phần đổ đầy phòng 6 người, 
 | `tests/endgame.mjs` | Đổ đôi 3 lần vào tù, các cách ra tù, phá sản trả tài sản về ngân hàng, thắng cuộc |
 | `tests/jail-debt.mjs` | Đáp xuống ô Vào Tù là hết lượt, ở tù cầu đôi từng lượt một (hụt lần 3 nộp 50$), vỡ nợ ngay khi tổng tài sản không đủ trả |
 | `tests/audio.mjs` | Đo biên độ RMS thật: nhạc có tiếng ở màn hình chờ, **im hẳn sau khi khai cuộc**, 11 hiệu ứng đều kêu; kiểm tra hai công tắc độc lập |
+| `tests/chat-online.mjs` | Chat hai máy: gửi từ phòng chờ, số chưa đọc và dòng trích ở máy nhận, tên lấy từ sổ ghế, HTML trong tin hiện thành chữ, hạn mức 5 tin / 6 giây; vào ván rồi thì Enter/Esc gõ trong ô chat không bấm "Học" của cây kỹ năng, không chốt hay huỷ phiên chọn ô |
 | `tests/cards-online.mjs` | Băng chuyền bóc thẻ hai máy: cùng `seed` thì hai máy dựng cùng số ô, dừng cùng một ô, lật cùng một mặt thẻ; hộp ở máy ngồi xem tự đóng |
 | `tests/events.mjs` | Thẻ Thời Cuộc: thanh áp lực chỉ chạy khi bàn đã bão hoà, ngưỡng hạ dần, hệ số tiền thuê / giá xây / lương, ô mất giấy tờ, cấn nợ tự động, ảnh chụp mang đủ phần mới (kể cả ảnh chụp cũ thiếu trường), và **cả tám thẻ Kỳ 2 chạy thật từ đầu tới cuối** |
 | `tests/events-online.mjs` | Nấc luật đồng bộ trong phòng chờ, thẻ hiện ở mọi máy, và một **phiên đấu giá kín hai máy** chạy trọn: ai trả cao thì lấy đất, tiền trừ đúng, sổ chủ đất khớp nhau |

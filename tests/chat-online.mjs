@@ -5,11 +5,16 @@
  * lấy từ sổ ghế, HTML trong tin không chạy, hạn mức chặn gửi dồn, và Enter gõ
  * trong khung chat không bấm nhầm nút của hộp thoại đang mở (phòng chờ).
  *
+ * Phần trong ván soi những người nghe phím ở pha bắt trên `window` — chúng chạy
+ * trước ô chat nên phải tự nhường: Enter gửi tin không được bấm "Học" của cây
+ * kỹ năng, không được chốt phiên chọn ô trên bàn cờ.
+ *
  * Chạy: cần dev server ở cổng 5179
  *   npx vite --port 5179 --strictPort &
  *   node tests/chat-online.mjs
  */
 import { launchChrome } from './launch.mjs';
+import { playRollOff } from './rolloff.mjs';
 
 const SHOT = process.env.SHOT_DIR || '/tmp';
 const BASE = 'http://localhost:5179/';
@@ -117,6 +122,63 @@ console.log('\n▸ 5. Esc đóng khung, phòng chờ vẫn còn');
 await A.locator('.chat-input').press('Escape');
 ok(await A.locator('#chat-dock').isHidden(), 'Esc đóng khung chat');
 ok((await A.locator('#lobby-link').count()) > 0, 'Esc không đóng phòng chờ');
+
+console.log('\n▸ 6. Vào ván, chat vẫn theo');
+await A.locator('#lobby-start').click();
+for (const p of [A, B]) {
+  await p.bringToFront();
+  await until(async () => p.evaluate(() => !!window.__monopoly?.controller?.state), 60000);
+}
+await playRollOff([A, B]);
+ok(await A.locator('#chat-btn').isVisible(), 'nút chat còn sau khi khai cuộc');
+const D = (await A.evaluate(() => window.__monopoly.controller.isDriver())) ? A : B;
+const O = D === A ? B : A;
+await D.bringToFront();
+const before = (await msgs(D)).length;
+
+console.log('\n▸ 7. Enter trong ô chat lúc mở thẻ kỹ năng');
+await D.evaluate(() => {
+  const c = window.__monopoly.controller;
+  c.state.current.skillPoints = 3;
+  c.hud.refresh(); c.sync(); c.restoreActions();
+});
+await D.locator('#actions button[data-key="k"]').click();
+await D.locator('.st-node[data-id="dd1"]').click();
+await D.locator('[data-act="learn"]').waitFor({ timeout: 8000 });
+if (await D.locator('#chat-dock').isHidden()) await D.locator('#chat-btn').click();
+await send(D, 'học hay không đây');
+await D.waitForTimeout(400);
+const learned = await D.evaluate(() => window.__monopoly.controller.state.current.skills.includes('dd1'));
+ok(!learned, 'Enter gửi tin không bấm nút "Học"');
+ok((await msgs(D)).length === before + 1, 'tin vẫn gửi đi');
+await D.locator('.chat-input').press('Escape');
+ok(await D.locator('#chat-dock').isHidden(), 'Esc đóng khung chat');
+ok(await D.locator('[data-act="learn"]').isVisible(), 'Esc trong ô chat không đóng thẻ kỹ năng');
+await D.locator('[data-act="cancel"]').first().click();
+await D.locator('.st-close').click();
+await D.waitForTimeout(500);
+
+console.log('\n▸ 8. Enter trong ô chat lúc đang chọn ô trên bàn cờ');
+await D.evaluate(async () => {
+  const { pickTilesOnBoard } = await import('/src/ui/tilePicker.js');
+  window.__pick = 'chờ';
+  pickTilesOnBoard(window.__monopoly.controller.scene, [1, 3], [1],
+    { eyebrow: 'Thử', title: 'Chọn ô', sub: '' }).then((r) => { window.__pick = r; });
+});
+await D.locator('.tile-pick').waitFor({ timeout: 5000 });
+await D.locator('#chat-btn').click();
+await send(D, 'chọn ô nào giờ');
+await D.waitForTimeout(400);
+ok((await D.evaluate(() => window.__pick)) === 'chờ', 'Enter gửi tin không chốt phiên chọn ô');
+ok((await msgs(D)).length === before + 2, 'tin vẫn gửi đi');
+await D.locator('.chat-input').press('Escape');
+ok((await D.evaluate(() => window.__pick)) === 'chờ', 'Esc trong ô chat không bỏ ngang phiên chọn');
+await D.locator('.tile-pick .tp-cancel').click();
+ok(await until(async () => (await D.evaluate(() => window.__pick)) === null, 3000), 'nút Huỷ vẫn bỏ ngang được');
+
+await O.bringToFront();
+ok(await until(async () => (await msgs(O)).some((m) => m.text === 'chọn ô nào giờ'), 5000),
+  'máy kia nhận tin gửi giữa ván');
 
 await browser.close();
 if (errors.length) console.log('\nLỖI TRANG:\n' + errors.join('\n'));

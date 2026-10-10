@@ -15,7 +15,7 @@
  * vì mỗi khung hình còn phải biết dải đã vượt qua bao nhiêu ô để gõ đúng bấy
  * nhiêu tiếng giấy (`SFX.cardTick`).
  */
-import { openModal } from './modal.js';
+import { openModal, isTyping } from './modal.js';
 import { DECK_META, KEEPABLE, DECKS } from '../data/cards.js';
 import { money } from '../data/board.js';
 import { EVENTS } from '../data/events.js';
@@ -383,6 +383,8 @@ export function caseOpenModal(kind, card, pool, o = {}) {
              thì nó nuốt phím Enter của hộp thoại kế tiếp. */
           if (!btn.isConnected) { window.removeEventListener('keydown', onKey, true); return; }
           if (e.key !== 'Enter' || e.repeat) return;
+          // Enter gửi tin chat là của khung chat, không phải "đóng thẻ"
+          if (isTyping(e.target)) return;
           e.preventDefault();
           window.removeEventListener('keydown', onKey, true);
           btn.click();

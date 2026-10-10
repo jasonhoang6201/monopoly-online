@@ -24,7 +24,7 @@
  * (`manage`); ngoài lượt vẫn mở cây để học và lên level.
  */
 import './skillTree.css';
-import { openModal } from './modal.js';
+import { openModal, isTyping } from './modal.js';
 import { skillIcon } from './skillIcons.js';
 import { BRANCHES, SKILLS, KINDS, RESPEC_FEE, MAX_LEVEL } from '../data/skills.js';
 import {
@@ -652,6 +652,8 @@ export function openSkillTree(player, o = {}) {
      của modal.js (`dismissible:false`, `enter:false`) và tự xử lý. */
   function onKey(e) {
     if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    // Enter gửi tin chat không được bấm luôn nút "Học" của thẻ đang mở
+    if (isTyping(e.target)) return;
     const open = document.querySelectorAll('#modal-root .scrim:not(.hide)');
     if (open[open.length - 1] !== scrimEl) return;
     // Enter khi chưa mở thẻ nào để nguyên cho nút ô đang focus tự bấm
