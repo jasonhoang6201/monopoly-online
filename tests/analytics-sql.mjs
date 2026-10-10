@@ -55,7 +55,10 @@ async function playGame({ winnerSeat, respecSeat0 }) {
   for (const x of [p, q, r]) { K.onLap(x); tick(5000); endTurn(); }
   K.learnSkill(p, 'cn1', st); tick(1000);
   K.learnSkill(q, 'dh1', st); tick(1000);
-  K.onLap(r); K.learnSkill(r, 'dd1', st); K.learnSkill(r, 'dd2a', st); K.setSkillOn(r, 'dd2a', true); tick(1000);
+  // C: dd1 → dd2a (cược, tự chạy) và thêm ddX2 → ddS2 (ô bật/tắt được) để có một lần bật tay
+  K.onLap(r); K.onLap(r); K.onLap(r);
+  K.learnSkill(r, 'dd1', st); K.learnSkill(r, 'dd2a', st); K.learnSkill(r, 'ddX2', st); K.learnSkill(r, 'ddS2', st);
+  K.setSkillOn(r, 'ddS2', true); tick(1000);
   // Vài lượt: cn1 nhặt tiền, dd2a thắng/thua cược
   for (let i = 0; i < 6; i++) {
     K.credit(p, 'cn1', 20); p.money += 20;
@@ -138,7 +141,7 @@ check('cn1: bị tẩy 1 lần (ván 2) → n_wiped 1, wipe_rate 0.5', by.cn1.n_
 check('cn1: thắng 1/2 ván có học → win_rate_with 0.5, n_with 2; without 4 người-ván, thắng 1 → 0.25',
   by.cn1.n_with === 2 && Number(by.cn1.win_rate_with) === 0.5 && by.cn1.n_without === 4 && Number(by.cn1.win_rate_without) === 0.25, JSON.stringify([by.cn1.n_with, by.cn1.win_rate_with, by.cn1.n_without, by.cn1.win_rate_without]));
 check('dd2a: delta có dấu: 3×50 − 3×30 = 60 mỗi ván → delta_total 120, gain 300, loss −180', by.dd2a.delta_total === 120 && by.dd2a.gain_total === 300 && by.dd2a.loss_total === -180, JSON.stringify([by.dd2a.delta_total, by.dd2a.gain_total, by.dd2a.loss_total]));
-check('dd2a: toggles_per_game 1 (bật tay), off_at_end 0 — người học đã vỡ nợ nên held_at_end theo cây lúc hạ màn', Number(by.dd2a.toggles_per_game) === 1, JSON.stringify([by.dd2a.toggles_per_game, by.dd2a.off_at_end_rate]));
+check('ddS2: toggles_per_game 1 (bật tay); dd2a tự chạy nên 0', Number(by.ddS2.toggles_per_game) === 1 && Number(by.dd2a.toggles_per_game) === 0, JSON.stringify([by.ddS2.toggles_per_game, by.dd2a.toggles_per_game]));
 check('cn1: thời gian nắm giữ > 0 phút, delta_per_min > 0, turns_held > 0', Number(by.cn1.held_min_total) > 1 && Number(by.cn1.delta_per_min) > 0 && by.cn1.turns_held_total > 0, JSON.stringify([by.cn1.held_min_total, by.cn1.delta_per_min, by.cn1.turns_held_total]));
 check('dh1: học 3 lần (B×2 ở nth 1, A sau tẩy ở nth 3) → avg_point_no_lv1 = 1, avg_nth_lv1 = 1.67', Number(by.dh1.avg_point_no_lv1) === 1 && Number(by.dh1.avg_nth_lv1) === 1.67, JSON.stringify([by.dh1.avg_point_no_lv1, by.dh1.avg_nth_lv1]));
 

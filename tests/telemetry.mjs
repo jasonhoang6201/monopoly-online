@@ -130,15 +130,17 @@ const json = (v) => JSON.stringify(v);
   K.credit(p, 'cn1', 99);
   check('credit skill chưa học: không ghi', evs.length === before);
 
-  K.grantLapPoint(p, 2);
+  // Ô bật/tắt được (kind active, không auto, không once): Cò Quay ddS2, mọc từ dd1 → ddX2
+  K.grantLapPoint(p, 3);
   K.learnSkill(p, 'dd1', st);
-  K.learnSkill(p, 'dd2a', st);
-  check('dd2a học xong nằm tắt', K.isOff(p, 'dd2a'));
-  K.setSkillOn(p, 'dd2a', true);
-  check('setSkillOn → toggle on, auto=false', last().kind === 'toggle' && last().id === 'dd2a' && last().on === true && last().auto === false);
-  p.cooldowns = { dd2a: 1 };
+  K.learnSkill(p, 'ddX2', st);
+  K.learnSkill(p, 'ddS2', st);
+  check('ddS2 học xong nằm tắt', K.isOff(p, 'ddS2'));
+  K.setSkillOn(p, 'ddS2', true);
+  check('setSkillOn → toggle on, auto=false', last().kind === 'toggle' && last().id === 'ddS2' && last().on === true && last().auto === false);
+  p.cooldowns = { ddS2: 1 };
   K.offSpent(p);
-  check('offSpent → toggle off, auto=true', last().kind === 'toggle' && last().id === 'dd2a' && last().on === false && last().auto === true);
+  check('offSpent → toggle off, auto=true', last().kind === 'toggle' && last().id === 'ddS2' && last().on === false && last().auto === true);
 
   // Xây nhà có Mái Ấm (ac1): credit trong state.js cũng phải phát sự kiện
   const brown = GROUP_TILES[Object.keys(GROUP_TILES)[0]];
