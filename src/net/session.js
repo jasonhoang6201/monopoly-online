@@ -216,6 +216,7 @@ async function runRoom(controller, room) {
     const st = new GameState(
       seats.map((s) => s.name), seats.map((s) => s.token), room.options,
     );
+    controller.analytics.gameStart(st, transportKind() === 'supabase' ? 'online' : 'local');
     opening = { snapshot: snapshot(st) };
     room.startGame(opening.snapshot);
   }

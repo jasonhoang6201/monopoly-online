@@ -1,0 +1,121 @@
+/* Trang cân bằng kỹ năng — trang tĩnh thứ hai, không dùng style.css của bàn cờ
+   (file ấy dựng cả giao diện ván). Màu theo token, có bản tối; màu nhánh là
+   màu trên cây kỹ năng, bản tối sẫm hơn một nấc để đủ tương phản với nền. */
+:root {
+  --bg: #F6F1E6;
+  --surface: #FFFDF8;
+  --ink: #1F1912;
+  --ink-2: #5B4E3E;
+  --ink-3: #8A7B68;
+  --line: #E4DACA;
+  --track: #EEE7D9;
+  --accent: #7C1E14;
+  --good: #2E7D4F;
+  --bad: #B3322A;
+  --br-congnhan: #E2743A;
+  --br-duhanh: #3C8FE0;
+  --br-doden: #D2463A;
+  --br-dauco: #D4A24C;
+  --br-ancu: #2E9E70;
+  --serif: "Playfair Display", Georgia, serif;
+  --sans: "Be Vietnam Pro", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17120E; --surface: #211A14; --ink: #F1E8DA; --ink-2: #C9BBA6; --ink-3: #94856F;
+    --line: #3A2F24; --track: #2E261E; --accent: #E6A27A; --good: #6CC592; --bad: #F08A80;
+    --br-congnhan: #C8602A; --br-duhanh: #3C8FE0; --br-doden: #D2463A; --br-dauco: #B98A33; --br-ancu: #2E9E70;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17120E; --surface: #211A14; --ink: #F1E8DA; --ink-2: #C9BBA6; --ink-3: #94856F;
+  --line: #3A2F24; --track: #2E261E; --accent: #E6A27A; --good: #6CC592; --bad: #F08A80;
+  --br-congnhan: #C8602A; --br-duhanh: #3C8FE0; --br-doden: #D2463A; --br-dauco: #B98A33; --br-ancu: #2E9E70;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body {
+  margin: 0; padding: 20px 16px 48px; background: var(--bg); color: var(--ink);
+  font-family: var(--sans); font-size: 14px; line-height: 1.45;
+  max-width: 1240px; margin-inline: auto;
+}
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; margin: 0; }
+h1 { font-size: 30px; line-height: 1.1; }
+h2 { font-size: 20px; margin-bottom: 4px; }
+h3 { font-size: 15px; margin: 12px 0 6px; }
+.eyebrow { margin: 0 0 4px; font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.lede, .hint { color: var(--ink-2); margin: 6px 0 0; max-width: 72ch; }
+.hint { font-size: 13px; margin-bottom: 10px; }
+.top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+.back { color: var(--accent); text-decoration: none; white-space: nowrap; padding-top: 6px; }
+
+.filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; padding: 12px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 14px; }
+.filters label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-2); }
+.filters label.check { flex-direction: row; align-items: center; padding-bottom: 8px; }
+.filters input, .filters select { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 8px; min-width: 120px; }
+/* Không thì checkbox ăn luôn `min-width` ở trên, giãn 120px và đẩy chữ ra xa. */
+.filters input[type="checkbox"] { min-width: 0; margin: 0 6px 0 0; }
+.filters input[type="number"] { min-width: 70px; width: 80px; }
+.btn { font: inherit; font-weight: 600; background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer; }
+:root[data-theme="dark"] .btn { color: #1F1912; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn { color: #1F1912; } }
+
+.status { color: var(--ink-2); min-height: 1.4em; margin: 0 0 10px; }
+.status.err { color: var(--bad); }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 10px; }
+.tile { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.tile .k { font-size: 11.5px; color: var(--ink-3); letter-spacing: .04em; text-transform: uppercase; }
+.tile .v { font-family: var(--serif); font-size: 24px; line-height: 1.15; margin-top: 2px; }
+.tile .v.text { font-family: var(--sans); font-size: 14px; line-height: 1.4; }
+.tile .s { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 6px 0 10px; font-size: 13px; color: var(--ink-2); }
+.legend span::before, .swatch::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+  margin-right: 6px; vertical-align: -1px; background: var(--c, var(--ink-3)); }
+
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; }
+th { font-weight: 600; color: var(--ink-2); font-size: 12px; position: sticky; top: 0; background: var(--surface); }
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover, th.sorted { color: var(--ink); }
+th.sorted::after { content: " ▾"; font-size: 10px; }
+th.sorted.asc::after { content: " ▴"; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.dim td { opacity: .45; }
+td.name { font-weight: 500; }
+/* Bảng 17 cột phải cuộn ngang: cột tên dính bên trái để biết đang đọc dòng nào. */
+#skill-table th:first-child, #skill-table td.name, #branch-table th:first-child, #branch-table td.name {
+  position: sticky; left: 0; background: var(--surface); z-index: 1; }
+#skill-table th:first-child { z-index: 2; }
+td.name small { color: var(--ink-3); font-weight: 400; margin-left: 4px; }
+
+/* Thanh ngang: mảnh, đầu dữ liệu bo 4px, chân vuông; nhãn số đặt ngoài thanh, luôn màu chữ. */
+.bar { display: inline-flex; align-items: center; gap: 8px; min-width: 120px; }
+.bar .track { flex: 0 0 90px; height: 10px; background: var(--track); border-radius: 0 4px 4px 0; overflow: hidden; }
+.bar .fill { display: block; height: 100%; background: var(--c, var(--ink-3)); border-radius: 0 4px 4px 0; }
+.bar.signed .track { position: relative; }
+.bar.signed .fill { position: absolute; top: 0; }
+.bar.signed .fill.neg { right: 50%; background: var(--bad); border-radius: 4px 0 0 4px; }
+.bar.signed .fill.pos { left: 50%; background: var(--good); }
+.bar.signed .zero { position: absolute; left: 50%; top: -2px; width: 1px; height: 14px; background: var(--ink-3); }
+.bar .lbl { font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+.pair { display: inline-grid; grid-template-columns: auto auto; gap: 1px 6px; font-variant-numeric: tabular-nums; }
+.pair .k { color: var(--ink-3); font-size: 11px; }
+
+/* Dải phân phối "học ở điểm thứ k": mỗi cột một điểm, cao theo số lần. */
+.hist { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; margin-left: 8px; vertical-align: middle; }
+.hist i { display: block; width: 5px; background: var(--c, var(--ink-3)); border-radius: 2px 2px 0 0; min-height: 2px; }
+
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.empty { color: var(--ink-3); padding: 12px 0; }
+@media (max-width: 720px) {
+  .two { grid-template-columns: 1fr; }
+  .top { flex-direction: column; }
+  h1 { font-size: 26px; }
+}

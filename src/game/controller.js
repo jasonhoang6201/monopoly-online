@@ -23,6 +23,8 @@ import { EventRunner } from './eventRunner.js';
 import { SkillPlay } from './skillPlay.js';
 import { has, offSpent, grantLapPoint } from '../core/skills.js';
 import { snapshot, fromSnapshot, applySnapshot } from '../core/serialize.js';
+import { telemetry, track } from '../core/telemetry.js';
+import { Analytics } from '../net/analytics.js';
 import { Hud, Broadcast } from '../ui/hud.js';
 import { QuickView } from '../ui/quickview.js';
 import {
@@ -93,6 +95,8 @@ export class Game {
     this.events = new EventRunner(this);
     /** Kỹ năng trong lượt chơi — xem `game/skillPlay.js`. */
     this.skills = new SkillPlay(this);
+    /** Số liệu cân bằng kỹ năng — xem `net/analytics.js`. */
+    this.analytics = new Analytics(this);
     /** Phòng online, hoặc null khi cả bàn ngồi chung một máy. */
     this.net = null;
     /**
@@ -216,6 +220,8 @@ export class Game {
     const { names, tokens, settings } = await setupModal();
     audio.stopMusic();
     this.state = new GameState(names, tokens ?? null, settings);
+    this.analytics.gameStart(this.state, 'offline');
+    this.armTelemetry();
     /* Hộp bày bàn đã áp chủ đề lúc người chơi chọn; gọi lại theo `settings`
        đã chốt cho chắc, trước khi dựng quân cờ (quân đội mũ theo chủ đề). */
     applyTheme(this.state.settings.theme);
@@ -235,6 +241,21 @@ export class Game {
        giữ ${WIN_SETS} bộ màu với ${WIN_HOTEL_SETS} bộ phủ kín khách sạn, hoặc gom đủ ${money(WIN_WORTH)} tổng tài sản.`,
       { ms: 4200 });
     await this.rollOff();
+  }
+
+  /**
+   * Bật bộ đệm số liệu cân bằng cho ván vừa dựng. Cổng kiểm **lúc phát**:
+   * chỉ máy cầm lái mới ghi — bản online quyền ấy đổi tay mỗi lượt, và máy
+   * ngồi xem vẫn chạy `learnSkill` trên bản sao khi học ngoài lượt.
+   */
+  armTelemetry() {
+    const st = this.state;
+    telemetry.start({
+      startedAt: st.startedAt,
+      gate: () => this.analytics.enabled && this.isDriver(),
+      ctx: () => ({ game_id: st.gameId, turn_no: st.turnNo, round: st.round, turn: st.turn }),
+      onPush: (ev) => this.analytics.push(ev),
+    });
   }
 
   /** Rê chuột lên một người ở thanh bên: soi đất của họ trên bàn cờ. */
@@ -259,6 +280,7 @@ export class Game {
     audio.stopMusic();
     this.net = room;
     this.state = fromSnapshot(snap);
+    this.armTelemetry();
     // Vào lại giữa ván cũng đi qua đây: chủ đề lấy từ ảnh chụp, không từ phòng chờ
     applyTheme(this.state.settings.theme);
     this.quick.setState(this.state);
@@ -1308,10 +1330,13 @@ export class Game {
       if (this.checkGameOver()) { this.sync(); return; }
     }
 
+    // Một dòng mỗi lượt cho số liệu cân bằng: tiền mặt cả bàn lúc hết lượt
+    track('turn', { seat: st.turn, turn_no: st.turnNo, round: st.round, cash: st.players.map((p) => p.money) });
     st.nextTurn();
     // Phát trước khi tự bày lại bàn: từ giây này quyền cầm lái đã sang người
     // khác, gọi `sync()` sau `beginTurn()` thì không còn ai để phát.
     this.sync();
+    this.analytics.flush();
     this.beginTurn();
   }
 
@@ -1666,7 +1691,7 @@ export class Game {
     await this.showFateCard(kind, card, {
       seed, note: `Nhận <b>+${card.points} điểm kỹ năng</b>.`, label: 'Nhận điểm',
     });
-    grantLapPoint(p, card.points);
+    grantLapPoint(p, card.points, 'card');
     this.hud.refresh();
     this.sync();
     audio.sfx('coin');
@@ -3012,6 +3037,7 @@ export class Game {
     if (!w) return false;
     st.over = true;
     st.endedAt = Date.now();
+    this.analytics.gameEnd(st, w);
     this.clock = null;
     this.hud.setClock(null);
     this.hud.refresh();
@@ -3043,6 +3069,10 @@ export class Game {
     // Ván đã hạ màn — quay về "màn hình chờ", nhạc nền nổi lại (bản Giáng Sinh
     // có riêng một bài cho lúc này)
     audio.startMusic('win');
+    /* Gửi nốt số liệu trước khi người chơi bấm gì: bản online sẽ rời trang
+       ngay sau hộp này. Máy ngồi xem cũng gửi — nó có thể còn batch từ lúc
+       chính nó cầm lái. */
+    await this.analytics.flushNow({ keepalive: true, timeoutMs: 500 });
     const again = await winnerModal(this.state, winner);
 
     /* Ván online hạ màn thì phòng cũng hết việc: mã phòng cũ đã mang trạng

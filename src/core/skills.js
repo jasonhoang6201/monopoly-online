@@ -10,6 +10,7 @@ import {
   WAYS, GROW_BY,
 } from '../data/skills.js';
 import { BOARD, GROUP_TILES, money, tileLabel, GO_SALARY } from '../data/board.js';
+import { track } from './telemetry.js';
 
 const BY_ID = new Map(SKILLS.map((s) => [s.id, s]));
 
@@ -42,11 +43,25 @@ export const usage = (p, id) => ({ uses: p?.skillUse?.[id]?.n ?? 0, gain: p?.ski
  * Không ghi gì nếu người này không học kỹ năng đó, nên bên gọi khỏi phải hỏi
  * `has` lần nữa.
  */
-export function credit(p, id, gain = 0) {
+export function credit(p, id, gain = 0, o = {}) {
   if (!has(p, id)) return;
-  const u = usage(p, id);
-  p.skillUse = { ...p.skillUse, [id]: { ...p.skillUse?.[id], n: u.uses + 1, gain: u.gain + Math.max(0, Math.round(gain)) } };
+  const counted = o.count !== false;
+  if (counted) {
+    const u = usage(p, id);
+    p.skillUse = { ...p.skillUse, [id]: { ...p.skillUse?.[id], n: u.uses + 1, gain: u.gain + Math.max(0, Math.round(gain)) } };
+  }
+  /* Số liệu cân bằng ghi **có dấu**: `skillUse.gain` chỉ cộng phần được, còn
+     bảng thống kê phải thấy cả khoản thua (cược trượt, tổng lẻ) mới biết kỹ
+     năng lời hay lỗ. `delta` không nói thì lấy bằng `gain`. */
+  track('use', { seat: p.id, id, delta: Math.round(o.delta ?? gain), gain: Math.max(0, Math.round(gain)), counted });
 }
+
+/**
+ * Chỉ ghi tiền cho thống kê, **không** đếm một lần chạy — cho khoản tiền của
+ * một lần chạy đã `credit` rồi (Tất Tay thắng/thua trả sau khi đã đếm lượt
+ * dùng), hay khoản âm không được tính vào điều kiện lên level (Số Đỏ ra lẻ).
+ */
+export const tally = (p, id, delta) => credit(p, id, 0, { delta, count: false });
 
 /**
  * Số đo tài sản đang có của người chơi, cho điều kiện lên level theo tài sản
@@ -187,9 +202,12 @@ export function canLearn(player, id, st) {
 }
 
 /** Học ô mới hoặc lên một level: trừ đúng giá bước đó. Không được thì không đổi gì. */
-export function learnSkill(player, id, st) {
+export function learnSkill(player, id, st, o = {}) {
   const check = canLearn(player, id, st);
   if (!check.ok) return check;
+  /* Tổng điểm đã nhận tới giờ = đã tiêu + chưa tiêu; đúng cả sau tẩy vì điểm
+     hoàn về `skillPoints`. Tính trước khi trừ để biết bước này tiêu điểm thứ mấy. */
+  const earned = spentTotal(player) + player.skillPoints;
   player.skillPoints -= check.cost;
   if (check.level === 1) {
     player.skills.push(id);
@@ -197,12 +215,40 @@ export function learnSkill(player, id, st) {
        chơi trong lượt mình. Kỹ năng tự động không có công tắc, học là chạy. */
     if (switchable(skillById(id))) player.skillOff = [...(player.skillOff ?? []), id];
   } else player.skillLv = { ...player.skillLv, [id]: check.level };
+  player.learnCount = (player.learnCount ?? 0) + 1;
+  recordLearn(player, id, check.level, { ...o, earned });
   return check;
 }
 
-/** Đi ngang ô Bắt Đầu: +1 điểm. */
-export function grantLapPoint(player, n = 1) {
+/**
+ * Ghi một lần học / lên level vào số liệu cân bằng. `learnSkill` gọi ngay sau
+ * khi học; `SkillPlay.reconcileLearn` gọi **bù** (`late`) cho lần học ngoài
+ * lượt đã xảy ra trên bản sao lúc cổng ghi còn tắt, khi máy ấy vừa thành máy
+ * cầm lái mà chưa máy nào kịp ghi. Trùng với dòng máy cũ đã ghi thì cùng
+ * `nth` — view `v_learn` gộp lại.
+ */
+export function recordLearn(player, id, level, o = {}) {
+  const s = skillById(id);
+  track('learn', {
+    seat: player.id, id, level,
+    cost: level === 1 ? skillCost(s) : LEVEL_COST,
+    points_left: player.skillPoints,
+    lap: player.laps ?? 0, off_turn: !!o.offTurn, late: !!o.late,
+    /* Ba toạ độ "học lúc nào": lần học thứ mấy trong ván, tổng điểm đã nhận,
+       và điểm thứ mấy vừa tiêu (bước giá 2 là điểm `point_no-1` và `point_no`). */
+    nth: player.learnCount ?? 0,
+    earned: o.earned ?? spentTotal(player) + player.skillPoints,
+    point_no: spentTotal(player),
+  });
+}
+
+/**
+ * Nhận điểm kỹ năng. `src` là nguồn: 'lap' (qua ô Bắt Đầu — `onLap` đã ghi sự
+ * kiện riêng nên không ghi thêm) hay 'card' (thẻ cộng điểm).
+ */
+export function grantLapPoint(player, n = 1, src = 'lap') {
   player.skillPoints += n;
+  if (src !== 'lap') track('points', { seat: player.id, n, src });
 }
 
 /** Tổng điểm đã đổ vào một nhánh — để hiện độ sâu của từng nhánh. */
@@ -282,11 +328,13 @@ export function canRespec(player) {
 export function respec(player) {
   const check = canRespec(player);
   if (!check.ok) return check;
+  const wiped = player.skills.map((id) => ({ id, lv: levelOf(player, id) }));
   player.money -= check.fee;
   player.skillPoints += check.refund;
   player.skills = [];
   player.skillLv = {};
   player.skillOff = [];
+  track('respec', { seat: player.id, wiped, refund: check.refund, fee: check.fee, points_after: player.skillPoints, lap: player.laps ?? 0 });
   return check;
 }
 
@@ -334,6 +382,7 @@ export const switchable = (s) => s?.kind === 'active' && !s.auto && !s.once;
 export function setSkillOn(p, id, on) {
   if (!p?.skills.includes(id) || !switchable(skillById(id)) || isOff(p, id) === !on) return false;
   p.skillOff = on ? p.skillOff.filter((x) => x !== id) : [...(p.skillOff ?? []), id];
+  track('toggle', { seat: p.id, id, on, auto: false });
   return true;
 }
 
@@ -352,6 +401,7 @@ export function setSkillOn(p, id, on) {
 export function offSpent(p) {
   const out = p.skills.filter((id) => !isOff(p, id) && p.cooldowns?.[id] > 0 && switchable(skillById(id)));
   if (out.length) p.skillOff = [...(p.skillOff ?? []), ...out];
+  for (const id of out) track('toggle', { seat: p.id, id, on: false, auto: true });
   return out;
 }
 
@@ -433,6 +483,7 @@ export function onLap(p, turnNo) {
   }
   p.cooldowns = next;
   p.lapUses = {};
+  track('lap', { seat: p.id, laps: p.laps, points, points_now: p.skillPoints, money: p.money });
   return points;
 }
 

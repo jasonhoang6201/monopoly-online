@@ -12,7 +12,7 @@ import {
   skillById, has, param, roll, rolled, ready, usesLeft, spend, onLap, levyRate, levyEach, levelOf,
   freeHouseTarget, credit, rentGains, lateFee, lottoPrize, tollStops, forecloseOffers,
   tourPassed, leftoverOffers, isOff, setSkillOn, learnSkill, switchable, canSeize,
-  teleportTargets,
+  teleportTargets, tally, recordLearn,
 } from '../core/skills.js';
 import { cardType, isKeepable, moveDest, repairBill } from '../core/cards.js';
 import { cardName, cardEffect, CARD_KINDS, DECK_META } from '../data/cards.js';
@@ -705,7 +705,7 @@ export class SkillPlay {
     if (!g.isDriver()) return;
     const q = this.st.players[seat];
     if (!q || q.bankrupt || levelOf(q, id) !== level - 1) return;
-    if (!learnSkill(q, id, this.st).ok) return;
+    if (!learnSkill(q, id, this.st, { offTurn: true }).ok) return;
     g.hud.refresh();
     this.announceLearn(q, id, level);
     g.syncSoon();
@@ -729,19 +729,29 @@ export class SkillPlay {
     if (!this.learnPending.length) return;
     const p = this.st.players[this.g.mySeat];
     const now = Date.now();
+    const driver = this.g.isDriver();
     this.learnPending = this.learnPending.filter((x) => {
       if (!p || p.bankrupt || now - x.t0 > 20000) return false;
       const lv = levelOf(p, x.id);
-      if (lv >= x.level) return false;
-      if (lv !== x.level - 1 || !learnSkill(p, x.id, this.st).ok) return false;
+      if (lv >= x.level) {
+        /* Máy mình vừa thành máy cầm lái mà ô này còn chờ xác nhận: lần học
+           trên bản sao (lúc cổng ghi tắt) giờ là lần học thật, ghi bù kẻo số
+           liệu thiếu một dòng `learn` trong khi cây cuối ván vẫn có ô. */
+        if (driver) recordLearn(p, x.id, x.level, { offTurn: true, late: true });
+        return false;
+      }
+      if (lv !== x.level - 1 || !learnSkill(p, x.id, this.st, { offTurn: true }).ok) return false;
       if (now - x.sent > 3000) {
         x.sent = now;
         this.g.netEmit('learn', { seat: p.id, id: x.id, level: x.level });
       }
       return true;
     });
-    // Máy mình vừa thành máy cầm lái: bản sao đã là bản gốc, hết gì để chờ
-    if (this.g.isDriver()) this.learnPending = [];
+    /* Máy mình vừa thành máy cầm lái: bản sao đã là bản gốc, hết gì để chờ.
+       Lần học lại ngay trên (nếu có) giờ là lần học thật và được ghi vào số
+       liệu — có thể trùng với dòng máy cầm lái cũ đã ghi trước khi rời; view
+       `v_learn` gộp theo (ván, ghế, ô, level, lần học thứ mấy) nên không đếm hai. */
+    if (driver) this.learnPending = [];
     refreshSkillTree();
   }
 
@@ -906,7 +916,7 @@ export class SkillPlay {
     if (!has(p, 'ddS2')) return { pay, note: '' };
     const win = Math.random() < param(p, 'ddS2').win;
     const out = win ? pay * 2 : Math.round(pay / 2);
-    credit(p, 'ddS2', Math.max(0, out - pay));
+    credit(p, 'ddS2', Math.max(0, out - pay), { delta: out - pay });
     return { pay: out, note: win ? ' · <b>Cò Quay trúng, lương ×2</b>' : ' · <b>Cò Quay trượt, lương còn một nửa</b>' };
   }
 
@@ -1423,6 +1433,8 @@ export class SkillPlay {
         credit(p, 'dd1', even);
         this.slip.push({ id: 'dd1', text: `tổng ${d.sum} chẵn`, n: even });
       } else if (odd > 0) {
+        // Khoản mất chỉ ghi cho số liệu cân bằng; `skillUse` không đếm — điều kiện lên level không thay đổi
+        tally(p, 'dd1', -odd);
         this.slip.push({ id: 'dd1', text: `tổng ${d.sum} lẻ`, n: -odd });
       }
     }
@@ -1474,7 +1486,7 @@ export class SkillPlay {
         this.slip.push({ id: txu ? 'ddX1' : 'dd2a', text: `đoán đúng cửa ${PARITY_NAME[bet.pick]}`, n });
       } else {
         // Tiền cược thua vào Quỹ Công; trả trong bản kê của lần lắc này (`flushSlip`)
-        credit(p, 'dd2a');
+        credit(p, 'dd2a', 0, { delta: -bet.amount });
         this.slip.push({ id: 'dd2a', text: `đoán sai cửa ${PARITY_NAME[bet.pick]}, tiền cược vào Quỹ Công`, n: -bet.amount, pot: bet.amount });
         if (has(p, 'ddX2')) {
           const back = Math.round(bet.amount * roll(param(p, 'ddX2').back));
@@ -1493,13 +1505,20 @@ export class SkillPlay {
         await this.bc(title('ddU'), `Ra ${d.sum}: ${named(p)} thắng! Mỗi người trả ${Math.round(win * 100)}% tiền mặt.`, { kind: 'trade', ms: 2800 });
         for (const q of others) {
           const n = Math.floor(q.money * win);
-          if (n > 0 && !q.bankrupt) await this.g.payPlayer(q.id, p.id, n);
+          if (n <= 0 || q.bankrupt) continue;
+          /* Ghi cả khi `payPlayer` trả false: con nợ vỡ nợ thì `coverDebt` cho
+             ngân hàng trả thay đủ `n`, người giữ Tất Tay vẫn nhận trọn. */
+          await this.g.payPlayer(q.id, p.id, n);
+          tally(p, 'ddU', n);
         }
       } else {
         const each = Math.floor(p.money * lose);
         await this.bc(title('ddU'), `Ra ${d.sum}: ${named(p)} thua, trả mỗi người <span class="down">${money(each)}</span>.`, { kind: 'bad', ms: 2800 });
         for (const q of others) {
-          if (each > 0 && !p.bankrupt && !q.bankrupt) await this.g.payPlayer(p.id, q.id, each);
+          if (each <= 0 || p.bankrupt || q.bankrupt) continue;
+          // Vỡ nợ giữa chừng thì khoản này vẫn là cái giá của lần thua: ghi đủ `-each`
+          await this.g.payPlayer(p.id, q.id, each);
+          tally(p, 'ddU', -each);
         }
       }
     }
