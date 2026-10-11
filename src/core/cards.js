@@ -118,7 +118,8 @@ export function cardTargets(st, card, seat) {
     .map(([id]) => id);
 
   switch (cardType(card)) {
-    // Có nhà mới dỡ được; ô có Sổ Hồng hay biển Di Sản thì không dỡ nổi
+    // Có nhà mới dỡ được; ô mang biển Di Sản thì không dỡ nổi. Ô có Sổ Hồng vẫn
+    // nhắm được, tỉ lệ giữ nhà rút lúc dỡ (`deedHolds`)
     case 'demolish':
       return foreign.filter((id) => st.housesOn(id) > 0 && !houseImmune(st, id)).sort((a, b) => a - b);
 

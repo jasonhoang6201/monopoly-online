@@ -228,6 +228,14 @@ export class GameState {
      */
     this.heritage = new Set();
     /**
+     * Chung Cư Mini: ô đất lẻ đang có nhà → số lượt của chủ đất còn lại trước
+     * khi nhà bị ngân hàng mua lại. Căn đầu đặt `life`, mỗi căn sau cộng `ext`:
+     * muốn giữ lâu thì phải đổ thêm tiền xây, mà mỗi ô lẻ chỉ có `cap` căn nên
+     * không kéo dài mãi được. Xoá khi ô hết nhà hoặc chủ đất gom đủ bộ.
+     * @type {Map<number, number>}
+     */
+    this.miniLeft = new Map();
+    /**
      * Đếm lượt từ đầu ván, tăng ở `nextTurn`. Kỹ năng "mỗi lượt 1 lần" đánh dấu
      * bằng con số này thay vì một cờ bật/tắt: `beginTurn` chạy lại nhiều lần
      * trong cùng một lượt (ảnh chụp về, sổ ghế đổi), xoá cờ ở đó là cho dùng lại.
@@ -606,7 +614,12 @@ export class GameState {
     if (!o.free && has(p, 'ac1')) {
       credit(p, 'ac1', Math.ceil(BOARD[tileId].house_cost * this.modMult('build')) - check.cost);
     }
-    if (check.mini) credit(p, 'acS1');
+    if (check.mini) {
+      credit(p, 'acS1');
+      const { life, ext } = param(p, 'acS1');
+      const left = this.miniLeft.get(tileId);
+      this.miniLeft.set(tileId, left === undefined ? life : left + ext);
+    }
     if (check.isHotel) {
       this.houses.set(tileId, 5);
       this.bankHouses += 4;   // trả 4 căn nhà về kho
@@ -697,7 +710,9 @@ export class GameState {
   demolish(tileId) {
     const cur = this.housesOn(tileId);
     if (cur === 0) return 0;
-    // Sổ Hồng và biển Di Sản: thẻ hay thiên tai đều không dỡ được
+    /* Biển Di Sản: thẻ hay thiên tai đều không dỡ được. Sổ Hồng không xét ở
+       đây — nó rút tỉ lệ một lần cho cả lần đánh (`deedHolds`), còn hàm này
+       chạy một lần cho mỗi cấp. */
     if (houseImmune(this, tileId)) return 0;
     this.payContractors(this.owner.get(tileId), 'sell');
     if (cur === 5) {
@@ -711,6 +726,36 @@ export class GameState {
     if (cur === 1) this.houses.delete(tileId);
     else this.houses.set(tileId, cur - 1);
     return 1;
+  }
+
+  /**
+   * Hết một lượt của `seat`: trừ hạn nhà Chung Cư Mini trên đất lẻ của họ.
+   * Ô hết hạn thì bán từng căn lại cho ngân hàng theo đúng luật bán nhà (giá
+   * bán lại, Sổ Hồng, Thầu Vật Liệu đều tính như bấm bán tay).
+   *
+   * Ô đã đủ bộ thì xoá hạn: nhà ấy giờ là nhà thường. Ô hết nhà hay đổi chủ
+   * cũng xoá, để lần xây lại tính hạn mới theo level của chủ mới.
+   * @returns {Array<{id:number, sold:number, refund:number}>} ô vừa hết hạn
+   */
+  ageMini(seat) {
+    const out = [];
+    for (const [id, left] of [...this.miniLeft]) {
+      const owner = this.owner.get(id);
+      if (owner === undefined || this.housesOn(id) === 0) { this.miniLeft.delete(id); continue; }
+      if (owner !== seat) continue;
+      if (this.hasFullGroup(seat, BOARD[id].color_group)) { this.miniLeft.delete(id); continue; }
+      if (left > 1) { this.miniLeft.set(id, left - 1); continue; }
+      this.miniLeft.delete(id);
+      let sold = 0, refund = 0;
+      while (this.housesOn(id) > 0) {
+        const res = this.sellHouse(seat, id);
+        if (!res.ok) break;
+        sold += 1;
+        refund += res.refund;
+      }
+      out.push({ id, sold, refund });
+    }
+    return out;
   }
 
   /** Dỡ sạch nhà cửa trên một ô, trả về số **cấp** đã dỡ (khách sạn tính 5). */
@@ -852,6 +897,7 @@ export class GameState {
       this.owner.delete(tileId);
       this.mortgaged.delete(tileId);
       this.heritage.delete(tileId);
+      this.miniLeft.delete(tileId);
     }
     // Thẻ còn trong túi người vỡ nợ thì trả về bộ, đừng chôn theo họ
     while (p.cards.length) this.dropCard(playerId);

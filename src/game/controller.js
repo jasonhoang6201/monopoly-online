@@ -21,7 +21,7 @@ import { cardOf, CARD_KINDS, cardName, cardEffect, DECKS } from '../data/cards.j
 import { inventoryModal } from '../ui/inventory.js';
 import { EventRunner } from './eventRunner.js';
 import { SkillPlay } from './skillPlay.js';
-import { has, offSpent, grantLapPoint } from '../core/skills.js';
+import { has, offSpent, grantLapPoint, deedHolds } from '../core/skills.js';
 import { snapshot, fromSnapshot, applySnapshot } from '../core/serialize.js';
 import { telemetry, track } from '../core/telemetry.js';
 import { Analytics } from '../net/analytics.js';
@@ -1342,6 +1342,7 @@ export class Game {
        thẻ Thời Cuộc sinh ra để phá, nên nó đẩy thanh áp lực nhanh hơn cả. */
     if (st.dryTurn) addPressure(st, PRESSURE.dryTurn);
     offSpent(st.current);
+    await this.expireMini(st.current);
 
     if (eventDue(st)) {
       await this.events.run();
@@ -1356,6 +1357,27 @@ export class Game {
     this.sync();
     this.analytics.flush();
     this.beginTurn();
+  }
+
+  /**
+   * Chung Cư Mini: hết lượt thì nhà trên đất lẻ của người vừa đi già thêm một
+   * lượt; ô hết hạn bị ngân hàng mua lại. Báo cho cả bàn vì giá thuê ô ấy tụt
+   * về đất trống ngay lượt sau.
+   */
+  async expireMini(p) {
+    const st = this.state;
+    const gone = st.ageMini(p.id);
+    if (!gone.length) return;
+    this.hud.refresh();
+    this.scene.refresh(st);
+    this.sync();
+    const sold = gone.reduce((n, g) => n + g.sold, 0);
+    const refund = gone.reduce((n, g) => n + g.refund, 0);
+    await this.bc.show('CHUNG CƯ MINI HẾT HẠN',
+      `Nhà trên đất lẻ của <b>${p.name}</b> ở ${gone.map((g) => `<b>${tileLabel(g.id)}</b>`).join(', ')}
+       hết hạn: ngân hàng mua lại ${sold} căn, trả <span class="up">${money(refund)}</span>.
+       Gom đủ bộ màu thì nhà không hết hạn.`, { kind: 'bad', ms: 4200 });
+    await this.spot(gone.map((g) => g.id));
   }
 
   // ------------------------------------------------------------- lắc xí ngầu
@@ -2138,6 +2160,17 @@ export class Game {
     const st = this.state;
     const owner = st.ownerOf(tileId);
     const before = st.housesOn(tileId);
+    if (deedHolds(st, tileId, levels)) {
+      audio.sfx('shake');
+      this.netEmit('quake', {});
+      this.scene.shake(0.008, 420);
+      this.sync();
+      await this.bc.show(title,
+        `<b>${p.name}</b> cho thợ tới dỡ nhà của <b>${owner.name}</b> ở <b>${tileLabel(tileId)}</b>,
+         nhưng <b>Sổ Hồng</b> hợp lệ: nhà đứng nguyên.`);
+      await this.spot([tileId]);
+      return;
+    }
     let gone = 0;
     for (let i = 0; i < levels && st.housesOn(tileId) > 0; i++) {
       st.demolish(tileId);

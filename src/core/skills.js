@@ -667,11 +667,27 @@ export function lateFee(st, payer, tileId, rent) {
 }
 
 /**
- * Nhà trên ô này có bị thẻ dỡ nhà / thiên tai đụng tới được không: chủ đất có
- * Sổ Hồng, hoặc ô mang biển Di Sản.
+ * Nhà trên ô này miễn hẳn thẻ dỡ nhà / thiên tai: chỉ ô mang biển Di Sản.
+ * Sổ Hồng không nằm ở đây vì nó giữ nhà theo tỉ lệ — xem `deedHolds`.
  */
-export const houseImmune = (st, tileId) =>
-  has(st.ownerOf(tileId), 'ac3') || !!st.heritage?.has(tileId);
+export const houseImmune = (st, tileId) => !!st.heritage?.has(tileId);
+
+/**
+ * Sổ Hồng: rút xem nhà trên ô này có đứng vững trước một lần dỡ không.
+ *
+ * Gọi **một lần cho mỗi ô mỗi lần bị đánh**, trước vòng hạ từng cấp: rút theo
+ * từng cấp thì khách sạn bị thẻ "dỡ 3 cấp" có ba lần thoát, tỉ lệ thật lệch
+ * xa con số in trên thẻ. Giữ được thì ghi vào tiến độ lên level bằng giá xây
+ * của mấy cấp vừa thoát.
+ * @param {number} [levels] số cấp lần đánh này định hạ
+ */
+export function deedHolds(st, tileId, levels = 1) {
+  const owner = st.ownerOf(tileId);
+  if (!has(owner, 'ac3') || st.housesOn(tileId) <= 0) return false;
+  if (Math.random() >= param(owner, 'ac3').hold) return false;
+  credit(owner, 'ac3', BOARD[tileId].house_cost * Math.min(levels, st.housesOn(tileId)));
+  return true;
+}
 
 /**
  * Phố Cổ chọn ô nào để xây thêm một căn miễn phí: ô ít nhà nhất trong các bộ
@@ -1013,6 +1029,7 @@ export function skillNow(st, p, s) {
       const n = st.houseCount(p.id);
       row('Căn nhà đang có', `${n} (khách sạn tính 5)`);
       row('Mỗi lần qua ô Bắt Đầu nhận', money(n * P.perHouse));
+      row('Bị dỡ mà nhà đứng nguyên', pctOf(P.hold));
       break;
     }
     case 'acU': {
@@ -1032,7 +1049,14 @@ export function skillNow(st, p, s) {
     case 'acS1': {
       const n = mine.filter((id) => BOARD[id].type === 'property' && !st.hasFullGroup(p.id, BOARD[id].color_group)).length;
       row('Đất lẻ xây được', `${n} ô, mỗi ô tối đa ${P.cap} căn`);
-      if (p.skills.includes('acS1')) row('Còn xây được trên đất lẻ', `${miniRoom(st, p)}/${P.total} căn`);
+      if (p.skills.includes('acS1')) {
+        row('Còn xây được trên đất lẻ', `${miniRoom(st, p)}/${P.total} căn`);
+        // Ô nào sắp hết hạn trước thì đứng đầu, người chơi biết nên giao dịch gom bộ nào
+        const left = [...(st.miniLeft ?? [])]
+          .filter(([id]) => st.ownerOf(id)?.id === p.id && st.housesOn(id) > 0)
+          .sort((a, b) => a[1] - b[1]);
+        for (const [id, n] of left) row(tileLabel(id), `còn ${n} lượt`);
+      }
       break;
     }
     case 'acS2':
