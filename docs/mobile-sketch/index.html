@@ -1,0 +1,832 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Cờ Tỷ Phú · phác thảo mobile ngang</title>
+<meta name="description" content="Bản phác thảo (concept) giao diện điện thoại nằm ngang cho Cờ Tỷ Phú Sài Gòn · Gia Định. Dữ liệu giả, không có luật chơi thật.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%237C1E14'/%3E%3Cpath d='M16 5l3.1 7.1 7.7.7-5.8 5.1 1.7 7.6L16 21.6l-6.7 3.9 1.7-7.6-5.8-5.1 7.7-.7z' fill='%23E9CE85'/%3E%3C/svg%3E">
+<!-- Font thật của game khi mở qua dev server; mở bằng file:// thì rơi về font hệ thống -->
+<link rel="stylesheet" href="/fonts/fonts.css">
+<style>
+/* ============================================================
+   PHÁC THẢO MOBILE — chỉ để tham khảo, không phải mã game.
+   Bảng màu chép từ src/style.css; màu khu chép từ src/data/board.js.
+   ============================================================ */
+:root {
+  --lac-deep:#5E140E; --lac:#8B2318; --lac-light:#A93425;
+  --gold-deep:#8A6A22; --gold:#C8A048; --gold-light:#E6C878; --gold-pale:#F2DFAE;
+  --jade-deep:#1D4436; --jade:#2E6B52; --jade-light:#4E9576;
+  --paper:#EFE2C6; --paper-warm:#E4D2AC; --paper-deep:#D2BC90;
+  --indigo-deep:#101B33; --indigo:#1D2E52; --indigo-mid:#2C4374;
+  --ground-night:#150A06; --ground-deep:#1B0B07; --ground:#30150F; --ground-light:#4A241A;
+  --ink:#17110C; --ink-soft:#3A2E22;
+  --ok:#3F8F5F; --bad:#B3322A;
+  --display:"Playfair Display", Georgia, serif;
+  --serif:"Noto Serif", Georgia, serif;
+  --sans:"Be Vietnam Pro", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+  --ease-back:cubic-bezier(.18,.89,.32,1.28);
+  --ease:cubic-bezier(.4,0,.2,1);
+  /* bề ngang hai cột điều khiển; bàn cờ ăn phần còn lại */
+  --left:118px; --right:148px;
+  --tap:44px; /* mục tiêu chạm tối thiểu */
+}
+/* Hai chủ đề thử nhận diện: chỉ đổi vài biến nền/nhấn như src/theme/*.css */
+#app[data-theme="christmas"] { --lac:#163C5A; --lac-deep:#0C2338; --lac-light:#245A82; --ground:#0F1E2C; --ground-deep:#0A141E; --ground-night:#060D14; --gold:#D8E6EE; --gold-light:#F0F6F9; --gold-deep:#8FA7B5; }
+#app[data-theme="halloween"] { --lac:#4A1F6B; --lac-deep:#2C1140; --lac-light:#6A2E97; --ground:#1D1026; --ground-deep:#130A1A; --ground-night:#0A0510; --gold:#E88A2E; --gold-light:#F5B36A; --gold-deep:#9E5A18; }
+
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { height:100%; background:#0a0605; color:var(--paper); font-family:var(--sans); overflow:hidden;
+  -webkit-tap-highlight-color:transparent; -webkit-text-size-adjust:100%; }
+button { font:inherit; color:inherit; background:none; border:0; cursor:pointer; touch-action:manipulation; }
+
+/* ---------- Khung xem trên máy tính ---------- */
+#deskbar { position:fixed; inset:0 0 auto 0; height:48px; display:flex; align-items:center; gap:14px; padding:0 16px;
+  background:#120907; border-bottom:1px solid #3a2118; font-size:13px; z-index:5; }
+#deskbar .brand { font-family:var(--display); color:var(--gold-light); font-weight:700; letter-spacing:.04em; }
+#deskbar .grp { display:flex; gap:4px; align-items:center; }
+#deskbar label { color:#a08a6a; font-size:11px; text-transform:uppercase; letter-spacing:.08em; margin-right:4px; white-space:nowrap; }
+#deskbar button { padding:6px 10px; border-radius:6px; background:#2a1711; color:var(--paper); font-size:12px; }
+#deskbar button.on { background:var(--gold); color:var(--ink); font-weight:600; }
+#deskbar .hint { margin-left:auto; color:#8f7a5c; font-size:12px; }
+#stage { position:fixed; inset:48px 0 0 0; display:grid; place-items:center; overflow:hidden; }
+#phone { position:relative; width:874px; height:402px; background:#000; border-radius:28px; padding:12px;
+  box-shadow:0 30px 80px rgba(0,0,0,.7), 0 0 0 2px #2a2a2a inset; transform-origin:center; }
+#phone::before { /* "đảo động" của iPhone, chỉ để nhìn cho quen mắt */
+  content:""; position:absolute; left:22px; top:50%; width:10px; height:70px; margin-top:-35px;
+  background:#000; border-radius:8px; z-index:3; box-shadow:0 0 0 2px #111; }
+#phone[data-notch="no"]::before { display:none; }
+/* iPhone có đảo động chừa ~59pt mỗi bên khi nằm ngang (safe-area-inset) — mô phỏng để thấy đúng phần đất còn lại */
+#phone[data-notch="yes"] #app { padding-left:59px; padding-right:59px; }
+#phone .screen { width:100%; height:100%; border-radius:18px; overflow:hidden; position:relative; }
+.dims { position:absolute; bottom:-26px; left:0; right:0; text-align:center; color:#6f5c45; font-size:11px; }
+
+/* Trên điện thoại thật: bỏ khung, chiếm trọn màn */
+body.phone #deskbar { display:none; }
+body.phone #stage { inset:0; }
+body.phone #phone { width:100dvw; height:100dvh; border-radius:0; padding:0; box-shadow:none; }
+body.phone #phone::before, body.phone .dims { display:none; }
+body.phone #phone .screen { border-radius:0; }
+body.phone #app { padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
+
+#rotate { display:none; position:fixed; inset:0; z-index:50; background:var(--ground-night); color:var(--gold-light);
+  place-items:center; text-align:center; font-family:var(--display); font-size:22px; padding:30px; line-height:1.4; }
+#rotate small { display:block; font-family:var(--sans); font-size:13px; color:#b89d74; margin-top:10px; }
+#rotate .ph { font-size:60px; display:block; animation:spin 2.4s var(--ease) infinite; }
+@keyframes spin { 0%,20%{transform:rotate(0)} 60%,100%{transform:rotate(90deg)} }
+body.portrait #rotate { display:grid; }
+
+/* ---------- Ứng dụng ---------- */
+#app { position:absolute; inset:0; display:grid; grid-template-columns:var(--left) 1fr var(--right);
+  background:radial-gradient(120% 90% at 50% 40%, var(--ground) 0%, var(--ground-deep) 60%, var(--ground-night) 100%);
+  overflow:hidden; font-size:12px; }
+#app::after { /* vân sơn mài rất nhẹ */
+  content:""; position:absolute; inset:0; pointer-events:none; opacity:.12;
+  background:repeating-linear-gradient(115deg, transparent 0 14px, rgba(255,220,160,.08) 14px 15px); }
+
+/* Cột trái: người chơi */
+#left { display:flex; flex-direction:column; padding:6px 6px 6px 8px; gap:5px; min-height:0; z-index:1; }
+.logo { font-family:var(--display); font-weight:800; font-size:11px; letter-spacing:.06em; color:var(--gold-light);
+  text-align:center; line-height:1.1; padding:3px 0 2px; border-bottom:1px solid rgba(200,160,72,.28); }
+.logo small { display:block; font-family:var(--sans); font-weight:500; font-size:8px; letter-spacing:.18em; color:var(--gold-deep); }
+#players { display:flex; flex-direction:column; gap:5px; }
+.pcard { position:relative; display:flex; width:100%; align-items:center; gap:6px; min-height:var(--tap); padding:4px 6px;
+  border-radius:9px; background:rgba(0,0,0,.28); border:1px solid rgba(200,160,72,.18); text-align:left;
+  transition:transform .15s var(--ease); }
+.pcard:active { transform:scale(.97); }
+.pcard.cur { border-color:var(--gold); background:linear-gradient(180deg, rgba(200,160,72,.22), rgba(200,160,72,.08)); box-shadow:0 0 0 1px rgba(200,160,72,.35), 0 4px 12px rgba(0,0,0,.4); }
+.pcard .tok { flex:0 0 22px; width:22px; height:22px; border-radius:50%; display:grid; place-items:center; font-weight:700; font-size:11px; color:#fff;
+  box-shadow:0 0 0 2px rgba(0,0,0,.4), 0 2px 4px rgba(0,0,0,.5); text-shadow:0 1px 1px rgba(0,0,0,.6); }
+.pcard .who { min-width:0; flex:1; }
+.pcard .nm { font-weight:600; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.1; }
+.pcard .cash { font-family:var(--serif); font-weight:700; font-size:13px; color:var(--gold-light); line-height:1.15; font-variant-numeric:tabular-nums; }
+.pcard .tags { display:flex; gap:3px; flex-wrap:wrap; margin-top:1px; }
+.tag { font-size:7.5px; font-weight:700; letter-spacing:.06em; padding:1px 4px; border-radius:3px; background:rgba(0,0,0,.4); color:var(--paper-deep); text-transform:uppercase; }
+.tag.jail { background:var(--indigo); color:#cdd8f5; }
+.tag.cards { background:var(--jade-deep); color:#bfe6cf; }
+.tag.debt { background:var(--bad); color:#fff; }
+.pcard .turn { position:absolute; top:-6px; right:6px; font-size:7px; font-weight:800; letter-spacing:.12em; padding:1px 5px; border-radius:3px;
+  background:var(--gold); color:var(--ink); }
+#left .util { margin-top:auto; display:flex; gap:4px; }
+#left .util button { flex:1; min-height:36px; border-radius:8px; background:rgba(0,0,0,.3); border:1px solid rgba(200,160,72,.18); font-size:15px; }
+#left .util button:active { background:rgba(200,160,72,.25); }
+
+/* Giữa: bàn cờ */
+#mid { position:relative; display:grid; place-items:center; min-width:0; min-height:0; padding:6px 4px; z-index:1; }
+#board { position:relative; width:min(100%, calc(100cqh - 0px)); aspect-ratio:1; display:grid;
+  grid-template-columns:1.45fr repeat(9,1fr) 1.45fr; grid-template-rows:1.45fr repeat(9,1fr) 1.45fr;
+  background:var(--paper-warm); border:3px solid var(--gold-deep); border-radius:6px; gap:1px; padding:1px;
+  box-shadow:0 0 0 1px var(--lac-deep), 0 16px 40px rgba(0,0,0,.6);
+  font-family:var(--serif); color:var(--ink); }
+#mid { container-type:size; }
+#board { width:min(100%, 100cqh); }
+.tile { position:relative; background:var(--paper); display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
+  overflow:hidden; cursor:pointer; -webkit-user-select:none; user-select:none; font-size:6.4px; line-height:1.05; text-align:center; padding:1px; }
+.tile:active { filter:brightness(.92); }
+.tile .strip { position:absolute; background:var(--g); }
+.tile[data-side="b"] .strip { left:0; right:0; top:0; height:22%; }
+.tile[data-side="l"] .strip { top:0; bottom:0; right:0; width:22%; }
+.tile[data-side="t"] .strip { left:0; right:0; bottom:0; height:22%; }
+.tile[data-side="r"] .strip { top:0; bottom:0; left:0; width:22%; }
+.tile .nm { position:absolute; inset:0; display:grid; place-items:center; padding:2px; font-weight:600; letter-spacing:-.01em; hyphens:auto; }
+.tile[data-side="b"] .nm { top:24%; } .tile[data-side="t"] .nm { bottom:24%; }
+/* cột trái/phải: chừa 12px mép ngoài cho quân cờ và chấm chủ đất */
+.tile[data-side="l"] .nm { right:24%; left:12px; } .tile[data-side="r"] .nm { left:24%; right:12px; }
+.tile .pr { position:absolute; font-size:5.6px; color:var(--ink-soft); font-variant-numeric:tabular-nums; }
+.tile[data-side="b"] .pr { bottom:1px; } .tile[data-side="t"] .pr { top:1px; }
+.tile[data-side="l"] .pr { left:1px; bottom:1px; } .tile[data-side="r"] .pr { right:1px; bottom:1px; }
+.tile.corner { font-size:6.8px; font-weight:800; font-family:var(--display); background:var(--paper-deep); justify-content:center; }
+.tile.corner .gl { font-size:14px; line-height:1; margin-bottom:2px; }
+.tile.corner .nm { position:static; display:block; padding:0 2px; }
+/* ô đặc biệt: ký hiệu ở mép trên, tên lùi xuống dưới ký hiệu để không đè nhau */
+.tile.special .gl { font-size:9px; line-height:1; position:absolute; top:2px; }
+.tile.special:not(.corner) .nm { top:11px; }
+.tile.here { outline:2px solid var(--gold); outline-offset:-2px; box-shadow:inset 0 0 0 20px rgba(200,160,72,.18); }
+.tile.sel { outline:2px solid var(--lac-light); outline-offset:-2px; }
+/* chủ đất: một chấm nhỏ ở mép ngoài */
+.tile .own { position:absolute; width:5px; height:5px; border-radius:50%; box-shadow:0 0 0 1px #fff; }
+.tile[data-side="b"] .own { bottom:2px; right:2px; } .tile[data-side="t"] .own { top:2px; right:2px; }
+.tile[data-side="l"] .own { left:2px; top:2px; } .tile[data-side="r"] .own { right:2px; top:2px; }
+.tile .hs { position:absolute; display:flex; gap:1px; }
+.tile[data-side="b"] .hs { top:1px; left:2px; } .tile[data-side="t"] .hs { bottom:1px; left:2px; }
+.tile[data-side="l"] .hs { right:1px; top:2px; flex-direction:column; } .tile[data-side="r"] .hs { left:1px; top:2px; flex-direction:column; }
+.tile .hs i { width:3px; height:3px; background:var(--jade); border-radius:1px; }
+.tile .hs i.hotel { width:7px; background:var(--lac); }
+/* quân cờ nằm sát mép ngoài (phía giá tiền), chừa phần tên ô */
+.tile .toks { position:absolute; display:flex; gap:1px; z-index:2; }
+.tile[data-side="b"] .toks, .tile[data-side="t"] .toks, .tile.corner .toks { left:50%; transform:translateX(-50%); bottom:1px; }
+.tile[data-side="t"] .toks { bottom:auto; top:1px; }
+.tile[data-side="l"] .toks, .tile[data-side="r"] .toks { top:50%; transform:translateY(-50%); left:2px; flex-direction:column; }
+.tile[data-side="r"] .toks { left:auto; right:2px; }
+.tile.corner .toks { bottom:3px; }
+.tk { width:9px; height:9px; border-radius:50%; box-shadow:0 0 0 1.5px #fff, 0 1px 3px rgba(0,0,0,.6); transition:transform .12s; }
+.tk.bump { transform:scale(1.35); }
+
+#center { grid-column:2/11; grid-row:2/11; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+  background:
+    radial-gradient(60% 60% at 50% 50%, rgba(139,35,24,.12), transparent 70%),
+    var(--paper-warm);
+  position:relative; }
+#center .title { font-family:var(--display); font-weight:800; color:var(--lac); font-size:clamp(11px, 4.2cqh, 20px); letter-spacing:.08em; line-height:1; }
+#center .sub { font-size:7px; letter-spacing:.3em; color:var(--gold-deep); text-transform:uppercase; }
+#dice { display:flex; gap:8px; margin:4px 0; }
+.die { width:30px; height:30px; border-radius:6px; background:#fff; border:1px solid #c9b48a; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr);
+  padding:4px; gap:1px; box-shadow:0 3px 6px rgba(0,0,0,.25); transition:transform .15s; }
+.die i { border-radius:50%; background:var(--ink); opacity:0; }
+.die[data-v="1"] i:nth-child(5), .die[data-v="3"] i:nth-child(5), .die[data-v="5"] i:nth-child(5) { opacity:1; }
+.die[data-v="2"] i:nth-child(1), .die[data-v="2"] i:nth-child(9), .die[data-v="3"] i:nth-child(1), .die[data-v="3"] i:nth-child(9),
+.die[data-v="4"] i:nth-child(1), .die[data-v="4"] i:nth-child(3), .die[data-v="4"] i:nth-child(7), .die[data-v="4"] i:nth-child(9),
+.die[data-v="5"] i:nth-child(1), .die[data-v="5"] i:nth-child(3), .die[data-v="5"] i:nth-child(7), .die[data-v="5"] i:nth-child(9),
+.die[data-v="6"] i:nth-child(1), .die[data-v="6"] i:nth-child(3), .die[data-v="6"] i:nth-child(4), .die[data-v="6"] i:nth-child(6), .die[data-v="6"] i:nth-child(7), .die[data-v="6"] i:nth-child(9) { opacity:1; }
+.die.roll { animation:tumble .12s linear infinite; }
+@keyframes tumble { 0%{transform:rotate(0) translateY(0)} 50%{transform:rotate(12deg) translateY(-3px)} 100%{transform:rotate(-10deg) translateY(0)} }
+#bcast { min-height:26px; display:flex; flex-direction:column; align-items:center; gap:2px; text-align:center; }
+.bc { background:var(--lac); color:var(--gold-pale); padding:2px 8px; border-radius:4px; font-family:var(--sans); font-size:7.5px; max-width:92%;
+  box-shadow:0 2px 6px rgba(0,0,0,.35); animation:pop .3s var(--ease-back); }
+.bc b { display:block; font-size:7px; letter-spacing:.14em; color:var(--gold-light); }
+@keyframes pop { from{transform:scale(.8); opacity:0} to{transform:none; opacity:1} }
+#hereChip { position:absolute; bottom:6px; left:50%; transform:translateX(-50%); font-size:7px; color:var(--ink-soft); background:rgba(255,255,255,.55);
+  padding:2px 7px; border-radius:10px; white-space:nowrap; }
+#hereChip b { color:var(--lac); }
+
+/* Cột phải: hành động */
+#right { display:flex; flex-direction:column; gap:5px; padding:6px 8px 6px 6px; min-height:0; z-index:1; }
+.primary { min-height:50px; border-radius:12px; font-family:var(--display); font-weight:800; font-size:14px; letter-spacing:.03em;
+  background:linear-gradient(180deg, var(--gold-light), var(--gold)); color:var(--ink);
+  box-shadow:0 4px 0 var(--gold-deep), 0 8px 18px rgba(0,0,0,.45); transition:transform .1s, box-shadow .1s; line-height:1.1; padding:4px; }
+.primary small { display:block; font-family:var(--sans); font-weight:500; font-size:8px; letter-spacing:.12em; opacity:.7; text-transform:uppercase; }
+.primary:active { transform:translateY(3px); box-shadow:0 1px 0 var(--gold-deep), 0 4px 10px rgba(0,0,0,.45); }
+.primary.pulse { animation:pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{filter:brightness(1)} 50%{filter:brightness(1.15)} }
+.primary.end { background:linear-gradient(180deg, var(--lac-light), var(--lac)); color:var(--gold-pale); box-shadow:0 4px 0 var(--lac-deep), 0 8px 18px rgba(0,0,0,.45); }
+.primary.end:active { box-shadow:0 1px 0 var(--lac-deep), 0 4px 10px rgba(0,0,0,.45); }
+.acts { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+.act { position:relative; min-height:var(--tap); border-radius:9px; background:rgba(0,0,0,.3); border:1px solid rgba(200,160,72,.22);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; padding:3px 2px; line-height:1.05; }
+.act .ic { font-size:15px; line-height:1; }
+.act .lb { font-size:8.5px; font-weight:600; }
+.act .ct { font-size:7px; color:var(--gold-deep); }
+.act:active { background:rgba(200,160,72,.25); }
+.act.dim { opacity:.4; }
+.act .badge { position:absolute; top:-4px; right:-3px; min-width:14px; height:14px; border-radius:7px; background:var(--gold); color:var(--ink);
+  font-size:8px; font-weight:800; display:grid; place-items:center; padding:0 3px; }
+.act .badge.hot { background:var(--bad); color:#fff; }
+#fate { padding:5px 6px; border-radius:9px; background:rgba(0,0,0,.3); border:1px solid rgba(200,160,72,.18); }
+#fate .lb { display:flex; justify-content:space-between; font-size:7.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--gold-deep); font-weight:700; }
+#fate .bar { height:6px; margin-top:3px; border-radius:3px; background:rgba(0,0,0,.5); overflow:hidden; }
+#fate .bar i { display:block; height:100%; width:62%; background:linear-gradient(90deg, var(--jade), var(--gold), var(--lac-light)); transition:width .4s; }
+#clock { display:flex; align-items:center; gap:6px; font-size:9px; color:var(--paper-deep); }
+#clock .ring { width:22px; height:22px; border-radius:50%; display:grid; place-items:center; font-size:7.5px; font-weight:700; color:var(--gold-light);
+  background:conic-gradient(var(--gold) var(--p, 60%), rgba(255,255,255,.12) 0); position:relative; }
+#clock .ring::after { content:""; position:absolute; inset:3px; border-radius:50%; background:var(--ground-deep); }
+#clock .ring span { position:relative; z-index:1; }
+/* nhật ký lượt: broadcast trên bàn tắt sau vài giây, trên điện thoại cần chỗ xem lại */
+#log { flex:1; min-height:0; overflow:hidden; display:flex; flex-direction:column; justify-content:flex-end; gap:2px; padding:4px 2px; font-size:8.5px; line-height:1.25; color:var(--paper-deep); }
+#log div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#log div b { color:var(--gold-light); font-weight:600; }
+#log div:last-child { color:var(--paper); }
+#clock .nm { font-weight:600; color:var(--paper); }
+
+/* ---------- Lớp phủ ---------- */
+#scrim { position:absolute; inset:0; z-index:8; background:rgba(8,4,2,.5); opacity:0; pointer-events:none; transition:opacity .2s; }
+#scrim.on { opacity:1; pointer-events:auto; }
+.sheet { position:absolute; top:0; bottom:0; width:min(340px, 58%); z-index:9; background:linear-gradient(180deg, #221009, #170a06); border-left:1px solid rgba(200,160,72,.35);
+  box-shadow:-10px 0 30px rgba(0,0,0,.5); transform:translateX(100%); transition:transform .25s var(--ease); display:flex; flex-direction:column; }
+#sheetL { left:0; right:auto; width:min(320px, 55%); transform:translateX(-100%); border-left:0; border-right:1px solid rgba(200,160,72,.35); box-shadow:10px 0 30px rgba(0,0,0,.5); }
+#sheetR { right:0; }
+/* đặt sau #sheetL/#sheetR để thắng độ ưu tiên của id */
+#sheetL.on, #sheetR.on { transform:none; }
+.sheet .hd { display:flex; align-items:center; gap:8px; padding:8px 10px 6px; border-bottom:1px solid rgba(200,160,72,.2); }
+.sheet .hd h3 { font-family:var(--display); font-size:14px; color:var(--gold-light); font-weight:700; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.15; }
+.sheet .hd h3 small { display:block; font-family:var(--sans); font-weight:500; font-size:9px; color:var(--paper-deep); letter-spacing:.02em; }
+.x { width:36px; height:36px; border-radius:50%; background:rgba(0,0,0,.35); font-size:16px; display:grid; place-items:center; flex:0 0 auto; }
+.sheet .bd { flex:1; overflow-y:auto; padding:8px 10px; font-size:11px; line-height:1.35; overscroll-behavior:contain; }
+.sheet .ft { display:flex; gap:6px; padding:6px 10px 8px; border-top:1px solid rgba(200,160,72,.2); }
+.btn { min-height:40px; flex:1; border-radius:9px; font-weight:700; font-size:11.5px; padding:0 10px; background:rgba(255,255,255,.08); border:1px solid rgba(200,160,72,.3); }
+.btn:active { filter:brightness(1.25); }
+.btn.gold { background:linear-gradient(180deg, var(--gold-light), var(--gold)); color:var(--ink); border:0; }
+.btn.red { background:var(--lac); color:var(--gold-pale); border:0; }
+.btn.ghost { background:transparent; }
+.btn:disabled { opacity:.4; }
+/* thẻ đất thu nhỏ */
+.deed { background:var(--paper); color:var(--ink); border-radius:8px; overflow:hidden; font-family:var(--serif); box-shadow:0 4px 12px rgba(0,0,0,.4); }
+.deed .top { padding:6px 10px; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.5); font-family:var(--display); font-weight:700; font-size:13px; line-height:1.1; }
+.deed .top small { display:block; font-family:var(--sans); font-size:8.5px; font-weight:500; opacity:.9; letter-spacing:.04em; }
+.deed table { width:100%; border-collapse:collapse; font-size:10px; }
+.deed td { padding:2.5px 10px; border-bottom:1px dashed rgba(23,17,12,.15); }
+.deed td:last-child { text-align:right; font-weight:700; font-variant-numeric:tabular-nums; }
+.deed tr.now td { background:rgba(200,160,72,.3); }
+.deed .foot { display:flex; justify-content:space-between; padding:5px 10px; font-size:9.5px; color:var(--ink-soft); font-family:var(--sans); }
+.kv { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid rgba(255,255,255,.07); }
+.kv b { color:var(--gold-light); font-variant-numeric:tabular-nums; }
+.sec { font-size:8.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--gold-deep); font-weight:700; margin:10px 0 4px; }
+.prop { display:flex; align-items:center; gap:7px; padding:5px 0; border-bottom:1px solid rgba(255,255,255,.06); }
+.prop .sw { width:10px; height:22px; border-radius:2px; flex:0 0 auto; }
+.prop .t { flex:1; min-width:0; }
+.prop .t small { display:block; color:var(--paper-deep); font-size:9px; }
+.prop .h { font-size:9px; color:var(--jade-light); }
+.prop .m { font-size:8px; color:var(--bad); font-weight:700; letter-spacing:.08em; }
+.chips { display:flex; flex-wrap:wrap; gap:4px; }
+.chip { padding:3px 7px; border-radius:12px; font-size:9.5px; background:rgba(255,255,255,.08); border:1px solid rgba(200,160,72,.25); }
+.chip.on { background:rgba(46,107,82,.5); border-color:var(--jade-light); }
+
+/* hộp thoại giữa màn */
+#modal { position:absolute; inset:0; z-index:12; display:grid; place-items:center; padding:12px; opacity:0; pointer-events:none; transition:opacity .2s;
+  background:rgba(8,4,2,.55); }
+#modal.on { opacity:1; pointer-events:auto; }
+#modal.peek .card { opacity:.08; } /* giữ nút con mắt để nhìn bàn cờ */
+.card { width:min(460px, 100%); max-height:100%; display:flex; flex-direction:column; background:linear-gradient(180deg, #2a140c, #1a0b06); border:1px solid var(--gold);
+  border-radius:14px; box-shadow:var(--shadow-lg, 0 24px 60px rgba(0,0,0,.6)); overflow:hidden; animation:pop .25s var(--ease-back); transition:opacity .15s; }
+.card .hd { padding:9px 12px 6px; display:flex; gap:8px; align-items:flex-start; }
+.card .eyebrow { font-size:8px; letter-spacing:.2em; text-transform:uppercase; color:var(--gold-deep); font-weight:700; }
+.card h2 { font-family:var(--display); font-size:16px; color:var(--gold-light); line-height:1.15; font-weight:700; }
+.card h2 small { display:block; font-family:var(--sans); font-size:10px; font-weight:400; color:var(--paper-deep); margin-top:2px; }
+.card .hd .sp { flex:1; }
+.eye { width:34px; height:34px; border-radius:50%; background:rgba(0,0,0,.35); font-size:15px; display:grid; place-items:center; flex:0 0 auto; }
+.card .bd { padding:0 12px 8px; overflow-y:auto; font-size:11px; line-height:1.4; }
+.card .ft { display:flex; gap:6px; padding:6px 12px 10px; }
+.card.wide { width:min(620px, 100%); }
+.timer { display:flex; align-items:center; gap:8px; font-size:10px; color:var(--paper-deep); }
+.timer .bar { flex:1; height:4px; background:rgba(255,255,255,.1); border-radius:2px; overflow:hidden; }
+.timer .bar i { display:block; height:100%; width:70%; background:var(--gold); animation:drain 12s linear forwards; }
+@keyframes drain { to{width:0} }
+.voters { display:flex; gap:6px; margin-top:6px; }
+.voters .v { display:flex; align-items:center; gap:4px; font-size:9.5px; padding:3px 7px; border-radius:10px; background:rgba(0,0,0,.3); }
+.voters .v .tok { width:10px; height:10px; border-radius:50%; }
+.voters .v.done { background:rgba(46,107,82,.45); }
+/* băng thẻ Cơ Hội */
+.reel { position:relative; height:84px; overflow:hidden; border-radius:8px; background:rgba(0,0,0,.35); margin:4px 0 8px; }
+.reel::after { content:""; position:absolute; left:50%; top:0; bottom:0; width:2px; margin-left:-1px; background:var(--gold); box-shadow:0 0 8px var(--gold); }
+.reel .strip { position:absolute; left:0; top:6px; display:flex; gap:6px; padding-left:6px; transition:transform 2.2s cubic-bezier(.1,.8,.2,1); }
+.reel .cc { width:120px; height:72px; flex:0 0 auto; border-radius:6px; background:var(--paper); color:var(--ink); font-family:var(--serif); font-size:8.5px; padding:6px 7px; line-height:1.25; }
+.reel .cc b { display:block; font-family:var(--display); color:var(--lac); font-size:9px; letter-spacing:.1em; margin-bottom:3px; }
+.reel .cc.win { outline:2px solid var(--gold); }
+.money { font-family:var(--serif); font-weight:700; font-variant-numeric:tabular-nums; }
+.money.neg { color:#ff9a8f; } .money.pos { color:#8fe0b0; }
+.trade { display:grid; grid-template-columns:1fr auto 1fr; gap:8px; align-items:start; }
+.trade .col { background:rgba(0,0,0,.25); border-radius:8px; padding:6px; min-height:90px; }
+.trade .col h4 { font-size:10px; color:var(--gold-light); margin-bottom:4px; display:flex; gap:5px; align-items:center; }
+.trade .arrow { align-self:center; font-size:20px; color:var(--gold); }
+.trade .item { font-size:9.5px; padding:3px 5px; border-radius:5px; background:rgba(255,255,255,.07); margin-bottom:3px; display:flex; gap:5px; align-items:center; }
+.trade .item .sw { width:7px; height:14px; border-radius:2px; }
+.trade .add { font-size:9px; color:var(--gold-deep); border:1px dashed rgba(200,160,72,.4); border-radius:5px; padding:4px; text-align:center; }
+
+/* ---------- Cây kỹ năng (toàn màn, dạng tab) ---------- */
+#tree { position:absolute; inset:0; z-index:11; display:flex; flex-direction:column; background:linear-gradient(180deg, #1c0d07, #120805);
+  transform:translateY(100%); transition:transform .28s var(--ease); }
+#tree.on { transform:none; }
+#tree .hd { display:flex; align-items:center; gap:6px; padding:6px 8px 0; }
+#tree .hd h2 { font-family:var(--display); font-size:13px; color:var(--gold-light); margin-right:6px; }
+#tree .hd .pts { font-size:9.5px; padding:4px 8px; border-radius:10px; background:rgba(200,160,72,.18); color:var(--gold-light); font-weight:700; white-space:nowrap; }
+#tabs { display:flex; gap:3px; flex:1; min-width:0; overflow-x:auto; scrollbar-width:none; }
+#tabs::-webkit-scrollbar { display:none; }
+.tab { flex:0 0 auto; min-height:34px; padding:0 9px; border-radius:8px 8px 0 0; font-size:9.5px; font-weight:700; color:var(--paper-deep); white-space:nowrap;
+  border-bottom:3px solid transparent; display:flex; align-items:center; gap:5px; }
+.tab i { width:8px; height:8px; border-radius:50%; background:var(--c); }
+.tab.on { color:var(--paper); border-bottom-color:var(--c); background:rgba(255,255,255,.05); }
+.tab .n { font-size:8px; color:var(--gold-deep); }
+#tree .body { flex:1; min-height:0; display:grid; grid-template-columns:1fr 210px; border-top:1px solid rgba(200,160,72,.25); }
+#tiers { display:flex; gap:0; overflow-x:auto; padding:8px 6px; align-items:stretch; }
+.tier { flex:0 0 auto; display:flex; flex-direction:column; justify-content:center; gap:6px; padding:0 8px; position:relative; min-width:118px; }
+.tier + .tier::before { content:""; position:absolute; left:-2px; top:14%; bottom:14%; border-left:1px dashed rgba(200,160,72,.25); }
+.tier h5 { position:absolute; top:-6px; left:8px; font-size:7.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--gold-deep); }
+.node { display:flex; align-items:center; gap:6px; min-height:var(--tap); padding:4px 8px; border-radius:9px; background:rgba(0,0,0,.3); border:1px solid rgba(255,255,255,.1); text-align:left; }
+.node .ic { width:26px; height:26px; border-radius:7px; display:grid; place-items:center; font-size:13px; background:rgba(255,255,255,.07); flex:0 0 auto; }
+.node .t { min-width:0; }
+.node .t b { display:block; font-size:9.5px; line-height:1.1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:84px; }
+.node .t small { font-size:7.5px; color:var(--paper-deep); }
+.node.lv1, .node.lv2, .node.lv3 { border-color:var(--c); background:color-mix(in srgb, var(--c) 18%, rgba(0,0,0,.3)); }
+.node.lv1 .ic, .node.lv2 .ic, .node.lv3 .ic { background:var(--c); color:#fff; }
+.node.locked { opacity:.45; }
+.node.can { box-shadow:0 0 0 1px var(--gold); }
+.node.sel { outline:2px solid var(--gold-light); }
+.node .lv { margin-left:auto; font-size:8px; font-weight:800; color:var(--gold-light); }
+#detail { border-left:1px solid rgba(200,160,72,.25); display:flex; flex-direction:column; padding:8px 10px; min-height:0; }
+#detail .nm { font-family:var(--display); font-size:13px; color:var(--gold-light); line-height:1.15; }
+#detail .meta { font-size:8.5px; color:var(--gold-deep); letter-spacing:.08em; text-transform:uppercase; margin:2px 0 6px; }
+#detail .desc { font-size:10px; line-height:1.4; color:var(--paper); flex:1; overflow-y:auto; }
+#detail .desc .lv { padding:3px 0; border-bottom:1px solid rgba(255,255,255,.07); }
+#detail .desc .lv.on { color:var(--gold-light); }
+#detail .ft { display:flex; gap:5px; margin-top:6px; }
+
+/* thanh thông báo nhỏ (toast) */
+#toast { position:absolute; left:50%; bottom:8px; transform:translate(-50%, 20px); z-index:20; background:var(--ink); color:var(--gold-pale); padding:6px 12px; border-radius:20px;
+  font-size:10px; opacity:0; transition:all .25s; pointer-events:none; white-space:nowrap; border:1px solid rgba(200,160,72,.4); }
+#toast.on { opacity:1; transform:translate(-50%, 0); }
+
+/* menu kịch bản demo */
+/* hai cột để vừa cả màn 375pt cao (iPhone SE) */
+#demo { position:absolute; left:6px; bottom:48px; z-index:13; background:#1a0b06; border:1px solid var(--gold); border-radius:10px; padding:4px; display:none; grid-template-columns:1fr 1fr; gap:2px; width:290px; }
+#demo.on { display:grid; }
+#demo button { text-align:left; padding:6px 8px; font-size:10.5px; border-radius:6px; min-height:32px; }
+#demo button:active { background:rgba(200,160,72,.25); }
+#demo .cap { grid-column:1/-1; font-size:7.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--gold-deep); padding:4px 8px 2px; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; } }
+</style>
+</head>
+<body>
+
+<div id="deskbar">
+  <span class="brand">Cờ Tỷ Phú · phác thảo mobile</span>
+  <div class="grp" id="devs"><label>Cỡ máy</label></div>
+  <div class="grp" id="themes"><label>Chủ đề</label>
+    <button data-theme="" class="on">Mặc định</button><button data-theme="christmas">Giáng sinh</button><button data-theme="halloween">Halloween</button>
+  </div>
+  <span class="hint">Chạm vào ô cờ, thẻ người chơi, các nút. Menu ☰ góc trái dưới bật thẳng từng hộp thoại.</span>
+</div>
+
+<div id="rotate"><div><span class="ph">📱</span>Xoay ngang điện thoại để chơi<small>Bàn cờ và các cột điều khiển được dựng cho màn hình nằm ngang.</small></div></div>
+
+<div id="stage">
+  <div id="phone">
+    <div class="screen">
+      <div id="app">
+        <aside id="left">
+          <div class="logo">CỜ TỶ PHÚ<small>SÀI GÒN · GIA ĐỊNH</small></div>
+          <div id="players"></div>
+          <div class="util">
+            <button id="btnDemo" title="Kịch bản demo">☰</button>
+            <button id="btnSound" title="Âm thanh">🔊</button>
+          </div>
+        </aside>
+        <main id="mid"><div id="board"></div></main>
+        <aside id="right">
+          <button class="primary pulse" id="btnMain">LẮC XÍ NGẦU<small>Lượt của bạn</small></button>
+          <div class="acts" id="acts"></div>
+          <div id="log"></div>
+          <div id="fate"><div class="lb"><span>Thời Cuộc</span><span id="fateN">62%</span></div><div class="bar"><i id="fateBar"></i></div></div>
+          <div id="clock"><div class="ring" style="--p:62%"><span>18</span></div><div><div class="nm" id="clockWho">Jason</div><div>đang quyết định</div></div></div>
+        </aside>
+
+        <div id="scrim"></div>
+        <div class="sheet" id="sheetL"></div>
+        <div class="sheet" id="sheetR"></div>
+        <div id="modal"></div>
+        <div id="tree"></div>
+        <div id="demo"></div>
+        <div id="toast"></div>
+      </div>
+    </div>
+    <div class="dims" id="dims"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   Dữ liệu giả — chép tên ô / khu / nhánh từ src/data, số liệu bịa cho đủ xem.
+   ============================================================ */
+const GROUPS = {
+  brown:{name:'Bến Nghé',hex:'#6B4A2F'}, light_blue:{name:'Thanh Thuỷ',hex:'#79B2C6'}, pink:{name:'Hồng Đào',hex:'#C77BA0'},
+  orange:{name:'Son Cam',hex:'#D98634'}, red:{name:'Sơn Mài',hex:'#B22F26'}, yellow:{name:'Hoàng Kim',hex:'#E0B93E'},
+  green:{name:'Ngọc Bích',hex:'#2E7D50'}, dark_blue:{name:'Chàm Ngự',hex:'#27418C'},
+};
+const RAW = [{"id":0,"name":"BẮT ĐẦU","type":"corner"},{"id":1,"name":"Quai de l'Arroyo Chinois","type":"property","g":"brown","p":60,"r":6,"h":50},{"id":2,"name":"Khí Vận","type":"chest"},{"id":3,"name":"Quai de Mytho","type":"property","g":"brown","p":60,"r":8,"h":50},{"id":4,"name":"Thuế Thu Nhập","type":"tax"},{"id":5,"name":"Gare Routière","type":"station","p":200},{"id":6,"name":"Rue Mac-Mahon","type":"property","g":"light_blue","p":100,"r":12,"h":50},{"id":7,"name":"Cơ Hội","type":"chance"},{"id":8,"name":"Rue Paul Blanchy","type":"property","g":"light_blue","p":100,"r":12,"h":50},{"id":9,"name":"Rue d'Ormay","type":"property","g":"light_blue","p":120,"r":14,"h":50},{"id":10,"name":"Khám Lớn","type":"corner"},{"id":11,"name":"Rue Pellerin","type":"property","g":"pink","p":140,"r":17,"h":100},{"id":12,"name":"Compagnie des Eaux","type":"utility","p":150},{"id":13,"name":"Rue La Grandière","type":"property","g":"pink","p":140,"r":17,"h":100},{"id":14,"name":"Rue d'Espagne","type":"property","g":"pink","p":160,"r":19,"h":100},{"id":15,"name":"Gare de Mytho","type":"station","p":200},{"id":16,"name":"Boulevard de la Somme","type":"property","g":"orange","p":180,"r":22,"h":100},{"id":17,"name":"Khí Vận","type":"chest"},{"id":18,"name":"Boulevard Gallieni","type":"property","g":"orange","p":180,"r":22,"h":100},{"id":19,"name":"Quai de Belgique","type":"property","g":"orange","p":200,"r":24,"h":100},{"id":20,"name":"Bến Đậu","type":"corner"},{"id":21,"name":"Rue Taberd","type":"property","g":"red","p":220,"r":26,"h":150},{"id":22,"name":"Cơ Hội","type":"chance"},{"id":23,"name":"Rue Richaud","type":"property","g":"red","p":220,"r":26,"h":150},{"id":24,"name":"Rue Chasseloup-Laubat","type":"property","g":"red","p":240,"r":29,"h":150},{"id":25,"name":"Port de Commerce","type":"station","p":200},{"id":26,"name":"Rue Testard","type":"property","g":"yellow","p":260,"r":31,"h":150},{"id":27,"name":"Rue Garcerie","type":"property","g":"yellow","p":260,"r":31,"h":150},{"id":28,"name":"Centrale Électrique","type":"utility","p":150},{"id":29,"name":"Boulevard Norodom","type":"property","g":"yellow","p":280,"r":34,"h":150},{"id":30,"name":"Vào Tù","type":"corner"},{"id":31,"name":"Boulevard Charner","type":"property","g":"green","p":300,"r":36,"h":200},{"id":32,"name":"Boulevard Bonard","type":"property","g":"green","p":300,"r":36,"h":200},{"id":33,"name":"Khí Vận","type":"chest"},{"id":34,"name":"Place Rigault de Genouilly","type":"property","g":"green","p":320,"r":38,"h":200},{"id":35,"name":"Gare de Saïgon","type":"station","p":200},{"id":36,"name":"Cơ Hội","type":"chance"},{"id":37,"name":"Rue Catinat","type":"property","g":"dark_blue","p":350,"r":42,"h":200},{"id":38,"name":"Thuế Xa Xỉ","type":"tax"},{"id":39,"name":"Palais du Gouverneur","type":"property","g":"dark_blue","p":400,"r":50,"h":200}];
+const MODERN = {1:'Bến Bình Đông',3:'Võ Văn Kiệt',5:'Chợ Lớn',6:'Nam Kỳ Khởi Nghĩa',8:'Hai Bà Trưng',9:'Mạc Thị Bưởi',10:'Khám Lớn',11:'Pasteur',12:'Thuỷ Cục',13:'Lý Tự Trọng',14:'Lê Thánh Tôn',15:'Ga Mỹ Tho',16:'Hàm Nghi',18:'Trần Hưng Đạo',19:'Bến Chương Dương',21:'Nguyễn Du',23:'Nguyễn Đình Chiểu',24:'Nguyễn T. Minh Khai',25:'Bến Nhà Rồng',26:'Võ Văn Tần',27:'Phạm Ngọc Thạch',28:'Nhà Máy Điện',29:'Lê Duẩn',31:'Nguyễn Huệ',32:'Lê Lợi',34:'CT Mê Linh',35:'Ga Sài Gòn',37:'Đồng Khởi',39:'Dinh Độc Lập'};
+const GLYPH = {0:'➜',2:'⚱',4:'⚖',5:'🚌',7:'✦',10:'⛓',12:'💧',15:'🚂',17:'⚱',20:'⛩',22:'✦',25:'⚓',28:'⚡',30:'👮',33:'⚱',35:'🚂',36:'✦',38:'💎'};
+const RENTS = {1:[6,15,40,115,200,315],3:[8,25,75,225,400,565],6:[12,40,115,340,500,690],8:[12,40,115,340,500,690],9:[14,50,125,375,565,750],11:[17,65,190,565,780,940],13:[17,65,190,565,780,940],14:[19,75,225,625,875,1125],16:[22,90,250,690,940,1190],18:[22,90,250,690,940,1190],19:[24,100,275,750,1000,1250],21:[26,115,315,875,1095,1315],23:[26,115,315,875,1095,1315],24:[29,125,375,940,1155,1375],26:[31,140,415,1000,1220,1440],27:[31,140,415,1000,1220,1440],29:[34,150,450,1065,1280,1500],31:[36,165,490,1125,1375,1595],32:[36,165,490,1125,1375,1595],34:[38,190,565,1250,1500,1750],37:[42,220,625,1375,1625,1875],39:[50,250,750,1750,2125,2500]};
+const BOARD = RAW.map(t => ({...t, vi: MODERN[t.id] || t.name, glyph: GLYPH[t.id], ownable: ['property','station','utility'].includes(t.type)}));
+
+const BRANCHES = [
+  {key:'congnhan',name:'Công Nhân Ưu Tú',color:'#E2743A',nodes:[
+    {id:'cn1',t:1,n:'Nhặt Tiền Rơi',ic:'🪙',d:'Đạp vào ô Thuế vẫn lượm lại một phần tiền.'},
+    {id:'cn2a',t:2,n:'Tăng Ca',ic:'⏰',d:'Qua ô Bắt Đầu lãnh thêm lương.'},{id:'cn2b',t:2,n:'Công Đoàn',ic:'✊',d:'Chủ đất bên kia đòi thuê thì bớt được một phần.'},{id:'cnX2',t:2,n:'Khách Quen Nhà Đá',ic:'⛓',d:'Vào tù được giảm phí ra tù.'},
+    {id:'cn3',t:3,n:'Thâm Niên',ic:'🎖',d:'Mỗi vòng đi thêm một khoản tích luỹ.'},{id:'cnX1',t:3,n:'Lão Làng',ic:'🧓',d:'Bớt phí chuộc lại tài sản thế chấp.'},{id:'cnS1',t:3,n:'Bảo Hộ Lao Động',ic:'⛑',d:'Thẻ Thời Cuộc rút tiền thì mất ít hơn.'},
+    {id:'cnU',t:4,n:'Liên Đoàn Lao Động',ic:'🏭',d:'Mỗi vòng, chủ đất khác phải nộp một phần tiền thuê cho bạn.'},{id:'cnV',t:4,n:'Bảo Hiểm Xã Hội',ic:'🛡',d:'Thiếu tiền thì quỹ bù, rồi chờ hồi.'}]},
+  {key:'duhanh',name:'Nhà Du Hành',color:'#3C8FE0',nodes:[
+    {id:'dh1',t:1,n:'Vé Tháng',ic:'🎫',d:'Đi bến / ga của người khác trả rẻ hơn.'},
+    {id:'dh2a',t:2,n:'Tàu Tốc Hành',ic:'🚄',d:'Dừng ở ga thì được đi tiếp tới ga kế.'},{id:'dh2b',t:2,n:'Về Nhà',ic:'🏠',d:'Đạp trúng Bắt Đầu được thưởng thêm.'},{id:'dhX2',t:2,n:'Phượt Thủ',ic:'🎒',d:'Mỗi vòng đi nhanh hơn một chút.'},
+    {id:'dh3',t:3,n:'Quay Đầu',ic:'↩️',d:'Sau khi lắc được chọn đi lùi.'},{id:'dhX1',t:3,n:'Hai Ngón',ic:'✌️',d:'Đổ đôi được thưởng tiền.'},{id:'dhS1',t:3,n:'Xe Đạp',ic:'🚲',d:'Bấm dùng: đi thêm 1–3 ô.'},
+    {id:'dhU',t:4,n:'Chuyến Tàu Xuyên Việt',ic:'🚂',d:'Một lần trong ván: đi tới bất kỳ ô nào.'},{id:'dhV',t:4,n:'Trạm Thu Phí BOT',ic:'🛣',d:'Ai đi ngang ga của bạn cũng phải trả phí.'}]},
+  {key:'doden',name:'Tay Chơi Đỏ Đen',color:'#D2463A',nodes:[
+    {id:'dd1',t:1,n:'Chẵn Lẻ',ic:'🎲',d:'Lắc ra tổng chẵn được thưởng nhỏ.'},
+    {id:'dd2a',t:2,n:'Cược Chẵn Lẻ',ic:'🪙',d:'Trước khi lắc, đoán chẵn / lẻ để cược.'},{id:'dd2b',t:2,n:'Đôi Hên',ic:'🍀',d:'Đổ đôi lần ba không vào tù.'},{id:'ddX2',t:2,n:'Con Bạc Hoàn Lương',ic:'💸',d:'Thua cược được hoàn một phần.'},
+    {id:'dd3',t:3,n:'Xí Ngầu Gian',ic:'🎯',d:'Sau khi lắc được lắc lại một viên.'},{id:'ddX1',t:3,n:'Thần Tài Xỉu',ic:'🔮',d:'Đoán tài / xỉu, trúng ăn gấp đôi.'},{id:'ddS2',t:3,n:'Cò Quay Lương',ic:'🎡',d:'Qua Bắt Đầu quay số: lương ×0 đến ×3.'},
+    {id:'ddU',t:4,n:'Tất Tay',ic:'🃏',d:'Một lần trong ván: cược nửa gia tài vào một lần lắc.'},{id:'ddV',t:4,n:'Xổ Số Kiến Thiết',ic:'🎰',d:'Chọn một tổng, ai lắc ra tổng đó bạn trúng thưởng.'}]},
+  {key:'dauco',name:'Nhà Đầu Cơ',color:'#D4A24C',nodes:[
+    {id:'dc1',t:1,n:'Môi Giới',ic:'🤝',d:'Mua đất được chiết khấu.'},
+    {id:'dc2a',t:2,n:'Cò Đất',ic:'🔁',d:'Mỗi vòng được đổi một ô với ngân hàng.'},{id:'dc2b',t:2,n:'Thầu Vật Liệu',ic:'🧱',d:'Xây nhà rẻ hơn.'},{id:'dcX2',t:2,n:'Khách Sộp',ic:'🧾',d:'Thuê thu được cộng thêm.'},
+    {id:'dc3',t:3,n:'Thâu Tóm',ic:'🧲',d:'Đạp vào đất thế chấp của người khác được mua lại.'},{id:'dcX1',t:3,n:'Chủ Nợ',ic:'📒',d:'Người nợ bạn phải trả thêm lãi.'},{id:'dcS2',t:3,n:'Góp Vốn',ic:'🤲',d:'Bấm dùng: hùn tiền mua đất với người khác.'},
+    {id:'dcU',t:4,n:'Cơn Sốt Đất',ic:'📈',d:'Giá thuê mọi ô của bạn tăng theo số khu trọn bộ.'},{id:'dcV',t:4,n:'Siết Nợ',ic:'🏦',d:'Một lần trong ván: lấy ô của người đang nợ bạn.'}]},
+  {key:'ancu',name:'Thường Dân An Cư',color:'#2E9E70',nodes:[
+    {id:'acX2',t:1,n:'Chủ Nhà',ic:'🚪',d:'Đạp vào đất của mình được tiền.'},
+    {id:'ac1',t:2,n:'Mái Ấm',ic:'🔥',d:'Mỗi nhà xây thêm cộng một khoản thuê.'},{id:'ac2a',t:2,n:'Nhà Lâu Năm',ic:'⏳',d:'Ô giữ càng lâu thuê càng cao.'},{id:'ac2b',t:2,n:'Đất Nhiều Màu',ic:'🎨',d:'Có đất nhiều khu thì được thưởng mỗi vòng.'},
+    {id:'ac3',t:3,n:'Sổ Hồng',ic:'📜',d:'Thẻ Thời Cuộc không lấy được đất của bạn.'},{id:'acX1',t:3,n:'Sống Sót',ic:'🛟',d:'Phá sản được cứu một lần.'},{id:'acS1',t:3,n:'Chung Cư Mini',ic:'🏢',d:'Xây được nhà thứ 5 thay vì khách sạn.'},
+    {id:'acU',t:4,n:'Phố Cổ',ic:'🏯',d:'Khu trọn bộ đầu tiên của bạn được miễn thuế, thuê ×1.5.'},{id:'acV',t:4,n:'Mặt Tiền',ic:'🏪',d:'Ô ở góc / sát ga thu thêm thuê.'}]},
+];
+const CHANCE = [
+  {b:'CƠ HỘI',t:'Trúng thầu xây cầu Bình Lợi, công trình nghiệm thu sớm.',a:150},
+  {b:'CƠ HỘI',t:'Mở tiệm vàng trên đường Catinat, khách ra vào nườm nượp.',a:250},
+  {b:'CƠ HỘI',t:'Toà Đô Chánh buộc sửa mặt tiền nhà cho đúng lệ phố.',a:-100},
+  {b:'CƠ HỘI',t:'Thắng độ ở trường đua Phú Thọ, con ngựa ô về nhất.',a:100},
+  {b:'CƠ HỘI',t:'Xe kéo gãy càng giữa đường Bonard, phải đền cho phu xe.',a:-45},
+  {b:'CƠ HỘI',t:'Giá lúa Gò Công tăng vọt, ghe chài đầy khoang.',a:180},
+  {b:'CƠ HỘI',t:'Thuế môn bài quý này tăng, phải đóng bù.',a:-80},
+];
+
+/* ---------- Trạng thái giả ---------- */
+const S = {
+  cur: 0, rolled: false, busy: false, pressure: 62,
+  players: [
+    {name:'Jason', color:'#B22F26', money:1250, pos:11, cards:2, pts:1, skills:{cn1:1,cn2a:2}, jail:0},
+    {name:'Linh',  color:'#27418C', money:830,  pos:24, cards:0, pts:0, skills:{dh1:1,dh2b:1,dh3:1}, jail:0},
+    {name:'Minh',  color:'#2E7D50', money:1540, pos:5,  cards:1, pts:2, skills:{dc1:1,dc2b:2}, jail:2},
+    {name:'Hà',    color:'#D98634', money:410,  pos:33, cards:0, pts:0, skills:{acX2:1,ac1:1}, jail:0},
+  ],
+  owner: {1:0,3:0,6:1,8:1,9:1,11:0,13:2,16:2,18:2,19:2,21:3,24:1,26:2,31:3,37:0,5:2,15:2,25:1,12:3},
+  houses: {6:2,8:2,9:1,16:3,18:3,19:3,21:1},
+  mortgaged: new Set([37]),
+  dice: [3,4], sel: null,
+};
+const $ = (s, r=document) => r.querySelector(s);
+const money = n => (n<0?'−':'') + Math.abs(Math.round(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.') + '$';
+const me = () => S.players[S.cur];
+const owned = id => S.owner[id];
+const hasSet = (pi, g) => BOARD.filter(t=>t.g===g).every(t=>S.owner[t.id]===pi);
+const rentOf = id => { const t=BOARD[id]; if (!t.ownable) return 0; if (t.type==='station') { const n=BOARD.filter(x=>x.type==='station'&&S.owner[x.id]===S.owner[id]).length; return [0,25,50,100,200][n]; }
+  if (t.type==='utility') return (S.dice[0]+S.dice[1]) * 4; const h=S.houses[id]||0; return h ? RENTS[id][h] : (hasSet(S.owner[id],t.g) ? RENTS[id][0]*2 : RENTS[id][0]); };
+
+/* ---------- Bàn cờ ---------- */
+function tileSide(i) { return i<=10 ? 'b' : i<=20 ? 'l' : i<=30 ? 't' : 'r'; }
+function tilePos(i) { if (i<=10) return [11-i, 11]; if (i<=20) return [1, 11-(i-10)]; if (i<=30) return [1+(i-20), 1]; return [11, 1+(i-30)]; }
+function buildBoard() {
+  const b = $('#board'); b.innerHTML = '';
+  for (const t of BOARD) {
+    const [c, r] = tilePos(t.id); const el = document.createElement('div');
+    const corner = t.type==='corner'; el.className = 'tile' + (corner?' corner':'') + (t.ownable?'':' special');
+    el.dataset.id = t.id; el.dataset.side = tileSide(t.id); el.style.gridColumn = c; el.style.gridRow = r;
+    if (t.g) el.style.setProperty('--g', GROUPS[t.g].hex);
+    let inner = '';
+    if (t.g) inner += '<div class="strip"></div>';
+    if (t.glyph) inner += `<div class="gl">${t.glyph}</div>`;
+    inner += `<div class="nm">${corner ? t.name : t.vi}</div>`;
+    if (t.ownable) inner += `<div class="pr">${t.p}$</div>`;
+    inner += '<div class="own"></div><div class="hs"></div><div class="toks"></div>';
+    el.innerHTML = inner; el.onclick = () => openTile(t.id); b.appendChild(el);
+  }
+  const c = document.createElement('div'); c.id = 'center';
+  c.innerHTML = `<div class="title">CỜ TỶ PHÚ</div><div class="sub">Sài Gòn · Gia Định</div>
+    <div id="dice"><div class="die" data-v="3">${'<i></i>'.repeat(9)}</div><div class="die" data-v="4">${'<i></i>'.repeat(9)}</div></div>
+    <div id="bcast"></div><div id="hereChip"></div>`;
+  b.appendChild(c);
+}
+function paintBoard() {
+  for (const t of BOARD) {
+    const el = $(`.tile[data-id="${t.id}"]`); const o = S.owner[t.id];
+    const own = $('.own', el); own.style.display = o==null ? 'none' : ''; if (o!=null) own.style.background = S.players[o].color;
+    const h = S.houses[t.id]||0; $('.hs', el).innerHTML = h===5 ? '<i class="hotel"></i>' : '<i></i>'.repeat(h);
+    el.classList.toggle('here', me().pos===t.id); el.classList.toggle('sel', S.sel===t.id);
+    el.style.opacity = S.mortgaged.has(t.id) ? .55 : '';
+    $('.toks', el).innerHTML = S.players.map((p,i)=> p.pos===t.id ? `<div class="tk" data-p="${i}" style="background:${p.color}"></div>` : '').join('');
+  }
+  const here = BOARD[me().pos];
+  $('#hereChip').innerHTML = `<b>${me().name}</b> đang ở ${here.vi}${here.ownable && owned(here.id)!=null ? ' · của '+S.players[owned(here.id)].name : ''}`;
+}
+function paintPlayers() {
+  $('#players').innerHTML = S.players.map((p,i)=>`<button class="pcard${i===S.cur?' cur':''}" data-i="${i}">
+    ${i===S.cur?'<span class="turn">ĐANG ĐI</span>':''}
+    <div class="tok" style="background:${p.color}">${p.name[0]}</div>
+    <div class="who"><div class="nm">${p.name}</div><div class="cash">${money(p.money)}</div>
+    <div class="tags">${p.jail?`<span class="tag jail">Tù ${p.jail}/3</span>`:''}${p.cards?`<span class="tag cards">Thẻ ×${p.cards}</span>`:''}${p.money<500?'<span class="tag debt">Kẹt</span>':''}</div></div>
+  </button>`).join('');
+  document.querySelectorAll('.pcard').forEach(b => b.onclick = () => openPlayer(+b.dataset.i));
+  $('#clockWho').textContent = me().name;
+}
+function paintActions() {
+  const p = me(); const main = $('#btnMain');
+  if (p.jail) { main.innerHTML = 'LẮC CẦU ĐÔI<small>Đang ở tù</small>'; }
+  else if (S.rolled) { main.innerHTML = 'KẾT THÚC LƯỢT<small>Tới lượt ' + S.players[(S.cur+1)%4].name + '</small>'; }
+  else main.innerHTML = 'LẮC XÍ NGẦU<small>Lượt của bạn</small>';
+  main.classList.toggle('end', S.rolled && !p.jail); main.classList.toggle('pulse', !S.rolled);
+  const acts = [
+    {k:'skill', ic:'🌳', lb:'Kỹ năng', ct: p.pts ? `${p.pts} điểm chưa dùng` : 'Cây kỹ năng', badge: p.pts||0},
+    {k:'use', ic:'✨', lb:'Dùng kỹ năng', ct:'1 sẵn sàng'},
+    {k:'bag', ic:'🎴', lb:'Túi thẻ', ct: p.cards ? `${p.cards} lá` : 'Trống', dim:!p.cards},
+    {k:'trade', ic:'⇄', lb:'Giao dịch', ct:'Thương lượng'},
+    {k:'manage', ic:'🏘', lb:'Tài sản', ct:'Xây · thế chấp'},
+    {k:'bust', ic:'💀', lb:'Phá sản', ct:'Bỏ cuộc', dim:true},
+  ];
+  if (p.jail) acts.splice(2, 0, {k:'jail', ic:'🔑', lb:'Nộp 50$', ct:'Ra tù', badge:'!', hot:true});
+  $('#acts').innerHTML = acts.map(a=>`<button class="act${a.dim?' dim':''}" data-k="${a.k}"><span class="ic">${a.ic}</span><span class="lb">${a.lb}</span><span class="ct">${a.ct}</span>${a.badge?`<span class="badge${a.hot?' hot':''}">${a.badge}</span>`:''}</button>`).join('');
+  document.querySelectorAll('.act').forEach(b => b.onclick = () => action(b.dataset.k));
+  $('#fateBar').style.width = S.pressure + '%'; $('#fateN').textContent = S.pressure + '%';
+}
+function paintAll() { paintBoard(); paintPlayers(); paintActions(); }
+
+/* ---------- Broadcast / toast ---------- */
+function bcast(title, line) {
+  const el = document.createElement('div'); el.className = 'bc'; el.innerHTML = `<b>${title}</b>${line||''}`;
+  const box = $('#bcast'); box.appendChild(el); while (box.children.length > 2) box.firstChild.remove();
+  setTimeout(() => el.remove(), 3400);
+  const log = $('#log'); log.insertAdjacentHTML('beforeend', `<div><b>${title}</b> ${line||''}</div>`); while (log.children.length > 6) log.firstChild.remove();
+}
+let toastT; function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('on'), 2200); }
+
+/* ---------- Lớp phủ: tấm trượt / hộp thoại ---------- */
+function closeAll() { $('#sheetL').classList.remove('on'); $('#sheetR').classList.remove('on'); $('#scrim').classList.remove('on'); S.sel = null; paintBoard(); }
+$('#scrim').onclick = closeAll;
+function sheet(side, hd, bd, ft) {
+  const el = side==='L' ? $('#sheetL') : $('#sheetR'); const other = side==='L' ? $('#sheetR') : $('#sheetL'); other.classList.remove('on');
+  el.innerHTML = `<div class="hd">${hd}<button class="x" data-close>✕</button></div><div class="bd">${bd}</div>${ft?`<div class="ft">${ft}</div>`:''}`;
+  $('[data-close]', el).onclick = closeAll; el.classList.add('on'); $('#scrim').classList.add('on'); return el;
+}
+function modal(opts) {
+  const m = $('#modal'); m.classList.remove('peek');
+  m.innerHTML = `<div class="card${opts.wide?' wide':''}"><div class="hd"><div class="sp">${opts.eyebrow?`<div class="eyebrow">${opts.eyebrow}</div>`:''}<h2>${opts.title}${opts.sub?`<small>${opts.sub}</small>`:''}</h2></div>
+    ${opts.noPeek?'':'<button class="eye" title="Giữ để nhìn bàn cờ">👁</button>'}</div>
+    <div class="bd">${opts.body||''}</div>${opts.buttons?`<div class="ft">${opts.buttons.map((b,i)=>`<button class="btn ${b.cls||''}" data-i="${i}">${b.label}</button>`).join('')}</div>`:''}</div>`;
+  const eye = $('.eye', m); if (eye) { const on=e=>{e.preventDefault(); m.classList.add('peek');}; const off=()=>m.classList.remove('peek');
+    eye.onpointerdown = on; eye.onpointerup = off; eye.onpointerleave = off; eye.onpointercancel = off; }
+  (opts.buttons||[]).forEach((b,i)=> $(`.ft [data-i="${i}"]`, m).onclick = () => { closeModal(); b.on && b.on(); });
+  m.classList.add('on'); return m;
+}
+function closeModal() { $('#modal').classList.remove('on'); }
+
+/* ---------- Thẻ đất ---------- */
+function deedHTML(id) {
+  const t = BOARD[id]; const o = owned(id); const hex = t.g ? GROUPS[t.g].hex : t.type==='station' ? '#27418C' : '#2E6B52';
+  let rows = '';
+  if (t.type==='property') { const h=S.houses[id]||0; const lb=['Đất trống','1 nhà','2 nhà','3 nhà','4 nhà','Khách sạn'];
+    rows = RENTS[id].map((r,i)=>`<tr class="${o!=null&&i===h?'now':''}"><td>${lb[i]}${i===0&&o!=null&&hasSet(o,t.g)?' · trọn bộ ×2':''}</td><td>${money(i===0&&o!=null&&hasSet(o,t.g)?r*2:r)}</td></tr>`).join('');
+    rows += `<tr><td>Giá xây mỗi nhà</td><td>${money(t.h)}</td></tr>`; }
+  else if (t.type==='station') rows = [1,2,3,4].map(n=>`<tr><td>Có ${n} bến / ga</td><td>${money([0,25,50,100,200][n])}</td></tr>`).join('');
+  else rows = `<tr><td>Có 1 ô công ích</td><td>4 × xí ngầu</td></tr><tr><td>Có 2 ô công ích</td><td>10 × xí ngầu</td></tr>`;
+  return `<div class="deed"><div class="top" style="background:${hex}">${t.vi}<small>${t.name}${t.g?' · '+GROUPS[t.g].name:''}</small></div>
+    <table>${rows}</table><div class="foot"><span>Giá ${money(t.p)}</span><span>Thế chấp ${money(t.p/2)}</span></div></div>`;
+}
+function openTile(id) {
+  const t = BOARD[id]; S.sel = id; paintBoard();
+  const o = owned(id); const mine = o===S.cur; const here = S.players.filter(p=>p.pos===id);
+  let body = '';
+  if (t.ownable) {
+    body += deedHTML(id);
+    body += `<div class="sec">Tình trạng</div>
+      <div class="kv"><span>Chủ đất</span><b>${o==null?'Chưa ai':S.players[o].name}${S.mortgaged.has(id)?' · ĐÃ THẾ CHẤP':''}</b></div>
+      ${o!=null?`<div class="kv"><span>Thuê hiện tại</span><b>${money(rentOf(id))}</b></div>`:''}`;
+  } else {
+    const txt = {corner:{0:'Đi ngang qua nhận lương 200$. Dừng đúng ô được ×1.5.',10:'Ghé thăm thì không sao. Bị bắt thì 3 lượt hoặc nộp 50$.',20:'Bến đậu an toàn. Quỹ công tích ở đây.',30:'Vào thẳng Khám Lớn, không qua Bắt Đầu.'}[id],
+      tax:'Nộp 10% tổng tài sản hoặc 200$, tuỳ ít hơn.', chance:'Bốc một lá Cơ Hội. Có lá được cất vào túi để dùng sau.', chest:'Bốc một lá Khí Vận.'}[t.type];
+    body += `<p style="font-size:11.5px">${txt}</p>`;
+  }
+  if (here.length) body += `<div class="sec">Đang đứng đây</div><div class="chips">${here.map(p=>`<span class="chip"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:4px"></span>${p.name}</span>`).join('')}</div>`;
+  let ft = '';
+  if (mine && t.type==='property') ft = `<button class="btn gold" data-a="build">Xây nhà · ${money(t.h)}</button><button class="btn" data-a="mort">${S.mortgaged.has(id)?'Chuộc lại':'Thế chấp'}</button>`;
+  else if (mine) ft = `<button class="btn" data-a="mort">${S.mortgaged.has(id)?'Chuộc lại':'Thế chấp'}</button>`;
+  else if (o!=null && o!==S.cur) ft = `<button class="btn" data-a="trade">Hỏi mua từ ${S.players[o].name}</button>`;
+  const el = sheet('R', `<div style="width:10px;height:36px;border-radius:3px;background:${t.g?GROUPS[t.g].hex:'var(--gold-deep)'}"></div><h3>${t.vi}<small>Ô ${id} · ${t.name}</small></h3>`, body, ft);
+  el.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
+    const a = b.dataset.a;
+    if (a==='build') { S.houses[id]=Math.min(5,(S.houses[id]||0)+1); me().money-=t.h; toast(`Xây thêm ở ${t.vi}`); paintAll(); openTile(id); }
+    if (a==='mort') { if (S.mortgaged.has(id)) { S.mortgaged.delete(id); me().money-=Math.ceil(t.p/2*1.1); } else { S.mortgaged.add(id); me().money+=t.p/2; } paintAll(); openTile(id); }
+    if (a==='trade') { closeAll(); openTrade(o, id); }
+  });
+}
+
+/* ---------- Thông tin người chơi (đối thủ / mình) ---------- */
+function openPlayer(i) {
+  const p = S.players[i]; const props = BOARD.filter(t=>S.owner[t.id]===i);
+  const byGroup = {}; for (const t of props) (byGroup[t.g||t.type] ||= []).push(t);
+  const groups = Object.entries(byGroup).map(([g, ts]) => {
+    const full = GROUPS[g] ? hasSet(i, g) : false; const hex = GROUPS[g]?.hex || (g==='station'?'#27418C':'#2E6B52');
+    return ts.map(t=>`<div class="prop" data-t="${t.id}"><div class="sw" style="background:${hex}"></div><div class="t">${t.vi}<small>${GROUPS[g]?.name || (g==='station'?'Bến / ga':'Công ích')}${full?' · trọn bộ':''}</small></div>
+      ${S.mortgaged.has(t.id)?'<span class="m">THẾ CHẤP</span>':S.houses[t.id]?`<span class="h">${S.houses[t.id]===5?'🏨 KS':'🏠×'+S.houses[t.id]}</span>`:''}</div>`).join('');
+  }).join('');
+  const skills = Object.entries(p.skills).map(([id,lv]) => { const br = BRANCHES.find(b=>b.nodes.some(n=>n.id===id)); const n = br.nodes.find(n=>n.id===id);
+    return `<span class="chip on" style="border-color:${br.color}">${n.ic} ${n.n} <b>lv${lv}</b></span>`; }).join('');
+  const worth = p.money + props.reduce((s,t)=>s+(S.mortgaged.has(t.id)?t.p/2:t.p)+(S.houses[t.id]||0)*(t.h||0),0);
+  const body = `
+    <div class="kv"><span>Tiền mặt</span><b>${money(p.money)}</b></div>
+    <div class="kv"><span>Tổng tài sản</span><b>${money(worth)}</b></div>
+    <div class="kv"><span>Đang ở</span><b>${BOARD[p.pos].vi}${p.jail?' · tù '+p.jail+'/3':''}</b></div>
+    <div class="kv"><span>Thẻ trong túi</span><b>${p.cards?p.cards+' lá (úp)':'Không'}</b></div>
+    <div class="sec">Đất đai · ${props.length} ô</div>${groups||'<p style="color:var(--paper-deep)">Chưa có ô nào.</p>'}
+    <div class="sec">Kỹ năng đã học</div><div class="chips">${skills||'<span class="chip">Chưa học</span>'}</div>`;
+  const ft = i===S.cur ? `<button class="btn gold" data-a="manage">Quản lý tài sản</button>` : `<button class="btn gold" data-a="trade">Giao dịch với ${p.name}</button>`;
+  const el = sheet('L', `<div class="tok" style="width:34px;height:34px;border-radius:50%;background:${p.color};display:grid;place-items:center;font-weight:800;font-size:15px">${p.name[0]}</div><h3>${p.name}<small>${i===S.cur?'Đang đi':'Người chơi '+(i+1)}</small></h3>`, body, ft);
+  el.querySelectorAll('.prop').forEach(r => r.onclick = () => openTile(+r.dataset.t));
+  const a = $('[data-a]', el); a.onclick = () => { closeAll(); a.dataset.a==='trade' ? openTrade(i) : openManage(); };
+}
+
+/* ---------- Quản lý tài sản (tấm phải) ---------- */
+function openManage() {
+  const props = BOARD.filter(t=>S.owner[t.id]===S.cur);
+  const body = props.map(t=>`<div class="prop" data-t="${t.id}"><div class="sw" style="background:${t.g?GROUPS[t.g].hex:'#27418C'}"></div><div class="t">${t.vi}<small>${t.type==='property'?(hasSet(S.cur,t.g)?'Trọn bộ · xây được':'Chưa trọn bộ'):'Bến / công ích'}</small></div>
+    ${S.mortgaged.has(t.id)?'<span class="m">THẾ CHẤP</span>':S.houses[t.id]?`<span class="h">🏠×${S.houses[t.id]}</span>`:''}<span style="color:var(--gold-deep)">›</span></div>`).join('');
+  const el = sheet('R', `<h3>Quản lý tài sản<small>Chạm một ô để xây, bán, thế chấp</small></h3>`,
+    `<div class="kv"><span>Tiền mặt</span><b>${money(me().money)}</b></div><div class="kv"><span>Ngân hàng còn</span><b>18 nhà · 9 KS</b></div><div class="sec">Ô của bạn</div>${body}`);
+  el.querySelectorAll('.prop').forEach(r => r.onclick = () => openTile(+r.dataset.t));
+}
+
+/* ---------- Giao dịch ---------- */
+function openTrade(withI, wantId) {
+  if (withI==null) { return modal({eyebrow:'GIAO DỊCH', title:'Thương lượng với ai?', body:`<div class="chips">${S.players.map((p,i)=> i===S.cur?'':`<button class="chip" data-p="${i}" style="min-height:40px;font-size:11px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${p.color};margin-right:5px"></span>${p.name} · ${money(p.money)}</button>`).join('')}</div>`,
+      buttons:[{label:'Huỷ', cls:'ghost'}]}), document.querySelectorAll('#modal [data-p]').forEach(b=>b.onclick=()=>{closeModal(); openTrade(+b.dataset.p);}); }
+  const q = S.players[withI]; const want = wantId!=null ? BOARD[wantId] : null;
+  modal({ wide:true, eyebrow:'ĐỀ NGHỊ GIAO DỊCH', title:`${me().name} ⇄ ${q.name}`, sub:'Chạm + để thêm ô hoặc tiền vào mỗi bên',
+    body:`<div class="trade">
+      <div class="col"><h4><i style="width:9px;height:9px;border-radius:50%;background:${me().color}"></i>${me().name} đưa</h4><div class="item">💵 ${money(want?want.p*1.2:150)}</div><div class="item"><span class="sw" style="background:#6B4A2F"></span>Võ Văn Kiệt</div><div class="add">+ thêm ô / tiền</div></div>
+      <div class="arrow">⇄</div>
+      <div class="col"><h4><i style="width:9px;height:9px;border-radius:50%;background:${q.color}"></i>${q.name} đưa</h4>${want?`<div class="item"><span class="sw" style="background:${want.g?GROUPS[want.g].hex:'#27418C'}"></span>${want.vi}</div>`:'<div class="item">🎴 1 thẻ ra tù</div>'}<div class="add">+ thêm ô / tiền</div></div>
+    </div>`, buttons:[{label:'Huỷ', cls:'ghost'},{label:'Gửi đề nghị', cls:'gold', on:()=>{ toast(`Đã gửi đề nghị cho ${q.name}, chờ trả lời…`); setTimeout(()=>bcast('GIAO DỊCH', `${q.name} từ chối đề nghị của ${me().name}`), 2500); }}] });
+}
+
+/* ---------- Cây kỹ năng ---------- */
+let treeTab = 0, treeSel = null;
+function openTree() { treeSel = null; paintTree(); $('#tree').classList.add('on'); }
+function paintTree() {
+  const p = me(); const br = BRANCHES[treeTab];
+  const learned = id => p.skills[id]||0;
+  const canLearn = n => { if (!p.pts) return false; if (learned(n.id)>=3) return false; if (learned(n.id)) return true;
+    if (n.t===1) return true; const prev = br.nodes.filter(x=>x.t===n.t-1); return prev.some(x=>learned(x.id)); };
+  const tiers = [1,2,3,4].map(t => `<div class="tier"><h5>${t===4?'Tối thượng':'Cấp '+t}</h5>${br.nodes.filter(n=>n.t===t).map(n=>{ const lv=learned(n.id); const prevOk = n.t===1 || br.nodes.filter(x=>x.t===n.t-1).some(x=>learned(x.id));
+    return `<button class="node${lv?' lv'+lv:''}${!lv&&!prevOk?' locked':''}${canLearn(n)?' can':''}${treeSel===n.id?' sel':''}" data-n="${n.id}" style="--c:${br.color}"><span class="ic">${n.ic}</span><span class="t"><b>${n.n}</b><small>${t===4?'1 lần / ván':n.t===1?'Gốc nhánh':'Cần cấp '+(t-1)}</small></span>${lv?`<span class="lv">LV${lv}</span>`:''}</button>`; }).join('')}</div>`).join('');
+  const sel = br.nodes.find(n=>n.id===treeSel);
+  const detail = sel ? `<div class="nm">${sel.ic} ${sel.n}</div><div class="meta">${br.name} · ${sel.t===4?'tối thượng':'cấp '+sel.t} · ${learned(sel.id)?'level '+learned(sel.id):'chưa học'}</div>
+    <div class="desc">${sel.d}<div style="height:6px"></div>${[1,2,3].map(l=>`<div class="lv${learned(sel.id)===l?' on':''}">Lv${l} · ${sel.d.split('.')[0].toLowerCase()} ${['', 'khá hơn', 'mạnh nhất'][l-1]}</div>`).join('')}</div>
+    <div class="ft"><button class="btn ghost" data-t="back">Đóng</button><button class="btn gold" data-t="up" ${canLearn(sel)?'':'disabled'}>${learned(sel.id)?'Lên level · 1 điểm':'Học · 1 điểm'}</button></div>`
+    : `<div class="nm">Chọn một ô</div><div class="meta">${br.name}</div><div class="desc" style="color:var(--paper-deep)">Nhánh này có ${br.nodes.length} ô. Học ô cấp 1 trước, rồi đi lên từng cấp. Mỗi ô lên tối đa level 3.<br><br>Bạn đang có <b style="color:var(--gold-light)">${p.pts} điểm</b> chưa dùng.</div>`;
+  $('#tree').innerHTML = `<div class="hd"><h2>Cây kỹ năng</h2><div id="tabs">${BRANCHES.map((b,i)=>`<button class="tab${i===treeTab?' on':''}" data-b="${i}" style="--c:${b.color}"><i></i>${b.name}<span class="n">${b.nodes.filter(n=>learned(n.id)).length}/${b.nodes.length}</span></button>`).join('')}</div>
+    <span class="pts">★ ${p.pts} điểm</span><button class="x" data-close>✕</button></div>
+    <div class="body"><div id="tiers">${tiers}</div><div id="detail">${detail}</div></div>`;
+  $('#tree [data-close]').onclick = () => $('#tree').classList.remove('on');
+  document.querySelectorAll('#tree .tab').forEach(b => b.onclick = () => { treeTab = +b.dataset.b; treeSel = null; paintTree(); });
+  document.querySelectorAll('#tree .node').forEach(b => b.onclick = () => { treeSel = b.dataset.n; paintTree(); });
+  const up = $('#tree [data-t="up"]'); if (up) up.onclick = () => { p.skills[treeSel] = (p.skills[treeSel]||0)+1; p.pts--; toast(`Đã học ${sel.n}`); paintTree(); paintActions(); };
+  const back = $('#tree [data-t="back"]'); if (back) back.onclick = () => { treeSel = null; paintTree(); };
+}
+
+/* ---------- Hành động cột phải ---------- */
+function action(k) {
+  if (k==='skill') return openTree();
+  if (k==='use') return modal({eyebrow:'DÙNG KỸ NĂNG', title:'Kỹ năng sẵn sàng', body:`<div class="chips"><button class="chip on" style="min-height:40px;font-size:11px">🚲 Xe Đạp · đi thêm 1–3 ô</button><button class="chip" style="min-height:40px;font-size:11px;opacity:.5">🤲 Góp Vốn · chờ 2 vòng</button></div><p style="margin-top:8px;color:var(--paper-deep)">Kỹ năng tự động (Nhặt Tiền Rơi, Tăng Ca) không cần bấm.</p>`, buttons:[{label:'Đóng', cls:'ghost'},{label:'Dùng Xe Đạp', cls:'gold', on:()=>bcast('XE ĐẠP', `${me().name} đạp thêm 2 ô`)}]});
+  if (k==='bag') return modal({eyebrow:'TÚI THẺ', title:`${me().cards} lá đang giữ`, body:`<div class="reel" style="height:auto;overflow:visible;background:none"><div style="display:flex;gap:6px"><div class="cc"><b>CƠ HỘI</b>Thẻ ra tù miễn phí. Dùng khi đang ở tù.</div><div class="cc" style="opacity:.6"><b>KHÍ VẬN</b>Miễn thuê một lần. Chỉ dùng khi đạp vào đất của người khác.</div></div></div><p style="color:var(--paper-deep)">Lá mờ là chưa dùng được lúc này.</p>`, buttons:[{label:'Đóng', cls:'ghost'},{label:'Dùng lá 1', cls:'gold'}]});
+  if (k==='trade') return openTrade();
+  if (k==='manage') return openManage();
+  if (k==='bust') return toast('Chưa cần phá sản, bạn vẫn còn tiền.');
+  if (k==='jail') { me().money -= 50; me().jail = 0; bcast('RA TÙ', `${me().name} nộp 50$ ra tù`); paintAll(); }
+}
+
+/* ---------- Lắc xí ngầu & đi ---------- */
+$('#btnMain').onclick = () => { if (S.busy) return; if (S.rolled && !me().jail) return endTurn(); roll(); };
+function endTurn() { S.rolled = false; S.cur = (S.cur+1)%4; S.pressure = Math.min(100, S.pressure+4); paintAll(); bcast('TỚI LƯỢT', me().name); if (S.pressure>=100) setTimeout(demoEvent, 600); }
+function roll() {
+  S.busy = true; const dice = document.querySelectorAll('.die'); dice.forEach(d=>d.classList.add('roll'));
+  let n = 0; const iv = setInterval(() => { dice.forEach(d=>d.dataset.v = 1+Math.floor(Math.random()*6)); if (++n > 8) { clearInterval(iv); finish(); } }, 90);
+  function finish() {
+    dice.forEach(d=>d.classList.remove('roll')); S.dice = [+dice[0].dataset.v, +dice[1].dataset.v];
+    const p = me();
+    if (p.jail) { if (S.dice[0]===S.dice[1]) { p.jail = 0; bcast('CẦU ĐÔI THÀNH', `${p.name} ra tù!`); move(S.dice[0]+S.dice[1]); } else { p.jail++; bcast('VẪN TRONG TÙ', `${p.name} ngồi thêm lượt`); S.rolled = true; S.busy = false; paintAll(); } return; }
+    if (S.dice[0]===S.dice[1]) bcast('ĐỔ ĐÔI', `${p.name} được đi thêm lượt`);
+    move(S.dice[0]+S.dice[1]);
+  }
+}
+function move(steps) {
+  const p = me(); let left = steps;
+  const step = () => {
+    const from = p.pos; p.pos = (p.pos+1)%40; if (p.pos===0) { p.money += 200; bcast('QUA BẮT ĐẦU', `+200$ lương`); }
+    paintBoard(); const tk = $(`.tile[data-id="${p.pos}"] .tk[data-p="${S.cur}"]`); if (tk) tk.classList.add('bump');
+    if (--left > 0) setTimeout(step, 130); else setTimeout(() => resolve(), 220);
+  };
+  setTimeout(step, 250);
+}
+function resolve() {
+  const p = me(); const t = BOARD[p.pos]; S.rolled = true; S.busy = false; paintAll();
+  if (t.ownable) { const o = owned(t.id);
+    if (o==null) return offerBuy(t.id);
+    if (o!==S.cur) { const r = rentOf(t.id); if (S.mortgaged.has(t.id)) return bcast('ĐẤT THẾ CHẤP', 'Không phải trả thuê');
+      if (p.money < r) return shortOfMoney(r, o); p.money -= r; S.players[o].money += r; paintPlayers(); return bcast('TRẢ TIỀN THUÊ', `${p.name} trả ${money(r)} cho ${S.players[o].name}`); }
+    return bcast('ĐẤT NHÀ', `${t.vi} là của bạn`); }
+  if (t.type==='chance' || t.type==='chest') return drawCard(t.type);
+  if (t.type==='tax') { const tx = t.id===4 ? Math.min(200, Math.round(p.money*.1)) : 100; p.money -= tx; paintPlayers(); return bcast(t.vi.toUpperCase(), `${p.name} nộp ${money(tx)}`); }
+  if (t.id===30) { p.pos = 10; p.jail = 1; paintAll(); return bcast('VÀO TÙ', `${p.name} bị bắt vào Khám Lớn`); }
+  if (t.id===20) return bcast('BẾN ĐẬU', 'Nghỉ chân, không mất gì');
+  if (t.id===0) { p.money += 100; paintPlayers(); return bcast('ĐẠP TRÚNG BẮT ĐẦU', 'Lương ×1.5'); }
+  if (t.id===10) return bcast('GHÉ THĂM', 'Chỉ ghé qua Khám Lớn');
+}
+function offerBuy(id) {
+  const t = BOARD[id]; const p = me();
+  modal({ eyebrow:'CƠ HỘI TẬU ĐẤT', title:`${t.vi}`, sub:`${t.name} · ${t.g?GROUPS[t.g].name:t.type==='station'?'Bến / ga':'Công ích'}`,
+    body: deedHTML(id) + `<div class="kv" style="margin-top:6px"><span>Tiền của bạn sau khi mua</span><b class="money ${p.money-t.p<300?'neg':''}">${money(p.money-t.p)}</b></div>`,
+    buttons:[{label:'Bỏ qua', cls:'ghost', on:()=>bcast('BỎ QUA', `${t.vi} vẫn của ngân hàng`)},
+             {label:`Mua · ${money(t.p)}`, cls:'gold', on:()=>{ S.owner[id]=S.cur; p.money-=t.p; paintAll(); bcast('TẬU ĐẤT', `${p.name} mua ${t.vi}`); }}] });
+}
+function drawCard(kind) {
+  const cards = CHANCE.map(c => kind==='chest' ? {...c, b:'KHÍ VẬN'} : c); const win = Math.floor(Math.random()*cards.length);
+  const list = [...cards, ...cards, ...cards]; const idx = cards.length + win;
+  modal({ eyebrow: kind==='chest' ? 'KHÍ VẬN' : 'CƠ HỘI', title:'Bốc thẻ…', noPeek:true,
+    body:`<div class="reel"><div class="strip" id="strip">${list.map((c,i)=>`<div class="cc${i===idx?' win':''}"><b>${c.b}</b>${c.t}</div>`).join('')}</div></div><div id="cardRes" style="min-height:18px;text-align:center"></div>`,
+    buttons:[{label:'Đã rõ', cls:'gold', on:()=>{ me().money += cards[win].a; paintPlayers(); bcast(cards[win].b, `${me().name} ${cards[win].a>0?'nhận':'mất'} ${money(Math.abs(cards[win].a))}`); }}] });
+  requestAnimationFrame(() => requestAnimationFrame(() => { const w = $('#modal .reel').clientWidth; $('#strip').style.transform = `translateX(${w/2 - (idx*126 + 60) - 6}px)`;
+    setTimeout(()=>{ const c = cards[win]; $('#cardRes').innerHTML = `<span class="money ${c.a>0?'pos':'neg'}">${c.a>0?'+':''}${money(c.a)}</span>`; }, 2300); }));
+}
+function shortOfMoney(need, to) {
+  const p = me();
+  modal({ eyebrow:'THIẾU TIỀN', title:`Còn thiếu ${money(need - p.money)}`, sub:`Phải trả ${money(need)} cho ${S.players[to].name}, bạn chỉ có ${money(p.money)}`,
+    body:`<div class="sec">Gợi ý xoay tiền</div><div class="prop"><div class="sw" style="background:#27418C"></div><div class="t">Thế chấp Ga Sài Gòn<small>+100$</small></div></div><div class="prop"><div class="sw" style="background:#79B2C6"></div><div class="t">Bán 1 nhà Hai Bà Trưng<small>+25$</small></div></div>`,
+    buttons:[{label:'Phá sản', cls:'red'},{label:'Quản lý tài sản', cls:'gold', on:openManage}] });
+}
+
+/* ---------- Thời Cuộc (hỏi cả bàn, có đồng hồ) ---------- */
+function demoEvent() {
+  S.pressure = 8; paintActions();
+  const m = modal({ eyebrow:'THỜI CUỘC · THẺ SỰ KIỆN', title:'HOẢ HOẠN', sub:'Lửa bén từ chợ Bến Thành. Mỗi chủ nhà chọn thuê phu chữa cháy hay chịu mất một nhà.',
+    body:`<div class="timer"><span>⏱ Cả bàn trả lời trong 12 giây</span><div class="bar"><i></i></div></div>
+      <div class="kv" style="margin-top:6px"><span>Thuê phu chữa cháy</span><b>−60$, giữ nguyên nhà</b></div><div class="kv"><span>Mặc kệ</span><b>Mất 1 nhà ở ô bất kỳ</b></div>
+      <div class="voters">${S.players.map((p,i)=>`<span class="v${i===2?' done':''}" data-v="${i}"><i class="tok" style="background:${p.color}"></i>${p.name}${i===2?' ✓':''}</span>`).join('')}</div>`,
+    buttons:[{label:'Mặc kệ', cls:'ghost', on:()=>bcast('HOẢ HOẠN', `${me().name} mất 1 nhà ở Hai Bà Trưng`)},{label:'Thuê phu · 60$', cls:'gold', on:()=>{ me().money-=60; paintPlayers(); bcast('HOẢ HOẠN', `${me().name} thuê phu chữa cháy`); }}] });
+  setTimeout(()=>{ const v = $('#modal [data-v="1"]'); if (v) { v.classList.add('done'); v.append(' ✓'); } }, 2500);
+}
+function demoWin() {
+  modal({ eyebrow:'HẠ MÀN', title:'Jason thắng ván!', sub:'Ba người còn lại lần lượt phá sản sau 38 lượt', noPeek:true,
+    body:`<div class="kv"><span>Tổng tài sản</span><b>4.820$</b></div><div class="kv"><span>Khu trọn bộ</span><b>Thanh Thuỷ · Chàm Ngự</b></div><div class="kv"><span>Kỹ năng tối thượng</span><b>Liên Đoàn Lao Động</b></div>`,
+    buttons:[{label:'Xem lại bàn', cls:'ghost'},{label:'Ván mới', cls:'gold'}] });
+}
+
+/* ---------- Menu kịch bản demo ---------- */
+const DEMOS = [
+  ['Mua đất (Lê Lợi)', ()=>{ me().pos=32; paintAll(); offerBuy(32); }],
+  ['Trả tiền thuê', ()=>{ me().pos=16; S.rolled=true; paintAll(); const r=rentOf(16); me().money-=r; S.players[2].money+=r; paintPlayers(); bcast('TRẢ TIỀN THUÊ', `${me().name} trả ${money(r)} cho Minh`); }],
+  ['Bốc thẻ Cơ Hội', ()=>drawCard('chance')],
+  ['Thời Cuộc: Hoả Hoạn', demoEvent],
+  ['Thiếu tiền', ()=>shortOfMoney(me().money+140, 1)],
+  ['Giao dịch', ()=>openTrade()],
+  ['Xem đối thủ (Minh)', ()=>openPlayer(2)],
+  ['Xem ô đất (Đồng Khởi)', ()=>openTile(37)],
+  ['Cây kỹ năng', openTree],
+  ['Thắng ván', demoWin],
+  ['Đặt lại', ()=>location.reload()],
+];
+$('#demo').innerHTML = '<div class="cap">Kịch bản demo</div>' + DEMOS.map((d,i)=>`<button data-d="${i}">${d[0]}</button>`).join('');
+document.querySelectorAll('#demo button').forEach(b => b.onclick = () => { $('#demo').classList.remove('on'); DEMOS[+b.dataset.d][1](); });
+$('#btnDemo').onclick = e => { e.stopPropagation(); $('#demo').classList.toggle('on'); };
+$('#app').addEventListener('click', e => { if (!e.target.closest('#demo') && !e.target.closest('#btnDemo')) $('#demo').classList.remove('on'); });
+$('#btnSound').onclick = () => toast('Âm thanh: menu Nhạc / Hiệu ứng (chưa vẽ trong sketch)');
+
+/* ---------- Khung máy tính / điện thoại thật ---------- */
+const DEVICES = [
+  {n:'iPhone 16 Pro', w:874, h:402, notch:'yes'}, {n:'iPhone SE', w:667, h:375, notch:'no'},
+  {n:'Pixel 8', w:915, h:412, notch:'no'}, {n:'iPad mini', w:1024, h:768, notch:'no'},
+];
+let dev = 0;
+$('#devs').insertAdjacentHTML('beforeend', DEVICES.map((d,i)=>`<button data-dev="${i}" class="${i===0?'on':''}">${d.n}</button>`).join(''));
+document.querySelectorAll('[data-dev]').forEach(b => b.onclick = () => { dev = +b.dataset.dev; document.querySelectorAll('[data-dev]').forEach(x=>x.classList.toggle('on', x===b)); fit(); });
+document.querySelectorAll('[data-theme]').forEach(b => b.onclick = () => { $('#app').dataset.theme = b.dataset.theme; document.querySelectorAll('[data-theme]').forEach(x=>x.classList.toggle('on', x===b)); });
+function fit() {
+  const vw = innerWidth, vh = innerHeight;
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  const phoneLike = coarse || vh <= 520;
+  document.body.classList.toggle('phone', phoneLike);
+  document.body.classList.toggle('portrait', phoneLike && vh > vw);
+  const ph = $('#phone');
+  if (phoneLike) { ph.style.transform = ''; ph.style.width = ''; ph.style.height = ''; return; }
+  const d = DEVICES[dev]; ph.style.width = d.w + 24 + 'px'; ph.style.height = d.h + 24 + 'px'; ph.dataset.notch = d.notch;
+  const k = Math.min(1, (vw - 40) / (d.w + 24), (vh - 48 - 60) / (d.h + 24)); ph.style.transform = `scale(${k})`;
+  $('#dims').textContent = `${d.n} · ${d.w}×${d.h} pt · bàn cờ ≈ ${Math.round(d.h - 12)} pt${d.notch==='yes' ? ' · đã chừa 59 pt tai thỏ mỗi bên' : ''}`;
+}
+addEventListener('resize', fit); addEventListener('orientationchange', () => setTimeout(fit, 150));
+
+buildBoard(); paintAll(); fit();
+bcast('TỚI LƯỢT', 'Jason · chạm Lắc xí ngầu');
+</script>
+</body>
+</html>
