@@ -87,6 +87,9 @@ function actRailWidthCss() {
 const DIE_TEX = 256;
 const DIE_PAD = 1.75;
 
+/** Giây để cảnh bộ xương đang diễn mờ đi khi cảnh mới chen vào (`playSkit`). */
+const SKIT_CUT = 0.25;
+
 /* Màu nền hiệu ứng ô cờ (vẽ ở chế độ blend cộng nên càng sáng càng đậm) */
 const HOVER_TINT = 0xC9A24A;      // rê chuột: ánh vàng ấm
 /* Giáng Sinh: mặt ô gần trắng nên cộng thêm sáng chỉ làm chữ trên ô bạc đi.
@@ -322,6 +325,14 @@ export default class BoardScene extends Phaser.Scene {
     this.dice = [0, 1].map((i) => this.add.image(0, 0, `die3d-${i}`)
       .setDepth(30).setVisible(false));
     this.diceHome = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
+    /* Chỗ đỗ khi bộ xương diễn: chỗ nằm thường trùng đúng mặt đất của cảnh
+       (`skits.js`, G = 0.84 lòng bàn), xí ngầu ở depth 30 che mất người diễn.
+       `parkK` chạy 0 → 1 lúc có cảnh, 1 → 0 lúc hết; mọi chỗ đọc vị trí xí
+       ngầu đều đi qua `diceSpot` để lăn, bấm chọn, vòng sáng cùng theo. */
+    this.dicePark = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
+    this.parkK = 0;
+    this.diceRolling = false;
+    this.events.on(Phaser.Scenes.Events.UPDATE, (_t, delta) => this.tickDicePark(delta / 1000));
 
     /* Chủ đề Giáng Sinh: tuyết rơi (depth 0.5 — ngay trên mặt bàn, dưới mọi
        thứ khác). Dây đèn LED vẽ sẵn trên ảnh bàn cờ, bóng nào cũng tắt; ô có
@@ -513,14 +524,18 @@ export default class BoardScene extends Phaser.Scene {
         x: c.x + (i === 0 ? -this.dieSize * 0.78 : this.dieSize * 0.78),
         y: this.originY + this.size * 0.735,
       };
-      d.setDisplaySize(this.dieSize * DIE_PAD, this.dieSize * DIE_PAD);
-      d.setPosition(this.diceHome[i].x, this.diceHome[i].y);
-      this.diceShadow[i]
-        .setDisplaySize(this.dieSize * 1.55, this.dieSize * 1.55)
-        .setPosition(this.diceHome[i].x, this.diceHome[i].y + this.dieSize * 0.34)
-        .setAlpha(0.34)
-        .setVisible(d.visible);
+      /* Góc dưới bên phải lòng bàn: đoàn khiêng quan tài và xe tải đi vào từ
+         mép trái, người diễn chính đứng giữa, nên góc này không cảnh nào đè.
+         Đứng trong dải giữa mặt đất của cảnh (0.755 cạnh bàn, `skitFrame`
+         G = 0.84 lòng bàn) và dây bí ngô báo nhà (0.855, `pumpkinSpots`):
+         trên thì đụng chân người diễn, két thuế, bánh xe tải; dưới thì che
+         đèn nhà. Dải ấy chỉ rộng 0.1, nên lúc đỗ viên thu còn 0.6. */
+      this.dicePark[i] = {
+        x: this.originX + this.size * (i === 0 ? 0.752 : 0.808),
+        y: this.originY + this.size * 0.795,
+      };
     });
+    this.placeDice();
 
     this.syncBoardHud();
     // Hoạt cảnh dựng theo toạ độ cũ — đổi cỡ bàn thì bỏ, ô về đúng trạng thái
@@ -1025,9 +1040,10 @@ export default class BoardScene extends Phaser.Scene {
     // Tiếng lắc trong ống trước, rồi từng cú chạm bàn kêu theo đúng lúc nảy
     audio.sfx('shake', { count: 10, span: 0.5 });
 
-    /* Chỗ nằm cuối đọc thẳng từ `diceHome` mỗi khung hình — đổi cỡ cửa sổ
-       giữa chừng thì con xí ngầu vẫn rơi đúng vào chỗ mới */
-    const sim = this.diceHome.map((home, i) => {
+    /* Chỗ nằm cuối đọc lại từ `diceSpot` mỗi khung hình — đổi cỡ cửa sổ hay
+       cảnh bộ xương bắt đầu giữa chừng thì con xí ngầu vẫn rơi đúng chỗ mới */
+    const sim = [0, 1].map((i) => {
+      const home = this.diceSpot(i);
       const dir = i === 0 ? -1 : 1;
       return {
         x: home.x + dir * S * 0.075 + (Math.random() - 0.5) * S * 0.03,
@@ -1049,6 +1065,7 @@ export default class BoardScene extends Phaser.Scene {
       };
     });
 
+    this.diceRolling = true;
     this.dice.forEach((d, i) => {
       if (!live(i)) return;
       this.diceQ[i] = qRandom();
@@ -1070,7 +1087,8 @@ export default class BoardScene extends Phaser.Scene {
         for (let i = 0; i < sim.length; i++) {
           if (!live(i)) continue;
           const s = sim[i];
-          const home = this.diceHome[i];
+          const home = this.diceSpot(i);
+          const dz = this.dieSize * this.dieScale();
           const snapping = t >= SETTLE;
 
           if (!snapping) {
@@ -1106,20 +1124,20 @@ export default class BoardScene extends Phaser.Scene {
           }
 
           /* Nhổm lên khi đang chống cạnh, hạ xuống khi một mặt áp bàn */
-          const lift = (supportFactor(this.diceQ[i]) - 1) * this.dieSize * 0.5;
+          const lift = (supportFactor(this.diceQ[i]) - 1) * dz * 0.5;
 
           /* Càng cao thì khối càng to và bóng càng loang nhạt */
           const rel = (s.h + lift) / S;
           const grow = 1 + rel * 0.30;
           const d = this.dice[i];
           d.setAlpha(Math.min(1, t / 90));
-          d.setDisplaySize(this.dieSize * DIE_PAD * grow, this.dieSize * DIE_PAD * grow);
+          d.setDisplaySize(dz * DIE_PAD * grow, dz * DIE_PAD * grow);
           d.setPosition(s.x, home.y - s.h - lift);
 
           const sh = this.diceShadow[i];
-          const shSize = this.dieSize * 1.55 * (1 + rel * 0.9);
+          const shSize = dz * 1.55 * (1 + rel * 0.9);
           sh.setDisplaySize(shSize, shSize);
-          sh.setPosition(s.x, home.y + this.dieSize * 0.34);
+          sh.setPosition(s.x, home.y + dz * 0.34);
           sh.setAlpha(Math.min(1, t / 90) * Math.max(0.05, 0.38 - rel * 0.55));
 
           this.paintDieFrame(i);
@@ -1129,12 +1147,12 @@ export default class BoardScene extends Phaser.Scene {
 
         /* Đã nằm yên: chốt đúng hướng mặt số rồi buông tay cho controller */
         this.events.off(Phaser.Scenes.Events.UPDATE, onUpdate);
+        this.diceRolling = false;
+        this.placeDice();
         this.dice.forEach((d, i) => {
           if (!live(i)) return;
           this.diceQ[i] = sim[i].target ?? qForValue(values[i], this.diceQ[i]);
           this.paintDieFrame(i);
-          d.setPosition(this.diceHome[i].x, this.diceHome[i].y);
-          d.setDisplaySize(this.dieSize * DIE_PAD, this.dieSize * DIE_PAD);
           this.tweens.add({
             targets: d,
             scaleX: d.scaleX * 1.10, scaleY: d.scaleY * 1.10,
@@ -1159,15 +1177,68 @@ export default class BoardScene extends Phaser.Scene {
   /** Viên xí ngầu nằm dưới điểm (toạ độ khung vẽ), hoặc null. */
   dieAt(sx, sy) {
     if (!this.dice[0].visible) return null;
-    const r = this.dieSize * 0.62;
-    const i = this.diceHome.findIndex((h) => Math.hypot(sx - h.x, sy - h.y) <= r);
+    const r = this.dieSize * this.dieScale() * 0.62;
+    const i = [0, 1].findIndex((k) => {
+      const h = this.diceSpot(k);
+      return Math.hypot(sx - h.x, sy - h.y) <= r;
+    });
     return i < 0 ? null : i;
+  }
+
+  /** Cỡ thu nhỏ lúc đỗ: chỗ đỗ chật hơn chỗ nằm giữa bàn. */
+  dieScale() {
+    return 1 - 0.4 * this.parkK;
+  }
+
+  /** Chỗ nằm của viên `i` lúc này, giữa chỗ thường và chỗ đỗ theo `parkK`. */
+  diceSpot(i) {
+    const a = this.diceHome[i], b = this.dicePark[i];
+    const e = this.parkK * this.parkK * (3 - 2 * this.parkK);
+    return { x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e };
+  }
+
+  /** Đặt hai viên (cả bóng) vào `diceSpot`, giữ nguyên ẩn / hiện. */
+  placeDice() {
+    const dz = this.dieSize * this.dieScale();
+    // Bóng lúc đỗ gọn lại, kẻo mép bóng loang xuống dây bí ngô
+    const sh = dz * (1.55 - 0.35 * this.parkK);
+    this.dice.forEach((d, i) => {
+      const p = this.diceSpot(i);
+      d.setDisplaySize(dz * DIE_PAD, dz * DIE_PAD).setPosition(p.x, p.y);
+      this.diceShadow[i]
+        .setDisplaySize(sh, sh)
+        .setPosition(p.x, p.y + dz * 0.34)
+        .setAlpha(0.34)
+        .setVisible(d.visible);
+    });
+  }
+
+  /**
+   * Mỗi khung hình: có cảnh bộ xương thì trượt xí ngầu lên chỗ đỗ, hết cảnh
+   * (kể cả hàng chờ) thì trượt về. Đang lăn thì chỉ tiến `parkK`, vị trí do
+   * `rollDiceAnim` tự đọc `diceSpot`, kẻo hai bên giành nhau đặt viên.
+   */
+  tickDicePark(dt) {
+    /* Về ngay lúc cảnh cuối bắt đầu mờ (0.4s cuối, xem `paintSkit`), không
+       chờ cảnh tắt hẳn mới về, kẻo nhìn như xí ngầu bị bỏ quên trên góc */
+    const sk = this.skit;
+    const ending = sk && !this.skitQ.length && sk.t >= SKITS[sk.kind].dur - 0.4;
+    const want = sk && !ending ? 1 : 0;
+    if (this.parkK === want) return;
+    const step = REDUCED_MOTION() ? 1 : dt / 0.45;
+    /* Cú nảy lúc lăn xong (`rollDiceAnim`) nhớ cỡ cũ để yoyo về: cảnh bắt
+       đầu ngay trong lúc nảy thì xí ngầu đỗ ở góc mà vẫn giữ cỡ to */
+    this.dice.forEach((d) => this.tweens.killTweensOf(d));
+    this.parkK = want > this.parkK
+      ? Math.min(want, this.parkK + step)
+      : Math.max(want, this.parkK - step);
+    if (!this.diceRolling) this.placeDice();
   }
 
   /**
    * Cho bấm vào từng viên xí ngầu (Xí Ngầu Gian: bấm viên nào lắc lại viên ấy).
    *
-   * Vòng sáng vẽ lại mỗi nhịp theo `diceHome`, nên đổi cỡ cửa sổ giữa chừng thì
+   * Vòng sáng vẽ lại mỗi nhịp theo `diceSpot`, nên đổi cỡ cửa sổ giữa chừng thì
    * vòng vẫn bám đúng viên. Depth 29.5: trên màn tối của phiên chọn ô (5.4) để
    * hai viên không bị phủ mờ như phần bàn không bấm được, dưới chính viên xí ngầu.
    *
@@ -1180,8 +1251,9 @@ export default class BoardScene extends Phaser.Scene {
     const draw = () => {
       g.clear();
       const k = 0.55 + beat.t * 0.45;
-      for (const h of this.diceHome) {
-        const r = this.dieSize * (0.66 + beat.t * 0.05);
+      for (const i of [0, 1]) {
+        const h = this.diceSpot(i);
+        const r = this.dieSize * this.dieScale() * (0.66 + beat.t * 0.05);
         g.fillStyle(0xC8A048, 0.16 * k).fillCircle(h.x, h.y, r);
         g.lineStyle(Math.max(2, this.size * 0.005), 0xFFE9B0, k).strokeCircle(h.x, h.y, r);
       }
@@ -1868,9 +1940,10 @@ export default class BoardScene extends Phaser.Scene {
 
   /**
    * Xếp một cảnh bộ xương diễn giữa nghĩa địa (`render/skits.js`). Chỉ chủ đề
-   * Halloween; người xin bớt chuyển động thì bỏ qua. Hàng chờ giữ tối đa hai
-   * cảnh: lượt dồn dập (đổ đôi, máy cầm lái đẩy nhiều tin một lúc) thì cảnh
-   * tới sau bị bỏ, kẻo nghĩa địa còn diễn chuyện của mấy lượt trước.
+   * Halloween; người xin bớt chuyển động thì bỏ qua. Đang có cảnh mà cảnh mới
+   * tới thì cảnh cũ mờ đi trong `SKIT_CUT` giây rồi nhường luôn, không diễn
+   * nốt: chờ từng cảnh diễn trọn thì nghĩa địa trễ cả chục giây so với bàn cờ.
+   * Hàng chờ chỉ giữ cảnh mới nhất.
    * @param {string} kind khoá trong `SKITS`
    * @param {number} seat người diễn chính (màu mũ)
    * @param {number} [ownerSeat] chủ đất, màu mũ đội khiêng quan tài
@@ -1881,8 +1954,10 @@ export default class BoardScene extends Phaser.Scene {
     const actor = css(seat);
     if (!actor) return;
     const job = { kind, actor, owner: css(ownerSeat) ?? actor, t: 0 };
-    if (!this.skit) this.skit = job;
-    else if (this.skitQ.length < 2) this.skitQ.push(job);
+    if (!this.skit) { this.skit = job; return; }
+    job.cutIn = true;
+    this.skitQ = [job];
+    this.skit.cut ??= 0;
   }
 
   stopSkits() {
@@ -1899,7 +1974,8 @@ export default class BoardScene extends Phaser.Scene {
     let sk = this.skit;
     if (sk) {
       sk.t += dt;
-      if (sk.t >= SKITS[sk.kind].dur) sk = this.skit = this.skitQ.shift() ?? null;
+      if (sk.cut != null) sk.cut += dt;
+      if (sk.t >= SKITS[sk.kind].dur || sk.cut >= SKIT_CUT) sk = this.skit = this.skitQ.shift() ?? null;
     }
     if (!sk) { this.skitImg?.setVisible(false); return 1; }
     /* Texture cỡ đúng lòng bàn trên màn hình (game chạy theo điểm ảnh thật,
@@ -1924,7 +2000,13 @@ export default class BoardScene extends Phaser.Scene {
     }
     this.skitTex.refresh();
     const p = this.toScreen(L.x, L.y);
-    this.skitImg.setVisible(true).setPosition(p.x, p.y).setDisplaySize(L.size * this.scaleF, L.size * this.scaleF);
+    /* Cảnh bị cắt mờ dần; cảnh vào thay hiện dần trong `SKIT_CUT` giây, và
+       hàng nhảy đang ẩn thì giữ ẩn luôn, kẻo nó loé lên một khung hình giữa
+       hai cảnh. */
+    const fade = sk.cut != null ? 1 - sk.cut / SKIT_CUT : sk.cutIn ? Math.min(1, sk.t / SKIT_CUT) : 1;
+    this.skitImg.setVisible(true).setAlpha(Math.max(0, fade))
+      .setPosition(p.x, p.y).setDisplaySize(L.size * this.scaleF, L.size * this.scaleF);
+    if (sk.cut != null || (sk.cutIn && sk.t < 0.35)) return 0;
     return skitRowAlpha(sk.kind, sk.t);
   }
 

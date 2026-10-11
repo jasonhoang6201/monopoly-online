@@ -325,17 +325,25 @@ const skit = await page.evaluate(async () => {
   st.houses.set(11, 5); sc.refresh(st);
   out.hotel = sc.skit?.kind;
   st.houses.delete(11); st.owner.delete(11); sc.refresh(st);
-  // Hàng chờ giữ tối đa hai cảnh sau cảnh đang diễn
+  // Cảnh mới chen vào thì cảnh đang diễn bắt đầu mờ, hàng chờ chỉ giữ cảnh mới nhất
   c.skit('rent', 0, 1); c.skit('tax', 2); c.skit('buy', 0);
   out.queue = sc.skitQ.map((j) => j.kind);
+  out.cutting = sc.skit?.kind === 'hotel' && sc.skit.cut != null;
+  // Mờ xong (0.25s) thì cảnh mới nhất lên thay, không chờ cảnh cũ diễn hết
+  sc.tickSkit(0.3);
+  out.next = sc.skit?.kind;
   // Đang diễn thì hàng nhảy mờ đi và ảnh cảnh hiện trên lòng bàn
-  sc.tickSkit(1.5);
+  sc.tickSkit(1.2);
   sc.tickSpooky(performance.now(), 0);
   out.drawn = !!sc.skitImg?.visible && sc.textures.exists('skit');
   out.rowAlpha = Math.max(...sc.walkers.map((w) => w.img.alpha));
-  // Hết giờ thì cảnh kế trong hàng chờ lên thay
+  // Có cảnh thì xí ngầu lên chỗ đỗ, hết cảnh thì về chỗ thường
+  sc.tickDicePark(1);
+  out.parked = sc.parkK;
   sc.tickSkit(60);
-  out.next = sc.skit?.kind;
+  sc.tickDicePark(1);
+  out.home = sc.parkK;
+  out.empty = sc.skit === null;
   sc.stopSkits();
   // Dừng ở Nhà Máy Điện của chính mình: chỉ diễn cảnh, không hỏi gì
   const p = st.current;
@@ -350,9 +358,12 @@ const skit = await page.evaluate(async () => {
 });
 ok('xây nhà diễn cảnh khiêng nhà, lên khách sạn diễn cảnh khiêng lâu đài',
   skit.build === 'build' && skit.hotel === 'hotel', JSON.stringify(skit));
-ok('cảnh xếp hàng tối đa hai, cảnh thứ ba bị bỏ', JSON.stringify(skit.queue) === '["rent","tax"]', JSON.stringify(skit.queue));
+ok('cảnh mới chen vào: cảnh cũ bắt đầu mờ, hàng chờ chỉ giữ cảnh mới nhất',
+  skit.cutting && JSON.stringify(skit.queue) === '["buy"]', JSON.stringify(skit.queue));
+ok('cảnh cũ mờ xong thì cảnh mới nhất lên thay ngay', skit.next === 'buy', String(skit.next));
 ok('đang diễn thì ảnh cảnh hiện và hàng bộ xương nhảy mờ đi', skit.drawn && skit.rowAlpha < 0.05, String(skit.rowAlpha));
-ok('hết cảnh thì cảnh kế trong hàng chờ lên thay', skit.next === 'rent', String(skit.next));
+ok('có cảnh thì xí ngầu lên chỗ đỗ, hết cảnh thì về chỗ thường',
+  skit.parked === 1 && skit.home === 0 && skit.empty, `${skit.parked} → ${skit.home}`);
 ok('dừng ở Nhà Máy Điện thì diễn cảnh bị điện giật', skit.power === 'power', String(skit.power));
 
 /* ------------------------------------------- phá sản: bia mộ mọc ở đúng ô */
