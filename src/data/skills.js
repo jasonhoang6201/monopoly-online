@@ -792,11 +792,14 @@ export const SKILLS = [
        giữ nhà mỗi lần qua ô Bắt Đầu: cùng đường với Nhà Lâu Năm và Phố Cổ là
        đổ tiền vào nhà rồi ăn dần. Khách sạn tính 5 căn như luật thuê. Cộng
        vào lương nên không thêm một thông báo nào trong lượt. */
-    levels: [{ refund: 0.5, perHouse: 5 }, { refund: 0.75, perHouse: 8 }, { refund: 1, perHouse: 12 }],
+    /* Giữ nhà theo tỉ lệ chứ không miễn hẳn: miễn hẳn thì Sổ Hồng học xong
+       là thẻ dỡ nhà, động đất, cháy, tuyết không còn đụng được người ấy nữa,
+       cả ván. Rút một lần cho mỗi ô mỗi lần bị đánh, không rút từng cấp. */
+    levels: [{ refund: 0.5, perHouse: 5, hold: 0.4 }, { refund: 0.75, perHouse: 8, hold: 0.55 }, { refund: 1, perHouse: 12, hold: 0.7 }],
     grow: { by: 'gain', at: [80, 200] },
-    short: 'Nhà không bị phá; mỗi lần qua ô Bắt Đầu thu tiền theo số nhà.',
-    effect: 'Mỗi lần qua ô Bắt Đầu nhận thêm {$perHouse} cho mỗi căn nhà bạn đang có (khách sạn tính 5 căn). Nhà của bạn không bị thẻ hay sự kiện Thời Cuộc dỡ. Bán lại nhà được {%refund} giá xây.',
-    lvText: '+{$perHouse} mỗi căn nhà khi qua ô Bắt Đầu, bán nhà lấy lại {%refund}',
+    short: 'Nhà có khả năng đứng vững khi bị dỡ; mỗi lần qua ô Bắt Đầu thu tiền theo số nhà.',
+    effect: 'Mỗi lần qua ô Bắt Đầu nhận thêm {$perHouse} cho mỗi căn nhà bạn đang có (khách sạn tính 5 căn). Khi thẻ hay sự kiện Thời Cuộc dỡ nhà của bạn, mỗi ô có {%hold} khả năng đứng nguyên. Bán lại nhà được {%refund} giá xây.',
+    lvText: '+{$perHouse} mỗi căn khi qua ô Bắt Đầu, {%hold} giữ được nhà, bán nhà lấy lại {%refund}',
   },
   {
     id: 'acU', branch: 'ancu', tier: 4, slot: 'a', kind: 'passive', span: 'lap', icon: 'pagoda',
@@ -836,15 +839,20 @@ export const SKILLS = [
     id: 'acS1', branch: 'ancu', tier: 3, slot: 'c', kind: 'passive', span: 'forever', icon: 'apartment',
     requires: ['ac2b'],
     name: 'Chung Cư Mini',
+    /* Nhà trên đất lẻ đứng `life` lượt của chủ đất kể từ căn đầu tiên, mỗi
+       căn xây thêm trên ô ấy cộng `ext` lượt; gom đủ bộ trước khi hết hạn thì
+       thành nhà thường, đứng mãi. Để nguyên vĩnh viễn thì người có kỹ năng
+       này khỏi cần giao dịch với ai. Hạn gốc ngắn để lượt chủ đất (cũng là
+       một vòng bàn) không kéo dài cả chục vòng. */
     levels: [
-      { cap: 1, mult: 1.25, total: 3 },
-      { cap: 2, mult: 1.25, total: 4 },
-      { cap: 2, mult: 1, total: 6 },
+      { cap: 1, mult: 1.25, total: 3, life: 3, ext: 3 },
+      { cap: 2, mult: 1.25, total: 4, life: 4, ext: 4 },
+      { cap: 2, mult: 1, total: 6, life: 4, ext: 5 },
     ],
     grow: { by: 'uses', at: [1, 3], say: 'Xây {n} căn trên đất lẻ' },
-    short: 'Đất chưa đủ bộ màu vẫn xây được nhà.',
-    effect: 'Ô đất chưa đủ bộ màu vẫn xây được tối đa {cap} căn nhà, giá xây ×{mult}; cộng mọi ô đất lẻ lại không quá {total} căn. Xây trong bảng Quản lý tài sản như thường.',
-    lvText: 'Đất lẻ xây tối đa {cap} căn mỗi ô, {total} căn tất cả, giá ×{mult}',
+    short: 'Đất chưa đủ bộ màu vẫn xây được nhà, nhưng nhà chỉ đứng một số lượt.',
+    effect: 'Ô đất chưa đủ bộ màu vẫn xây được tối đa {cap} căn nhà, giá xây ×{mult}; cộng mọi ô đất lẻ lại không quá {total} căn. Nhà trên ô lẻ đứng {life} lượt của bạn kể từ căn đầu tiên, mỗi căn xây thêm trên ô ấy cộng {ext} lượt; hết hạn thì ngân hàng mua lại như bán nhà. Gom đủ bộ màu trước khi hết hạn thì nhà thành nhà thường.',
+    lvText: 'Đất lẻ xây tối đa {cap} căn mỗi ô, {total} căn tất cả, giá ×{mult}, đứng {life} lượt, xây thêm +{ext} lượt',
   },
   {
     id: 'acS2', branch: 'ancu', tier: 3, slot: 'd', kind: 'passive', span: 'forever', icon: 'neighbors',
@@ -888,6 +896,6 @@ export const BUILDS = [
   {
     name: 'Phố Cổ Bất Khả Xâm',
     skills: ['acX2', 'ac2a', 'ac3', 'acU', 'ac1'],
-    note: 'Sổ Hồng chặn mọi thẻ dỡ nhà và trả tiền theo số nhà; Phố Cổ mỗi lần qua ô Bắt Đầu tự xây thêm một căn.',
+    note: 'Sổ Hồng có tỉ lệ giữ nhà khi bị dỡ và trả tiền theo số nhà; Phố Cổ mỗi lần qua ô Bắt Đầu tự xây thêm một căn.',
   },
 ];

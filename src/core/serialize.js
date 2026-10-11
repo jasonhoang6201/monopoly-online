@@ -38,6 +38,7 @@ export function snapshot(st) {
       lapUses: { ...p.lapUses },
       jails: p.jails,
       skillUse: copyUse(p.skillUse),
+      learnCount: p.learnCount,
       lotto: p.lotto,
       betSet: p.betSet ? { ...p.betSet } : null,
       stake: p.stake,
@@ -77,11 +78,13 @@ export function snapshot(st) {
     eventTally: { ...st.eventTally },
     /* Cây kỹ năng: biển Di Sản và bộ đếm lượt cho kỹ năng "mỗi lượt 1 lần". */
     heritage: [...st.heritage],
+    miniLeft: [...st.miniLeft],
     turnNo: st.turnNo,
     round: st.round,
     rolled: st.rolled,
     startedAt: st.startedAt,
     endedAt: st.endedAt,
+    gameId: st.gameId,
   };
 }
 
@@ -129,6 +132,7 @@ export function applySnapshot(st, snap) {
     p.lapUses = { ...(s.lapUses ?? p.lapUses) };
     p.jails = s.jails ?? p.jails;
     p.skillUse = copyUse(s.skillUse ?? p.skillUse);
+    p.learnCount = s.learnCount ?? p.learnCount;
     p.lotto = s.lotto ?? null;
     p.betSet = s.betSet ? { ...s.betSet } : null;
     p.stake = s.stake ?? null;
@@ -164,11 +168,14 @@ export function applySnapshot(st, snap) {
   /* Ảnh chụp cũ mang hai chồng chia theo kỳ (`eventPiles`). Gộp lại thành một
      chồng thay vì bỏ đi, để ván đang chơi giữa lúc cập nhật không bị xáo lại. */
   if (snap.heritage) st.heritage = new Set(snap.heritage);
+  if (snap.miniLeft) st.miniLeft = new Map(snap.miniLeft);
   st.turnNo = snap.turnNo ?? st.turnNo;
   st.round = snap.round ?? st.round;
   st.rolled = snap.rolled ?? false;
   st.startedAt = snap.startedAt ?? st.startedAt;
   if ('endedAt' in snap) st.endedAt = snap.endedAt;
+  /* Ảnh chụp của bản trước khi có số liệu cân bằng không mang `gameId`: giữ mã tự sinh. */
+  if (snap.gameId) st.gameId = snap.gameId;
   if (snap.eventTally) st.eventTally = { ...snap.eventTally };
   if (snap.eventPile) st.eventPile = [...snap.eventPile];
   else if (snap.eventPiles) st.eventPile = [...(snap.eventPiles[1] ?? []), ...(snap.eventPiles[2] ?? [])];

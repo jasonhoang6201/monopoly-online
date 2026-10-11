@@ -11,7 +11,8 @@ import {
 import { CHANCE, CHEST, Deck } from '../data/cards.js';
 import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
 import { DEFAULT_THEME, themeKey } from '../data/themes.js';
-import { has, param, roll, ownerRentMult, ownerRentFlat, houseImmune, credit, miniRoom } from './skills.js';
+import { has, param, roll, ownerRentMult, ownerRentFlat, houseImmune, credit, miniRoom, levelOf } from './skills.js';
+import { uuid, track } from './telemetry.js';
 
 /**
  * Bảng màu quân — quân cờ chỉ phân biệt bằng MÀU, không mang biểu tượng riêng.
@@ -111,6 +112,8 @@ export class Player {
      * từ lúc học — điều kiện lên level (xem `credit` trong core/skills.js).
      */
     this.skillUse = {};
+    /** Số lần đã học / lên level trong ván — không về 0 khi tẩy (số liệu cân bằng). */
+    this.learnCount = 0;
     /** Tổng xí ngầu đã chọn cho Xổ Số Kiến Thiết; `null` là chưa chọn. */
     this.lotto = null;
     /** Cửa và tiền Cược Chẵn Lẻ tự đặt mỗi lượt; `null` là chưa chọn. @type {?{pick:string, amount:number}} */
@@ -158,12 +161,13 @@ export class GameState {
     /** Đặt true khi ván đã kết thúc. */
     this.over = false;
     /**
-     * Khoản người-trả-người đang dở dang: `{ from, to, amount }`, `null` là
-     * không nợ ai.
+     * Khoản người-trả-người đang dở dang: `{ from, to, amount, left? }`, `null`
+     * là không nợ ai. `left` là số con nợ gom được lúc vỡ nợ (tiền mặt +
+     * bán nhà + thế chấp đất), chủ nợ chỉ nhận chừng đó.
      *
      * Nằm trong trạng thái (nên đi theo ảnh chụp) vì máy con nợ có thể tắt
      * ngang giữa lúc đang hỏi họ xoay tiền hay tuyên bố phá sản. Máy khác đọc
-     * ảnh chụp mới biết còn ai chưa trả cho ai mà trả thay hoặc đòi tiếp —
+     * ảnh chụp mới biết còn ai chưa trả cho ai mà chuyển nốt hoặc đòi tiếp —
      * xem `Game.coverDebt`.
      */
     this.debt = null;
@@ -225,6 +229,14 @@ export class GameState {
      */
     this.heritage = new Set();
     /**
+     * Chung Cư Mini: ô đất lẻ đang có nhà → số lượt của chủ đất còn lại trước
+     * khi nhà bị ngân hàng mua lại. Căn đầu đặt `life`, mỗi căn sau cộng `ext`:
+     * muốn giữ lâu thì phải đổ thêm tiền xây, mà mỗi ô lẻ chỉ có `cap` căn nên
+     * không kéo dài mãi được. Xoá khi ô hết nhà hoặc chủ đất gom đủ bộ.
+     * @type {Map<number, number>}
+     */
+    this.miniLeft = new Map();
+    /**
      * Đếm lượt từ đầu ván, tăng ở `nextTurn`. Kỹ năng "mỗi lượt 1 lần" đánh dấu
      * bằng con số này thay vì một cờ bật/tắt: `beginTurn` chạy lại nhiều lần
      * trong cùng một lượt (ảnh chụp về, sổ ghế đổi), xoá cờ ở đó là cho dùng lại.
@@ -251,6 +263,11 @@ export class GameState {
      */
     this.startedAt = Date.now();
     this.endedAt = null;
+    /**
+     * Mã ván cho số liệu cân bằng. Sinh ở máy dựng ván rồi đi theo ảnh chụp,
+     * để mọi máy từng cầm lái trong ván ghi về cùng một mã.
+     */
+    this.gameId = uuid();
   }
 
   // ------------------------------------------------- hiệu ứng đang hiệu lực
@@ -598,7 +615,12 @@ export class GameState {
     if (!o.free && has(p, 'ac1')) {
       credit(p, 'ac1', Math.ceil(BOARD[tileId].house_cost * this.modMult('build')) - check.cost);
     }
-    if (check.mini) credit(p, 'acS1');
+    if (check.mini) {
+      credit(p, 'acS1');
+      const { life, ext } = param(p, 'acS1');
+      const left = this.miniLeft.get(tileId);
+      this.miniLeft.set(tileId, left === undefined ? life : left + ext);
+    }
     if (check.isHotel) {
       this.houses.set(tileId, 5);
       this.bankHouses += 4;   // trả 4 căn nhà về kho
@@ -689,7 +711,9 @@ export class GameState {
   demolish(tileId) {
     const cur = this.housesOn(tileId);
     if (cur === 0) return 0;
-    // Sổ Hồng và biển Di Sản: thẻ hay thiên tai đều không dỡ được
+    /* Biển Di Sản: thẻ hay thiên tai đều không dỡ được. Sổ Hồng không xét ở
+       đây — nó rút tỉ lệ một lần cho cả lần đánh (`deedHolds`), còn hàm này
+       chạy một lần cho mỗi cấp. */
     if (houseImmune(this, tileId)) return 0;
     this.payContractors(this.owner.get(tileId), 'sell');
     if (cur === 5) {
@@ -703,6 +727,36 @@ export class GameState {
     if (cur === 1) this.houses.delete(tileId);
     else this.houses.set(tileId, cur - 1);
     return 1;
+  }
+
+  /**
+   * Hết một lượt của `seat`: trừ hạn nhà Chung Cư Mini trên đất lẻ của họ.
+   * Ô hết hạn thì bán từng căn lại cho ngân hàng theo đúng luật bán nhà (giá
+   * bán lại, Sổ Hồng, Thầu Vật Liệu đều tính như bấm bán tay).
+   *
+   * Ô đã đủ bộ thì xoá hạn: nhà ấy giờ là nhà thường. Ô hết nhà hay đổi chủ
+   * cũng xoá, để lần xây lại tính hạn mới theo level của chủ mới.
+   * @returns {Array<{id:number, sold:number, refund:number}>} ô vừa hết hạn
+   */
+  ageMini(seat) {
+    const out = [];
+    for (const [id, left] of [...this.miniLeft]) {
+      const owner = this.owner.get(id);
+      if (owner === undefined || this.housesOn(id) === 0) { this.miniLeft.delete(id); continue; }
+      if (owner !== seat) continue;
+      if (this.hasFullGroup(seat, BOARD[id].color_group)) { this.miniLeft.delete(id); continue; }
+      if (left > 1) { this.miniLeft.set(id, left - 1); continue; }
+      this.miniLeft.delete(id);
+      let sold = 0, refund = 0;
+      while (this.housesOn(id) > 0) {
+        const res = this.sellHouse(seat, id);
+        if (!res.ok) break;
+        sold += 1;
+        refund += res.refund;
+      }
+      out.push({ id, sold, refund });
+    }
+    return out;
   }
 
   /** Dỡ sạch nhà cửa trên một ô, trả về số **cấp** đã dỡ (khách sạn tính 5). */
@@ -836,6 +890,13 @@ export class GameState {
    */
   bankrupt(playerId) {
     const p = this.players[playerId];
+    /* Đang dở một khoản trả người khác: bán sạch nhà, thế chấp hết đất, gom cả
+       tiền mặt trả chủ nợ, tối đa bằng khoản nợ. Ngân hàng không bù phần thiếu,
+       phần dư theo đất về ngân hàng. Chốt con số ở đây, trước khi đất bị thu
+       và ví về 0, vì `Game.coverDebt` chạy sau hoạt cảnh phá sản. */
+    if (this.debt && this.debt.from === playerId && this.debt.left == null) {
+      this.debt.left = Math.max(0, Math.min(this.liquidValue(playerId), this.debt.amount));
+    }
     for (const tileId of this.propertiesOf(playerId)) {
       const h = this.housesOn(tileId);
       if (h === 5) { this.bankHotels += 1; }
@@ -844,6 +905,7 @@ export class GameState {
       this.owner.delete(tileId);
       this.mortgaged.delete(tileId);
       this.heritage.delete(tileId);
+      this.miniLeft.delete(tileId);
     }
     // Thẻ còn trong túi người vỡ nợ thì trả về bộ, đừng chôn theo họ
     while (p.cards.length) this.dropCard(playerId);
@@ -852,6 +914,10 @@ export class GameState {
       p.outRank = this.players.filter((x) => x.bankrupt).length + 1;
       p.outPos = p.pos;
       p.outRound = this.round;
+      track('bankrupt', {
+        seat: playerId, round: this.round, turn_no: this.turnNo,
+        skills: p.skills.map((id) => ({ id, lv: levelOf(p, id) })),
+      });
     }
     p.bankrupt = true;
     p.inJail = false;
@@ -940,3 +1006,22 @@ export function rollDice() {
   const b = 1 + Math.floor(Math.random() * 6);
   return { a, b, sum: a + b, isDouble: a === b };
 }
+
+/**
+ * Thứ hạng cuối ván: người thắng đứng đầu, kế đến những người còn trụ (so gia
+ * sản), cuối cùng là người phá sản — ai vỡ nợ sau đứng trên ai vỡ nợ trước.
+ *
+ * Người phá sản đã trả hết tài sản về ngân hàng, gia sản ai cũng là 0$, nên
+ * không đem tiền ra so được; thứ tự vỡ nợ (`outRank`) là thứ duy nhất phân
+ * định họ. Ảnh chụp cũ chưa có `outRank` (0) thì xếp chót.
+ */
+export function finalRanking(state, winner) {
+  const alive = state.players
+    .filter((p) => !p.bankrupt && p.id !== winner.id)
+    .sort((a, b) => state.netWorth(b.id) - state.netWorth(a.id));
+  const out = state.players
+    .filter((p) => p.bankrupt && p.id !== winner.id)
+    .sort((a, b) => (b.outRank || 0) - (a.outRank || 0));
+  return [winner, ...alive, ...out];
+}
+

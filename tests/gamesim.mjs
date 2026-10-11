@@ -530,6 +530,7 @@ function game(names, builds = BUILDS, pol = []) {
   for (let n = 0; n < 4 * 120; n++) {
     const p = st.current;
     turn(p);
+    st.ageMini(p.id);   // như controller.endTurn: nhà Chung Cư Mini già thêm một lượt
     const w = st.winCheck();
     if (w) { by = w.by; break; }
     if (!st.nextTurn()) break;

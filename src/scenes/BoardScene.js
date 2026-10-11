@@ -35,7 +35,9 @@ import {
 } from '../render/halloweenArt.js';
 import { graveLayout, pumpkinSpots, pumpkinSize } from '../render/halloweenDeco.js';
 import { MOVES, movePose, danceAt, STILL_AT } from '../render/dance.js';
+import { SKITS, paintSkit, skitRowAlpha, skitFrame } from '../render/skits.js';
 import { batSwarm } from '../ui/batSwarm.js';
+import { paintJailPanel, paintJailPost, JAIL_PANELS, JAIL_POSTS } from '../render/jailBars.js';
 
 /* Người dùng xin bớt chuyển động thì ô đổi trạng thái ngay, không diễn */
 /** Ảnh khung nhảy của bộ xương nghĩa địa: bề rộng, bề cao, cỡ bộ xương, chỗ bàn chân (tỉ lệ bề cao). */
@@ -85,6 +87,9 @@ function actRailWidthCss() {
  */
 const DIE_TEX = 256;
 const DIE_PAD = 1.75;
+
+/** Giây để cảnh bộ xương đang diễn mờ đi khi cảnh mới chen vào (`playSkit`). */
+const SKIT_CUT = 0.25;
 
 /* Màu nền hiệu ứng ô cờ (vẽ ở chế độ blend cộng nên càng sáng càng đậm) */
 const HOVER_TINT = 0xC9A24A;      // rê chuột: ánh vàng ấm
@@ -275,7 +280,15 @@ export default class BoardScene extends Phaser.Scene {
     /** Mỗi ghế: màu hào quang (`ultColor`) hoặc null — bóng mờ khi đi lấy màu ở đây. */
     this.auraColor = [];
     this.events.on('update', (time) => this.tickAuras(time));
+    /* Song sắt ô tù (`render/jailBars.js`): hai tấm dọc mép trên và mép
+       phải ô 10, nằm dưới lớp quân để quân đứng trong góc không bị che. */
+    this.jailLayer = this.add.container(0, 0).setDepth(5.95);
     this.tokenLayer = this.add.container(0, 0).setDepth(6);
+    /** Các phần song và trụ (`buildJailBars`), hoặc null khi chưa dựng. */
+    this.jailBars = null;
+    /** Song đang dựng hay đang nằm; `undefined` = chưa đồng bộ lần nào. */
+    this.jailUp = undefined;
+    this.jailState = null;
     this.fxLayer = this.add.container(0, 0).setDepth(20);
     /* Hoạt cảnh ô đất (`render/tileFx.js`): phần mặt ô (vết nứt, vết sém, ô
        rung) nằm trên nước màu chủ đất nhưng dưới vệt đèn và quân cờ; phần nổi
@@ -321,6 +334,14 @@ export default class BoardScene extends Phaser.Scene {
     this.dice = [0, 1].map((i) => this.add.image(0, 0, `die3d-${i}`)
       .setDepth(30).setVisible(false));
     this.diceHome = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
+    /* Chỗ đỗ khi bộ xương diễn: chỗ nằm thường trùng đúng mặt đất của cảnh
+       (`skits.js`, G = 0.84 lòng bàn), xí ngầu ở depth 30 che mất người diễn.
+       `parkK` chạy 0 → 1 lúc có cảnh, 1 → 0 lúc hết; mọi chỗ đọc vị trí xí
+       ngầu đều đi qua `diceSpot` để lăn, bấm chọn, vòng sáng cùng theo. */
+    this.dicePark = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
+    this.parkK = 0;
+    this.diceRolling = false;
+    this.events.on(Phaser.Scenes.Events.UPDATE, (_t, delta) => this.tickDicePark(delta / 1000));
 
     /* Chủ đề Giáng Sinh: tuyết rơi (depth 0.5 — ngay trên mặt bàn, dưới mọi
        thứ khác). Dây đèn LED vẽ sẵn trên ảnh bàn cờ, bóng nào cũng tắt; ô có
@@ -340,6 +361,13 @@ export default class BoardScene extends Phaser.Scene {
     this.fogs = [];
     this.moonRed = null;
     this.walkKey = '';
+    /* Cảnh bộ xương diễn khi có chuyện trên bàn (`render/skits.js`): mỗi lúc
+       một cảnh, cảnh tới sau xếp hàng. Ảnh cảnh nằm ngoài `graveLayer` vì
+       `layoutSpooky` xoá sạch lớp ấy mỗi lần đổi cỡ, mà cảnh đang diễn dở. */
+    this.skit = null;
+    this.skitQ = [];
+    this.skitTex = null;
+    this.skitImg = null;
     /** Bia mộ đang dựng: khoá `ghế:ô` → ảnh. */
     this.tombs = new Map();
     this.tombState = null;
@@ -390,6 +418,7 @@ export default class BoardScene extends Phaser.Scene {
     this.paintHouseTextures();
     // Bia mộ và bộ xương vẽ theo chủ đề — dựng lại từ đầu
     this.clearTombs();
+    this.clearJail();
     this.walkKey = '';
     this.diceTex.forEach((tex, i) => { drawDie(tex.getSourceImage(), this.diceQ[i]); tex.refresh(); });
     this.hideHousePlaque();
@@ -505,14 +534,18 @@ export default class BoardScene extends Phaser.Scene {
         x: c.x + (i === 0 ? -this.dieSize * 0.78 : this.dieSize * 0.78),
         y: this.originY + this.size * 0.735,
       };
-      d.setDisplaySize(this.dieSize * DIE_PAD, this.dieSize * DIE_PAD);
-      d.setPosition(this.diceHome[i].x, this.diceHome[i].y);
-      this.diceShadow[i]
-        .setDisplaySize(this.dieSize * 1.55, this.dieSize * 1.55)
-        .setPosition(this.diceHome[i].x, this.diceHome[i].y + this.dieSize * 0.34)
-        .setAlpha(0.34)
-        .setVisible(d.visible);
+      /* Góc dưới bên phải lòng bàn: đoàn khiêng quan tài và xe tải đi vào từ
+         mép trái, người diễn chính đứng giữa, nên góc này không cảnh nào đè.
+         Đứng trong dải giữa mặt đất của cảnh (0.755 cạnh bàn, `skitFrame`
+         G = 0.84 lòng bàn) và dây bí ngô báo nhà (0.855, `pumpkinSpots`):
+         trên thì đụng chân người diễn, két thuế, bánh xe tải; dưới thì che
+         đèn nhà. Dải ấy chỉ rộng 0.1, nên lúc đỗ viên thu còn 0.6. */
+      this.dicePark[i] = {
+        x: this.originX + this.size * (i === 0 ? 0.752 : 0.808),
+        y: this.originY + this.size * 0.795,
+      };
     });
+    this.placeDice();
 
     this.syncBoardHud();
     // Hoạt cảnh dựng theo toạ độ cũ — đổi cỡ bàn thì bỏ, ô về đúng trạng thái
@@ -1017,9 +1050,10 @@ export default class BoardScene extends Phaser.Scene {
     // Tiếng lắc trong ống trước, rồi từng cú chạm bàn kêu theo đúng lúc nảy
     audio.sfx('shake', { count: 10, span: 0.5 });
 
-    /* Chỗ nằm cuối đọc thẳng từ `diceHome` mỗi khung hình — đổi cỡ cửa sổ
-       giữa chừng thì con xí ngầu vẫn rơi đúng vào chỗ mới */
-    const sim = this.diceHome.map((home, i) => {
+    /* Chỗ nằm cuối đọc lại từ `diceSpot` mỗi khung hình — đổi cỡ cửa sổ hay
+       cảnh bộ xương bắt đầu giữa chừng thì con xí ngầu vẫn rơi đúng chỗ mới */
+    const sim = [0, 1].map((i) => {
+      const home = this.diceSpot(i);
       const dir = i === 0 ? -1 : 1;
       return {
         x: home.x + dir * S * 0.075 + (Math.random() - 0.5) * S * 0.03,
@@ -1041,6 +1075,7 @@ export default class BoardScene extends Phaser.Scene {
       };
     });
 
+    this.diceRolling = true;
     this.dice.forEach((d, i) => {
       if (!live(i)) return;
       this.diceQ[i] = qRandom();
@@ -1062,7 +1097,8 @@ export default class BoardScene extends Phaser.Scene {
         for (let i = 0; i < sim.length; i++) {
           if (!live(i)) continue;
           const s = sim[i];
-          const home = this.diceHome[i];
+          const home = this.diceSpot(i);
+          const dz = this.dieSize * this.dieScale();
           const snapping = t >= SETTLE;
 
           if (!snapping) {
@@ -1098,20 +1134,20 @@ export default class BoardScene extends Phaser.Scene {
           }
 
           /* Nhổm lên khi đang chống cạnh, hạ xuống khi một mặt áp bàn */
-          const lift = (supportFactor(this.diceQ[i]) - 1) * this.dieSize * 0.5;
+          const lift = (supportFactor(this.diceQ[i]) - 1) * dz * 0.5;
 
           /* Càng cao thì khối càng to và bóng càng loang nhạt */
           const rel = (s.h + lift) / S;
           const grow = 1 + rel * 0.30;
           const d = this.dice[i];
           d.setAlpha(Math.min(1, t / 90));
-          d.setDisplaySize(this.dieSize * DIE_PAD * grow, this.dieSize * DIE_PAD * grow);
+          d.setDisplaySize(dz * DIE_PAD * grow, dz * DIE_PAD * grow);
           d.setPosition(s.x, home.y - s.h - lift);
 
           const sh = this.diceShadow[i];
-          const shSize = this.dieSize * 1.55 * (1 + rel * 0.9);
+          const shSize = dz * 1.55 * (1 + rel * 0.9);
           sh.setDisplaySize(shSize, shSize);
-          sh.setPosition(s.x, home.y + this.dieSize * 0.34);
+          sh.setPosition(s.x, home.y + dz * 0.34);
           sh.setAlpha(Math.min(1, t / 90) * Math.max(0.05, 0.38 - rel * 0.55));
 
           this.paintDieFrame(i);
@@ -1121,12 +1157,12 @@ export default class BoardScene extends Phaser.Scene {
 
         /* Đã nằm yên: chốt đúng hướng mặt số rồi buông tay cho controller */
         this.events.off(Phaser.Scenes.Events.UPDATE, onUpdate);
+        this.diceRolling = false;
+        this.placeDice();
         this.dice.forEach((d, i) => {
           if (!live(i)) return;
           this.diceQ[i] = sim[i].target ?? qForValue(values[i], this.diceQ[i]);
           this.paintDieFrame(i);
-          d.setPosition(this.diceHome[i].x, this.diceHome[i].y);
-          d.setDisplaySize(this.dieSize * DIE_PAD, this.dieSize * DIE_PAD);
           this.tweens.add({
             targets: d,
             scaleX: d.scaleX * 1.10, scaleY: d.scaleY * 1.10,
@@ -1151,15 +1187,68 @@ export default class BoardScene extends Phaser.Scene {
   /** Viên xí ngầu nằm dưới điểm (toạ độ khung vẽ), hoặc null. */
   dieAt(sx, sy) {
     if (!this.dice[0].visible) return null;
-    const r = this.dieSize * 0.62;
-    const i = this.diceHome.findIndex((h) => Math.hypot(sx - h.x, sy - h.y) <= r);
+    const r = this.dieSize * this.dieScale() * 0.62;
+    const i = [0, 1].findIndex((k) => {
+      const h = this.diceSpot(k);
+      return Math.hypot(sx - h.x, sy - h.y) <= r;
+    });
     return i < 0 ? null : i;
+  }
+
+  /** Cỡ thu nhỏ lúc đỗ: chỗ đỗ chật hơn chỗ nằm giữa bàn. */
+  dieScale() {
+    return 1 - 0.4 * this.parkK;
+  }
+
+  /** Chỗ nằm của viên `i` lúc này, giữa chỗ thường và chỗ đỗ theo `parkK`. */
+  diceSpot(i) {
+    const a = this.diceHome[i], b = this.dicePark[i];
+    const e = this.parkK * this.parkK * (3 - 2 * this.parkK);
+    return { x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e };
+  }
+
+  /** Đặt hai viên (cả bóng) vào `diceSpot`, giữ nguyên ẩn / hiện. */
+  placeDice() {
+    const dz = this.dieSize * this.dieScale();
+    // Bóng lúc đỗ gọn lại, kẻo mép bóng loang xuống dây bí ngô
+    const sh = dz * (1.55 - 0.35 * this.parkK);
+    this.dice.forEach((d, i) => {
+      const p = this.diceSpot(i);
+      d.setDisplaySize(dz * DIE_PAD, dz * DIE_PAD).setPosition(p.x, p.y);
+      this.diceShadow[i]
+        .setDisplaySize(sh, sh)
+        .setPosition(p.x, p.y + dz * 0.34)
+        .setAlpha(0.34)
+        .setVisible(d.visible);
+    });
+  }
+
+  /**
+   * Mỗi khung hình: có cảnh bộ xương thì trượt xí ngầu lên chỗ đỗ, hết cảnh
+   * (kể cả hàng chờ) thì trượt về. Đang lăn thì chỉ tiến `parkK`, vị trí do
+   * `rollDiceAnim` tự đọc `diceSpot`, kẻo hai bên giành nhau đặt viên.
+   */
+  tickDicePark(dt) {
+    /* Về ngay lúc cảnh cuối bắt đầu mờ (0.4s cuối, xem `paintSkit`), không
+       chờ cảnh tắt hẳn mới về, kẻo nhìn như xí ngầu bị bỏ quên trên góc */
+    const sk = this.skit;
+    const ending = sk && !this.skitQ.length && sk.t >= SKITS[sk.kind].dur - 0.4;
+    const want = sk && !ending ? 1 : 0;
+    if (this.parkK === want) return;
+    const step = REDUCED_MOTION() ? 1 : dt / 0.45;
+    /* Cú nảy lúc lăn xong (`rollDiceAnim`) nhớ cỡ cũ để yoyo về: cảnh bắt
+       đầu ngay trong lúc nảy thì xí ngầu đỗ ở góc mà vẫn giữ cỡ to */
+    this.dice.forEach((d) => this.tweens.killTweensOf(d));
+    this.parkK = want > this.parkK
+      ? Math.min(want, this.parkK + step)
+      : Math.max(want, this.parkK - step);
+    if (!this.diceRolling) this.placeDice();
   }
 
   /**
    * Cho bấm vào từng viên xí ngầu (Xí Ngầu Gian: bấm viên nào lắc lại viên ấy).
    *
-   * Vòng sáng vẽ lại mỗi nhịp theo `diceHome`, nên đổi cỡ cửa sổ giữa chừng thì
+   * Vòng sáng vẽ lại mỗi nhịp theo `diceSpot`, nên đổi cỡ cửa sổ giữa chừng thì
    * vòng vẫn bám đúng viên. Depth 29.5: trên màn tối của phiên chọn ô (5.4) để
    * hai viên không bị phủ mờ như phần bàn không bấm được, dưới chính viên xí ngầu.
    *
@@ -1172,8 +1261,9 @@ export default class BoardScene extends Phaser.Scene {
     const draw = () => {
       g.clear();
       const k = 0.55 + beat.t * 0.45;
-      for (const h of this.diceHome) {
-        const r = this.dieSize * (0.66 + beat.t * 0.05);
+      for (const i of [0, 1]) {
+        const h = this.diceSpot(i);
+        const r = this.dieSize * this.dieScale() * (0.66 + beat.t * 0.05);
         g.fillStyle(0xC8A048, 0.16 * k).fillCircle(h.x, h.y, r);
         g.lineStyle(Math.max(2, this.size * 0.005), 0xFFE9B0, k).strokeCircle(h.x, h.y, r);
       }
@@ -1276,6 +1366,7 @@ export default class BoardScene extends Phaser.Scene {
       }
     }
     this.syncAuras(state);
+    this.syncJail(state);
     if (this.spooky) {
       this.syncTombs(state);
       this.syncWalkers();
@@ -1442,13 +1533,19 @@ export default class BoardScene extends Phaser.Scene {
       this.startTileFx(kind, id, { ...extra, sound: !sound.has(kind) });
       sound.add(kind);
     };
+    let built = null;
     for (const [id, now] of view) {
       const was = prev.get(id);
       if (!was || was.o !== now.o) continue;
-      if (now.h > was.h) play('build', id, { from: was.h, to: now.h });
+      if (now.h > was.h) {
+        play('build', id, { from: was.h, to: now.h });
+        // Xây nhiều ô một lần thì diễn một cảnh; có khách sạn thì khiêng lâu đài
+        if (!built || now.h === 5) built = { seat: now.o, hotel: now.h === 5 };
+      }
       if (now.m && !was.m) play('mortgage', id);
       else if (!now.m && was.m) play('redeem', id);
     }
+    if (built) this.playSkit(built.hotel ? 'hotel' : 'build', built.seat);
   }
 
   /**
@@ -1811,11 +1908,17 @@ export default class BoardScene extends Phaser.Scene {
 
   /** Mỗi khung hình: hàng bộ xương nhảy, dơi bay, sương trôi, trăng máu thở. */
   tickSpooky(time, dt) {
-    if (!this.spooky || !this.walkers) return;
+    if (!this.spooky) {
+      // Đổi sang chủ đề khác giữa lúc diễn thì bỏ cả cảnh lẫn hàng chờ
+      if (this.skit || this.skitImg?.visible) this.stopSkits();
+      return;
+    }
+    if (!this.walkers) return;
     const L = graveLayout(TEX);
     const still = REDUCED_MOTION();
     const step = still ? 0 : dt;
     const sec = still ? STILL_AT : time / 1000;
+    const rowA = this.tickSkit(step);
     // Vị trí cả hàng theo đồng hồ chung, không trễ, để hàng trượt thẳng tắp
     const shift = danceAt(sec).glide * (this.danceGlide ?? 0);
     for (const w of this.walkers) {
@@ -1825,7 +1928,8 @@ export default class BoardScene extends Phaser.Scene {
       const ww = hh * DANCE_W / DANCE_H;
       w.img.setTexture(w.frames[d.move][d.k])
         .setFlipX(d.sx < 0).setPosition(p.x, p.y)
-        .setDisplaySize(ww * Math.max(0.12, Math.abs(d.sx)), hh);
+        .setDisplaySize(ww * Math.max(0.12, Math.abs(d.sx)), hh)
+        .setAlpha(rowA);
     }
     for (const b of this.bats) {
       b.x += b.sp * step;
@@ -1843,6 +1947,78 @@ export default class BoardScene extends Phaser.Scene {
       f.img.setPosition(p.x, p.y).setDisplaySize(L.size * 0.55 * this.scaleF, L.size * 0.2 * this.scaleF);
     }
     if (this.moonRed?.visible) this.moonRed.setAlpha(0.82 + 0.18 * Math.sin(time * 0.002));
+  }
+
+  /**
+   * Xếp một cảnh bộ xương diễn giữa nghĩa địa (`render/skits.js`). Chỉ chủ đề
+   * Halloween; người xin bớt chuyển động thì bỏ qua. Đang có cảnh mà cảnh mới
+   * tới thì cảnh cũ mờ đi trong `SKIT_CUT` giây rồi nhường luôn, không diễn
+   * nốt: chờ từng cảnh diễn trọn thì nghĩa địa trễ cả chục giây so với bàn cờ.
+   * Hàng chờ chỉ giữ cảnh mới nhất.
+   * @param {string} kind khoá trong `SKITS`
+   * @param {number} seat người diễn chính (màu mũ)
+   * @param {number} [ownerSeat] chủ đất, màu mũ đội khiêng quan tài
+   */
+  playSkit(kind, seat, ownerSeat) {
+    if (!this.spooky || REDUCED_MOTION() || !SKITS[kind]) return;
+    const css = (i) => this.state?.players?.[i]?.token.css;
+    const actor = css(seat);
+    if (!actor) return;
+    const job = { kind, actor, owner: css(ownerSeat) ?? actor, t: 0 };
+    if (!this.skit) { this.skit = job; return; }
+    job.cutIn = true;
+    this.skitQ = [job];
+    this.skit.cut ??= 0;
+  }
+
+  stopSkits() {
+    this.skit = null;
+    this.skitQ = [];
+    this.skitImg?.setVisible(false);
+  }
+
+  /**
+   * Tiến đồng hồ cảnh đang diễn rồi vẽ lại lên texture phủ lòng bàn.
+   * @returns {number} độ hiện của hàng bộ xương nhảy (1 khi không có cảnh)
+   */
+  tickSkit(dt) {
+    let sk = this.skit;
+    if (sk) {
+      sk.t += dt;
+      if (sk.cut != null) sk.cut += dt;
+      if (sk.t >= SKITS[sk.kind].dur || sk.cut >= SKIT_CUT) sk = this.skit = this.skitQ.shift() ?? null;
+    }
+    if (!sk) { this.skitImg?.setVisible(false); return 1; }
+    /* Texture cỡ đúng lòng bàn trên màn hình (game chạy theo điểm ảnh thật,
+       xem `zoom: 1 / DPR`), chặn trên 1100 cho máy màn lớn khỏi vẽ thừa. */
+    const L = graveLayout(TEX);
+    const side = Math.max(64, Math.min(1100, Math.round(L.size * this.scaleF)));
+    if (this.skitTex?.width !== side) {
+      this.skitImg?.destroy();
+      if (this.textures.exists('skit')) this.textures.remove('skit');
+      this.skitTex = this.textures.createCanvas('skit', side, side);
+      this.skitImg = this.add.image(0, 0, 'skit').setOrigin(0, 0).setDepth(0.55);
+    }
+    const ctx = this.skitTex.getContext();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, side, side);
+    try {
+      paintSkit(ctx, sk.kind, sk.t, skitFrame(side, sk.actor, sk.owner));
+    } catch (err) {
+      // Một cảnh vẽ hỏng thì bỏ cảnh ấy, đừng để mỗi khung hình ném lỗi
+      console.error(err);
+      this.skit = this.skitQ.shift() ?? null;
+    }
+    this.skitTex.refresh();
+    const p = this.toScreen(L.x, L.y);
+    /* Cảnh bị cắt mờ dần; cảnh vào thay hiện dần trong `SKIT_CUT` giây, và
+       hàng nhảy đang ẩn thì giữ ẩn luôn, kẻo nó loé lên một khung hình giữa
+       hai cảnh. */
+    const fade = sk.cut != null ? 1 - sk.cut / SKIT_CUT : sk.cutIn ? Math.min(1, sk.t / SKIT_CUT) : 1;
+    this.skitImg.setVisible(true).setAlpha(Math.max(0, fade))
+      .setPosition(p.x, p.y).setDisplaySize(L.size * this.scaleF, L.size * this.scaleF);
+    if (sk.cut != null || (sk.cutIn && sk.t < 0.35)) return 0;
+    return skitRowAlpha(sk.kind, sk.t);
   }
 
   /**
@@ -1872,6 +2048,163 @@ export default class BoardScene extends Phaser.Scene {
         this.glowLayer.add(fl);
         this.glowFx.push({ img: fl, base: 1, id });
       }
+    }
+  }
+
+  // ------------------------------------------------------------ song sắt ô tù
+
+  /** Gỡ song và trụ (đổi chủ đề): lần đồng bộ sau dựng lại bằng texture mới, không diễn. */
+  clearJail() {
+    this.jailLayer.removeAll(true);
+    this.jailBars = null;
+    this.jailUp = undefined;
+    this.jailSize = 0;
+  }
+
+  /**
+   * Dựng song khi có ít nhất một người ngồi tù thật, hạ song khi không còn
+   * ai. Người đi ngang thăm tù cũng đứng ở ô 10 nhưng `inJail` false, nên
+   * không tính.
+   *
+   * Gọi từ `refresh` (cả máy ngồi xem, dựng từ ảnh chụp) và từ controller
+   * ngay sau `sendToJail`/`releaseFromJail`, vì máy cầm lái có thể chưa gọi
+   * `refresh` cho tới hết lượt. Chỉ diễn khi cùng một `state` đổi trạng thái;
+   * vào ván mới, nối lại giữa ván, đổi chủ đề thì đặt thẳng vào thế cuối.
+   */
+  syncJail(state) {
+    const up = state.players.some((p) => p.inJail && !p.bankrupt);
+    const was = this.jailUp;
+    const fresh = this.jailState === state && was !== undefined;
+    this.jailState = state;
+    this.jailUp = up;
+    if (!this.jailBars) this.buildJailBars();
+    // Đổi cỡ bàn: đặt lại chỗ, bỏ tween đang chạy dở theo toạ độ cũ
+    const moved = this.jailSize !== this.size;
+    if (moved) this.placeJailBars();
+    if (up === was) { if (moved) this.settleJail(); return; }
+    if (!fresh || REDUCED_MOTION()) { this.settleJail(); return; }
+    if (up) this.raiseJail(); else this.dropJail();
+  }
+
+  /**
+   * Mỗi phần (hai tấm song, ba trụ) là một ảnh kèm một bóng đổ cùng texture
+   * phủ đen, lệch về dưới-phải. Bóng nằm dưới cả song lẫn trụ, trụ nằm trên
+   * song để che hai đầu tấm. Bóng tween cùng ảnh nên co giãn khớp nhau.
+   */
+  buildJailBars() {
+    const theme = this.spooky ? 'halloween' : this.xmas ? 'christmas' : 'classic';
+    const parts = [];
+    const add = (key, paint, o) => {
+      if (!this.textures.exists(key)) this.textures.addCanvas(key, paint());
+      const shadow = this.add.image(0, 0, key).setOrigin(o.ox, o.oy).setRotation(o.rot)
+        .setTintFill(0x000000).setAlpha(0).setVisible(false);
+      const img = this.add.image(0, 0, key).setOrigin(o.ox, o.oy).setRotation(o.rot).setVisible(false);
+      parts.push({ img, shadow, ...o });
+    };
+    for (const kind of ['top', 'right']) {
+      const f = JAIL_PANELS[kind];
+      const W = 480;
+      add(`jail-${theme}-${kind}`, () => paintJailPanel(theme, kind, W, (W * f.h) / f.len),
+        { kind: 'panel', name: kind, f, ox: 0.5, oy: 1, rot: f.rot });
+    }
+    JAIL_POSTS.forEach((f, i) => {
+      add(`jail-${theme}-post-${f.big ? 'big' : 'end'}`, () => paintJailPost(theme, 128, f.big),
+        { kind: 'post', name: `post${i}`, f, ox: 0.5, oy: 0.5, rot: 0 });
+    });
+    for (const p of parts) this.jailLayer.add(p.shadow);
+    for (const kind of ['panel', 'post']) for (const p of parts) if (p.kind === kind) this.jailLayer.add(p.img);
+    this.jailBars = parts;
+  }
+
+  /** Đặt chỗ và cỡ song, trụ, bóng theo bố cục hiện tại; dựng hay nằm do `settleJail` hoặc tween quyết. */
+  placeJailBars() {
+    this.jailSize = this.size;
+    const c = tileCenter(10, TEX);
+    const sc = this.toScreen(c.x, c.y);
+    const side = DEPTH(TEX) * this.scaleF;
+    const off = side * 0.022;
+    for (const p of this.jailBars) {
+      const { f } = p;
+      const w = (p.kind === 'panel' ? f.len : f.s) * side;
+      const h = (p.kind === 'panel' ? f.h : f.s) * side;
+      const x = sc.x + f.x * side, y = sc.y + f.y * side;
+      this.tweens.killTweensOf([p.img, p.shadow]);
+      p.img.setPosition(x, y).setDisplaySize(w, h);
+      p.shadow.setPosition(x + off, y + off).setDisplaySize(w, h);
+      p.sx = p.img.scaleX; p.sy = p.img.scaleY;
+    }
+  }
+
+  settleJail() {
+    for (const p of this.jailBars) {
+      this.tweens.killTweensOf([p.img, p.shadow]);
+      for (const o of [p.img, p.shadow]) o.setScale(p.sx, p.sy).setVisible(!!this.jailUp);
+      p.img.setAlpha(1);
+      p.shadow.setAlpha(0.32);
+    }
+  }
+
+  /** Thứ tự xuất hiện: trụ góc, tấm trên, tấm phải, hai trụ đầu. */
+  jailOrder() {
+    const at = (n) => this.jailBars.find((p) => p.name === n);
+    return [at('post0'), at('top'), at('right'), at('post1'), at('post2')];
+  }
+
+  /**
+   * Trụ góc bật lên trước, song mọc từ mép vào trong ô, hai trụ đầu bật lên
+   * sau cùng. Trụ phóng to cả hai chiều, song chỉ dài ra theo bề cao.
+   */
+  raiseJail() {
+    const delays = [0, 90, 180, 300, 340];
+    this.jailOrder().forEach((p, i) => {
+      const objs = [p.img, p.shadow];
+      this.tweens.killTweensOf(objs);
+      const post = p.kind === 'post';
+      for (const o of objs) o.setVisible(true).setScale(post ? p.sx * 0.05 : p.sx, p.sy * 0.05);
+      p.img.setAlpha(1);
+      p.shadow.setAlpha(0.32);
+      this.tweens.add({
+        targets: objs, scaleX: p.sx, scaleY: p.sy, delay: delays[i],
+        duration: post ? 360 : 480, ease: 'Back.easeOut',
+        onStart: () => { if (!post) this.jailDust(p.img, 6); },
+        onComplete: () => { if (i === 2) audio.sfx('bars', { gain: 0.6 }); },
+      });
+    });
+  }
+
+  /** Song sập về mép, trụ góc sập cuối cùng rồi nện đất: bụi bắn, bàn rung nhẹ. */
+  dropJail() {
+    const order = this.jailOrder().reverse();
+    order.forEach((p, i) => {
+      const objs = [p.img, p.shadow];
+      this.tweens.killTweensOf(objs);
+      const post = p.kind === 'post';
+      this.tweens.add({
+        targets: objs, scaleX: post ? p.sx * 0.05 : p.sx, scaleY: p.sy * 0.05,
+        delay: i * 55, duration: 230, ease: 'Quad.easeIn',
+        onComplete: () => {
+          for (const o of objs) o.setVisible(false).setScale(p.sx, p.sy);
+          if (!post) this.jailDust(p.img, 12);
+          if (i === order.length - 1) { audio.sfx('bars'); this.shake(0.003, 180); }
+        },
+      });
+    });
+  }
+
+  /** Bụi bắn ra dọc chân tấm song (tấm phải xoay 90° nên chân chạy dọc). */
+  jailDust(img, n) {
+    if (REDUCED_MOTION()) return;
+    const tint = this.spooky ? 0x4A3D5C : this.xmas ? 0xF4F8FF : 0x8A7458;
+    for (let i = 0; i < n; i++) {
+      const t = (Math.random() - 0.5) * img.displayWidth;
+      const d = this.add.circle(img.x + Math.cos(img.rotation) * t, img.y + Math.sin(img.rotation) * t,
+        Math.max(2, this.size * 0.0035), tint, 0.9).setDepth(6.6);
+      const a = img.rotation - Math.PI / 2 + (Math.random() - 0.5) * 2.6;
+      const r = this.size * (0.01 + Math.random() * 0.025);
+      this.tweens.add({
+        targets: d, x: d.x + Math.cos(a) * r, y: d.y + Math.sin(a) * r * 0.5, alpha: 0,
+        duration: 420 + Math.random() * 300, ease: 'Cubic.easeOut', onComplete: () => d.destroy(),
+      });
     }
   }
 

@@ -17,7 +17,9 @@ let peekPill = null;
 /** Có modal nào đang mở mà cho phép ngó bàn cờ không? */
 const peekableOpen = () => root()?.querySelector('.scrim:not(.hide):not(.no-peek):not(.stashed)');
 
-const isTyping = (el) => el instanceof HTMLInputElement
+/* Xuất ra cho mọi chỗ nghe phím ở pha bắt trên `window`: những người nghe ấy
+   chạy trước ô nhập, nên phải tự nhường phím gõ trong khung chat. */
+export const isTyping = (el) => el instanceof HTMLInputElement
   || el instanceof HTMLTextAreaElement
   || (el instanceof HTMLElement && el.isContentEditable);
 

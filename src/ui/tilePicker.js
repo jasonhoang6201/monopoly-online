@@ -10,7 +10,7 @@
  * Hộp xác nhận là chỗ chặn cú bấm lỡ tay: bấm nhầm ô thì bấm "Chọn ô khác",
  * bàn cờ trở lại trạng thái đang chọn chứ không mất lượt.
  */
-import { openModal } from './modal.js';
+import { openModal, isTyping } from './modal.js';
 import { BOARD, money, tileShortLabel } from '../data/board.js';
 import { tileCardUrl } from './deed.js';
 import { audio } from '../audio/audio.js';
@@ -41,6 +41,8 @@ function tileMeta(state, id, owned) {
 export function escCancels(panel, onEsc) {
   const onKey = (e) => {
     if (e.key !== 'Escape' || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    // Esc gõ trong ô chat là đóng khung chat, không phải bỏ ngang phiên chọn
+    if (isTyping(e.target)) return;
     const picks = document.querySelectorAll('.tile-pick:not(.out)');
     if (picks[picks.length - 1] !== panel) return;
     if (document.querySelector('.scrim:not(.hide):not(.stashed)')) return;
@@ -301,6 +303,9 @@ export function pickTilesOnBoard(scene, ids, chosen, text) {
        chọn này cầm luôn Enter/Esc để bàn phím không rơi vào khoảng trống. */
     function onKey(e) {
       if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      /* Khung chat đứng trên bàn cờ, nhắn được giữa phiên chọn. Enter gửi tin
+         mà rơi vào đây thì chốt luôn các ô đang chọn dở, còn tin thì mất. */
+      if (isTyping(e.target)) return;
       if (e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); finish([...sel]); }
       else if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(null); }
     }

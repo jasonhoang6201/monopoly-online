@@ -56,7 +56,7 @@ const reset = () => run(`
     p.skillLv = {}; p.skillOff = []; p.betSet = null; p.lapUses = {}; p.jails = 0; p.skillUse = {};
     p.pos = 5; p.inJail = false; p.bankrupt = false;
   }
-  s.owner.clear(); s.houses.clear(); s.mortgaged.clear(); s.heritage.clear();
+  s.owner.clear(); s.houses.clear(); s.mortgaged.clear(); s.heritage.clear(); s.miniLeft.clear();
   s.bankHouses = 32; s.bankHotels = 12; s.mods = []; s.pot = 0;
   c.hud.refresh(); c.scene.refresh(s);
 `);
@@ -199,7 +199,13 @@ const build = await run(`
   const m0 = s.players[other].money;
   const res = s.build(me, 21);
   const contractor = s.players[other].money - m0;
-  const gone = s.demolish(21);
+  const gone = s.demolish(21);                              // demolish không xét Sổ Hồng nữa
+  s.houses.set(21, 1); s.bankHouses -= 1;
+  // Sổ Hồng level 1 giữ 40%: rút 0.39 thì giữ, 0.41 thì không
+  const rnd = Math.random;
+  Math.random = () => 0.39; const hold = K.deedHolds(s, 21);
+  Math.random = () => 0.41; const fall = K.deedHolds(s, 21);
+  Math.random = rnd;
   const refund1 = s.canSellHouse(me, 21).refund;
   s.players[me].skillLv = { ac3: 3 };
   const refund3 = s.canSellHouse(me, 21).refund;
@@ -221,7 +227,7 @@ const build = await run(`
   // Sổ Hồng level 3: 12$ mỗi căn khi qua ô Bắt Đầu, khách sạn tính 5
   s.houses.set(21, 2); s.houses.set(23, 5);
   const deed = s.payslip(false, s.players[me]);
-  return { before, cost, after, ok: res.ok, contractor, gone, houses: 1, refund1, refund3, caps, room1, total: total.ok, why: total.reason, deed: deed.parts.ac3, pay: deed.total };
+  return { before, cost, after, ok: res.ok, contractor, gone, houses: 1, refund1, refund3, caps, room1, total: total.ok, why: total.reason, deed: deed.parts.ac3, pay: deed.total, hold, fall };
 `);
 check(!build.before, 'Sổ Hồng không còn cho xây với 2/3 bộ');
 check(build.cost === 120, `Mái Ấm level 1 giảm 20%: căn $150 còn $120 (được ${build.cost})`);
@@ -230,8 +236,41 @@ check(build.caps.every(Boolean), `Chung Cư Mini level 1/2/3: mỗi ô đất l�
 check(build.room1 && !build.total && /3 căn/.test(build.why), `Chung Cư Mini level 1: cả bàn đất lẻ tối đa 3 căn (${build.why})`);
 check(build.deed === 84 && build.pay === 284, `Sổ Hồng level 3: 7 căn × 12$ = 84$ cộng vào lương (${build.deed}, ${build.pay})`);
 check(build.contractor === 18, `Thầu Vật Liệu level 2: người khác xây → +$18 (được ${build.contractor})`);
-check(build.gone === 0 && build.houses === 1, 'Sổ Hồng: nhà không bị dỡ');
+check(build.gone === 1, 'Sổ Hồng: demolish tự nó không chặn, tỉ lệ rút ở deedHolds');
+check(build.hold && !build.fall, `Sổ Hồng level 1: 40% giữ nhà (${build.hold}/${build.fall})`);
 check(build.refund1 === 75 && build.refund3 === 150, `Sổ Hồng: bán nhà level 1 lấy 50%, level 3 lấy 100% (${build.refund1}/${build.refund3})`);
+
+await reset();
+const mini = await run(`
+  const me = s.turn, other = (s.turn + 1) % 3;
+  s.owner.set(21, me); s.owner.set(23, me); s.owner.set(24, other);   // 2/3 bộ đỏ
+  s.owner.set(6, me);                                                  // 1/3 bộ xanh nhạt
+  s.players[me].skills = ['acX2', 'ac2b', 'acS1'];                    // level 1: đứng 3 lượt
+  s.build(me, 21); s.build(me, 6);
+  const life = s.miniLeft.get(21);
+  s.build(me, 23);
+  // Level 2: căn thứ hai trên ô 21 cộng 4 lượt (3 - 1 + 4 = 6)
+  s.players[me].skillLv = { acS1: 2 };
+  s.ageMini(me); s.build(me, 21);
+  const extended = s.miniLeft.get(21);
+  s.players[me].skillLv = {};
+  s.ageMini(me);                                                       // ô 23 còn 1, ô 21 còn 5
+  s.ageMini(other);                                                    // lượt người khác không tính
+  const left = s.miniLeft.get(23);
+  // Gom đủ bộ xanh nhạt trước khi hết hạn: ô 6 thành nhà thường
+  s.owner.set(8, me); s.owner.set(9, me);
+  const m0 = s.players[me].money;
+  const gone23 = s.ageMini(me).map((g) => g.id);                      // ô 23 hết hạn trước
+  for (let i = 0; i < 3; i++) s.ageMini(me);
+  const gone = s.ageMini(me);
+  const snap = S.fromSnapshot(S.snapshot(s));
+  return { life, left, extended, gone23, gone, refund: s.players[me].money - m0, h21: s.housesOn(21), h6: s.housesOn(6),
+    kept6: !s.miniLeft.has(6), snapOk: snap.miniLeft.size === s.miniLeft.size };
+`);
+check(mini.life === 3 && mini.extended === 6 && mini.left === 1, `Chung Cư Mini: hạn gốc 3 lượt, level 2 căn thứ hai +4 (${mini.life}, ${mini.extended}, còn ${mini.left})`);
+check(mini.gone23.join() === '23' && mini.gone.map((g) => g.id).join() === '21' && mini.h21 === 0, `Chung Cư Mini hết hạn: ngân hàng mua lại nhà ô lẻ (${mini.gone23}, ${JSON.stringify(mini.gone)})`);
+check(mini.refund === 225 && mini.h6 === 1 && mini.kept6, `Chung Cư Mini: gom đủ bộ trước hạn thì nhà ở lại (hoàn ${mini.refund}$, ô 6 còn ${mini.h6} căn)`);
+check(mini.snapOk, 'Chung Cư Mini: hạn nhà đi theo ảnh chụp');
 
 await reset();
 const snap = await run(`

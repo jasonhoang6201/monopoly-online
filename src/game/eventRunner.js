@@ -15,7 +15,7 @@
  */
 import { BOARD, GROUPS, GROUP_TILES, money, tileLabel, tileShortLabel } from '../data/board.js';
 import { drawEvent, planEvent, autoRaise } from '../core/events.js';
-import { houseImmune } from '../core/skills.js';
+import { houseImmune, deedHolds } from '../core/skills.js';
 import { handoff } from '../ui/modal.js';
 import {
   bracePromptModal, firePromptModal, snowPromptModal, zombiePromptModal, auctionBidModal, auctionResultModal,
@@ -243,6 +243,7 @@ export class EventRunner {
       st.releaseFromJail(st.players[seat]);
       audio.sfx('jail');
     }
+    this.g.scene.syncJail(st);
     this.g.hud.refresh();
     this.g.sync();
     if (plan.seats.length) {
@@ -300,6 +301,7 @@ export class EventRunner {
        chỉ sáng lên cho thấy vùng thiên tai rộng tới đâu, không ai phải trả
        tiền chống đỡ cho đất trống. */
     const bySeat = lotsBySeat(st, plan);
+    await this.deedNotice(bySeat.held);
 
     const answers = await this.askMany([...bySeat].map(([seat, lots]) => ({
       seat,
@@ -343,6 +345,16 @@ export class EventRunner {
    */
   collapse(tileId) { this.state.demolish(tileId); }
 
+  /** Báo những ô Sổ Hồng vừa giữ được nhà, trước khi hỏi ai chống đỡ. */
+  async deedNotice(held) {
+    if (!held.length) return;
+    const st = this.state;
+    const names = [...new Set(held.map((l) => st.players[l.seat].name))];
+    await this.g.bc.show('SỔ HỒNG GIỮ NHÀ',
+      `Nhà của <b>${names.join(', ')}</b> ở ${held.map((l) => tileShortLabel(l.id)).join(', ')}
+       đứng nguyên, khỏi chống đỡ.`, { ms: 2600 });
+  }
+
   /**
    * Hoả hoạn: cả một khu bốc thăm trúng cùng cháy.
    *
@@ -357,6 +369,7 @@ export class EventRunner {
     /* Gom theo chủ đất; bỏ qua ô trống, ô đã đổi chủ, hoặc chủ đã vỡ nợ từ
        lúc lập kế hoạch. */
     const bySeat = lotsBySeat(st, plan);
+    await this.deedNotice(bySeat.held);
 
     const answers = await this.askMany([...bySeat].map(([seat, lots]) => ({
       seat,
@@ -416,6 +429,7 @@ export class EventRunner {
     await this.g.spot(plan.tiles.map((l) => l.id));
 
     const bySeat = lotsBySeat(st, plan);
+    await this.deedNotice(bySeat.held);
 
     const answers = await this.askMany([...bySeat].map(([seat, lots]) => ({
       seat,
@@ -959,15 +973,21 @@ function nthLabel(nth) {
  * đã vỡ nợ kể từ lúc lập kế hoạch — sự kiện có thể chạy qua vài hộp thoại
  * trước khi tới đây.
  *
- * @returns {Map<number, Array<object>>} ghế → mấy ô của họ
+ * Ô của chủ có Sổ Hồng rút tỉ lệ giữ nhà ngay ở đây — hàm này chạy đúng một
+ * lần mỗi sự kiện — ô giữ được nằm trong `held` để báo cho cả bàn.
+ *
+ * @returns {Map<number, Array<object>> & {held: Array<object>}} ghế → mấy ô của họ
  */
 function lotsBySeat(st, plan) {
   const bySeat = new Map();
+  bySeat.held = [];
   for (const lot of plan.tiles) {
     if (lot.lose <= 0 || lot.seat === null || lot.seat === undefined) continue;
     if (st.owner.get(lot.id) !== lot.seat || st.players[lot.seat].bankrupt) continue;
-    // Sổ Hồng / Di Sản: nhà không sập, khỏi hỏi chủ đất có chống đỡ không
+    // Di Sản: nhà không sập, khỏi hỏi chủ đất có chống đỡ không
     if (houseImmune(st, lot.id)) continue;
+    // Sổ Hồng: rút một lần cho cả lần đánh; giữ được thì như Di Sản
+    if (deedHolds(st, lot.id, lot.lose)) { bySeat.held.push(lot); continue; }
     if (!bySeat.has(lot.seat)) bySeat.set(lot.seat, []);
     bySeat.get(lot.seat).push(lot);
   }

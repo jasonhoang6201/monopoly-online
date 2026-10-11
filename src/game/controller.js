@@ -22,8 +22,10 @@ import { inventoryModal } from '../ui/inventory.js';
 import { EventRunner } from './eventRunner.js';
 import { SkillPlay } from './skillPlay.js';
 import { Bot } from './bot.js';
-import { has, offSpent, grantLapPoint } from '../core/skills.js';
+import { has, offSpent, grantLapPoint, deedHolds } from '../core/skills.js';
 import { snapshot, fromSnapshot, applySnapshot } from '../core/serialize.js';
+import { telemetry, track } from '../core/telemetry.js';
+import { Analytics } from '../net/analytics.js';
 import { Hud, Broadcast } from '../ui/hud.js';
 import { QuickView } from '../ui/quickview.js';
 import {
@@ -96,6 +98,8 @@ export class Game {
     this.skills = new SkillPlay(this);
     /** Ghế giao cho máy chơi (bản một máy) — xem `game/bot.js`. */
     this.bot = new Bot(this);
+    /** Số liệu cân bằng kỹ năng — xem `net/analytics.js`. */
+    this.analytics = new Analytics(this);
     /** Phòng online, hoặc null khi cả bàn ngồi chung một máy. */
     this.net = null;
     /**
@@ -223,6 +227,11 @@ export class Game {
     /* Có bot thì người ngồi trước màn hình học kỹ năng được cả lúc máy đang
        đi, y như bản online — nút cây kỹ năng ở hàng tiện ích mở cho ghế ấy. */
     if (this.skillBtn) this.skillBtn.hidden = !this.bot.active;
+    /* Ván có bot không ghi số liệu cân bằng: bot học kỹ năng theo lối cố định
+       của cấp nó, đếm vào là kéo lệch tỉ lệ thắng của từng kỹ năng — cùng lý
+       do analytics đã tắt cho ván bot của bộ kiểm thử. */
+    if (!this.bot.active) this.analytics.gameStart(this.state, 'offline');
+    this.armTelemetry();
     /* Hộp bày bàn đã áp chủ đề lúc người chơi chọn; gọi lại theo `settings`
        đã chốt cho chắc, trước khi dựng quân cờ (quân đội mũ theo chủ đề). */
     applyTheme(this.state.settings.theme);
@@ -242,6 +251,21 @@ export class Game {
        giữ ${WIN_SETS} bộ màu với ${WIN_HOTEL_SETS} bộ phủ kín khách sạn, hoặc gom đủ ${money(WIN_WORTH)} tổng tài sản.`,
       { ms: 4200 });
     await this.rollOff();
+  }
+
+  /**
+   * Bật bộ đệm số liệu cân bằng cho ván vừa dựng. Cổng kiểm **lúc phát**:
+   * chỉ máy cầm lái mới ghi — bản online quyền ấy đổi tay mỗi lượt, và máy
+   * ngồi xem vẫn chạy `learnSkill` trên bản sao khi học ngoài lượt.
+   */
+  armTelemetry() {
+    const st = this.state;
+    telemetry.start({
+      startedAt: st.startedAt,
+      gate: () => this.analytics.enabled && this.isDriver() && !this.bot.active,
+      ctx: () => ({ game_id: st.gameId, turn_no: st.turnNo, round: st.round, turn: st.turn }),
+      onPush: (ev) => this.analytics.push(ev),
+    });
   }
 
   /** Rê chuột lên một người ở thanh bên: soi đất của họ trên bàn cờ. */
@@ -266,6 +290,7 @@ export class Game {
     audio.stopMusic();
     this.net = room;
     this.state = fromSnapshot(snap);
+    this.armTelemetry();
     // Vào lại giữa ván cũng đi qua đây: chủ đề lấy từ ảnh chụp, không từ phòng chờ
     applyTheme(this.state.settings.theme);
     this.quick.setState(this.state);
@@ -569,6 +594,22 @@ export class Game {
   }
 
   /**
+   * Cảnh bộ xương diễn giữa nghĩa địa (chủ đề Halloween) — trên mọi máy.
+   * Không chờ: cảnh chạy song song với lượt, không bắt ai đứng đợi. Chủ đề
+   * khác thì `playSkit` tự bỏ qua. Xây nhà không gọi ở đây: bàn cờ tự nhận ra
+   * từ ảnh chụp (`BoardScene.diffTileFx`).
+   * @param {string} kind khoá trong `render/skits.js`
+   * @param {number} seat người diễn chính
+   * @param {number} [owner] chủ đất, cho cảnh trả tiền thuê
+   */
+  skit(kind, seat, owner) {
+    // Ván chủ đề khác không có nghĩa địa: khỏi tốn một tin trên đường truyền
+    if (this.state?.settings.theme !== 'halloween') return;
+    this.netEmit('skit', { kind, seat, owner });
+    this.scene.playSkit?.(kind, seat, owner);
+  }
+
+  /**
    * Nháy sáng ô mà nước vừa rồi đụng tới — trên **mọi máy**, không riêng máy
    * cầm lái.
    *
@@ -658,6 +699,8 @@ export class Game {
       await sc.spotTiles(data.ids, data.ms);
     } else if (name === 'zombies') {
       sc.zombieMarch?.(data.ids);
+    } else if (name === 'skit') {
+      sc.playSkit?.(data.kind, data.seat, data.owner);
     } else if (name === 'witch') {
       await sc.witchFly?.(data.a, data.b);
     } else if (name === 'tilefx') {
@@ -1079,7 +1122,7 @@ export class Game {
     await this.scene.bankruptFx(seat);
     /* Người này có thể đang đứng giữa một khoản phải trả — chính lúc hộp thoại
        vỡ nợ mở ra mà họ tắt máy. Chủ nợ không liên can gì tới việc mất kết nối
-       ấy nên vẫn phải nhận đủ. */
+       ấy nên vẫn nhận số người này gom được từ tiền mặt và nhà đất. */
     await this.coverDebt(seat);
 
     // Còn đúng một người trụ lại thì hạ màn ngay, đừng bắt họ đi thêm một lượt
@@ -1320,17 +1363,42 @@ export class Game {
        thẻ Thời Cuộc sinh ra để phá, nên nó đẩy thanh áp lực nhanh hơn cả. */
     if (st.dryTurn) addPressure(st, PRESSURE.dryTurn);
     offSpent(st.current);
+    await this.expireMini(st.current);
 
     if (eventDue(st)) {
       await this.events.run();
       if (this.checkGameOver()) { this.sync(); return; }
     }
 
+    // Một dòng mỗi lượt cho số liệu cân bằng: tiền mặt cả bàn lúc hết lượt
+    track('turn', { seat: st.turn, turn_no: st.turnNo, round: st.round, cash: st.players.map((p) => p.money) });
     st.nextTurn();
     // Phát trước khi tự bày lại bàn: từ giây này quyền cầm lái đã sang người
     // khác, gọi `sync()` sau `beginTurn()` thì không còn ai để phát.
     this.sync();
+    this.analytics.flush();
     this.beginTurn();
+  }
+
+  /**
+   * Chung Cư Mini: hết lượt thì nhà trên đất lẻ của người vừa đi già thêm một
+   * lượt; ô hết hạn bị ngân hàng mua lại. Báo cho cả bàn vì giá thuê ô ấy tụt
+   * về đất trống ngay lượt sau.
+   */
+  async expireMini(p) {
+    const st = this.state;
+    const gone = st.ageMini(p.id);
+    if (!gone.length) return;
+    this.hud.refresh();
+    this.scene.refresh(st);
+    this.sync();
+    const sold = gone.reduce((n, g) => n + g.sold, 0);
+    const refund = gone.reduce((n, g) => n + g.refund, 0);
+    await this.bc.show('CHUNG CƯ MINI HẾT HẠN',
+      `Nhà trên đất lẻ của <b>${p.name}</b> ở ${gone.map((g) => `<b>${tileLabel(g.id)}</b>`).join(', ')}
+       hết hạn: ngân hàng mua lại ${sold} căn, trả <span class="up">${money(refund)}</span>.
+       Gom đủ bộ màu thì nhà không hết hạn.`, { kind: 'bad', ms: 4200 });
+    await this.spot(gone.map((g) => g.id));
   }
 
   // ------------------------------------------------------------- lắc xí ngầu
@@ -1477,6 +1545,10 @@ export class Game {
     const st = this.state;
     const t = BOARD[p.pos];
 
+    // Dừng ở nhà ga, Thuỷ Cục (ô 12), Nhà Máy Điện (ô 28): diễn trước, mua / trả thuê xếp sau
+    if (t.type === 'station') this.skit('station', p.id);
+    else if (t.type === 'utility') this.skit(t.id === 28 ? 'power' : 'hydro', p.id);
+
     switch (t.type) {
       case 'property':
       case 'station':
@@ -1492,6 +1564,7 @@ export class Game {
 
       case 'tax': {
         const tax = this.skills.cut(p, t.tax_amount);
+        this.skit('tax', p.id);
         await this.bc.show(t.name.split(' (')[0].toUpperCase(),
           `<b>${p.name}</b> phải nộp <span class="down">${money(tax)}</span> cho ngân hàng${this.skills.cutNote(p)}.`,
           { kind: 'bad' });
@@ -1540,6 +1613,7 @@ export class Game {
       if (choice === 'buy') {
         audio.sfx('buy');
         st.buy(p.id, t.id);
+        this.skit('buy', p.id);
         this.hud.refresh();
         this.sync();
         this.hud.flashMoney(p.id, false);
@@ -1588,6 +1662,7 @@ export class Game {
     const rent = bill.total;
     // Thâu Tóm: ép mua lô này thay vì trả thuê
     if (await this.skills.trySeize(p, t.id, rent)) return;
+    this.skit('rent', p.id, ownerId);
     await this.bc.show('TRẢ TIỀN THUÊ',
       `<b>${p.name}</b> trả <span class="down">${money(rent)}</span> cho <b>${owner.name}</b>
        tại <b>${tileLabel(t.id)}</b>${this.skills.rentNote(p, t.id, bill)}.`, { kind: 'bad' });
@@ -1684,7 +1759,7 @@ export class Game {
     await this.showFateCard(kind, card, {
       seed, note: `Nhận <b>+${card.points} điểm kỹ năng</b>.`, label: 'Nhận điểm',
     });
-    grantLapPoint(p, card.points);
+    grantLapPoint(p, card.points, 'card');
     this.hud.refresh();
     this.sync();
     audio.sfx('coin');
@@ -2106,6 +2181,17 @@ export class Game {
     const st = this.state;
     const owner = st.ownerOf(tileId);
     const before = st.housesOn(tileId);
+    if (deedHolds(st, tileId, levels)) {
+      audio.sfx('shake');
+      this.netEmit('quake', {});
+      this.scene.shake(0.008, 420);
+      this.sync();
+      await this.bc.show(title,
+        `<b>${p.name}</b> cho thợ tới dỡ nhà của <b>${owner.name}</b> ở <b>${tileLabel(tileId)}</b>,
+         nhưng <b>Sổ Hồng</b> hợp lệ: nhà đứng nguyên.`);
+      await this.spot([tileId]);
+      return;
+    }
     let gone = 0;
     for (let i = 0; i < levels && st.housesOn(tileId) > 0; i++) {
       st.demolish(tileId);
@@ -2225,7 +2311,7 @@ export class Game {
     this.sync();
 
     if (!(await this.ensureFunds(fromId, amount))) {
-      // Vỡ nợ: `doBankrupt` đã trả thay chủ nợ rồi, đây chỉ là chốt chặn cuối
+      // Vỡ nợ: `doBankrupt` đã chuyển phần còn lại cho chủ nợ, đây chỉ là chốt chặn cuối
       await this.coverDebt(fromId);
       return false;
     }
@@ -2245,30 +2331,45 @@ export class Game {
   }
 
   /**
-   * Con nợ vỡ nợ thì ngân hàng trả thay chủ nợ đúng khoản còn treo.
-   *
-   * Đất của người vỡ nợ về ngân hàng chứ không sang tay chủ nợ, nên không trả
-   * thay thì ai xui đón đúng người sắp phá sản là mất trắng một lượt thu, mà
-   * lỗi chẳng phải của họ.
+   * Con nợ vỡ nợ thì chủ nợ nhận **số con nợ gom được** (tiền mặt, bán sạch
+   * nhà, thế chấp hết đất), ngân hàng không bù phần thiếu. `GameState.bankrupt`
+   * đã chốt con số vào `debt.left` trước khi thu đất.
    *
    * Khoản nợ đọc từ `state.debt` chứ không từ tham số, nên **máy nào tuyên bố
    * phá sản cũng trả được**: máy con nợ tự bấm, hay trọng tài tịch thu người đã
    * tắt máy giữa chừng, kết quả như nhau.
    *
    * @param {number} seat chỉ trả cho khoản nợ của đúng người này
+   * @returns {Promise<number>} số tiền chủ nợ thực nhận
    */
   async coverDebt(seat) {
     const st = this.state;
     const d = st.debt;
-    if (!d || d.from !== seat) return;
+    if (!d || d.from !== seat) return 0;
     st.debt = null;
     const to = st.players[d.to];
-    // Chủ nợ cũng đã rời ván thì không còn ai để trả — đừng in tiền vô chủ
-    if (!to || to.bankrupt) { this.sync(); return; }
-    await this.bc.show('NGÂN HÀNG TRẢ THAY',
-      `<b>${st.players[d.from].name}</b> vỡ nợ, ngân hàng trả thay
-       <span class="up">${money(d.amount)}</span> cho <b>${to.name}</b>.`, { ms: 3200 });
-    await this.receiveFromBank(d.to, d.amount);
+    const from = st.players[d.from];
+    // Chủ nợ cũng đã rời ván thì không còn ai để nhận, tiền theo con nợ về ngân hàng
+    if (!to || to.bankrupt) { this.sync(); return 0; }
+    const left = d.left ?? 0;
+    if (left <= 0) {
+      this.sync();
+      await this.bc.show('MẤT TRẮNG',
+        `<b>${from.name}</b> vỡ nợ, bán sạch nhà đất vẫn không còn đồng nào trả <b>${to.name}</b>.`,
+        { kind: 'bad', ms: 3200 });
+      return 0;
+    }
+    st.dryTurn = false;
+    to.money += left;
+    this.hud.refresh();
+    this.sync();
+    await this.bc.show('TRẢ PHẦN CÒN LẠI',
+      `<b>${from.name}</b> vỡ nợ, bán sạch nhà đất trả được
+       <span class="up">${money(left)}</span> trên ${money(d.amount)} cho <b>${to.name}</b>.`, { ms: 3200 });
+    this.hud.flashMoney(d.to, true);
+    await this.scene.flyMoney(this.hud.cardEl(d.from), this.hud.cardEl(d.to), left,
+      { text: `+${money(left)}`, color: '#7BE0A0' });
+    return left;
   }
 
   /**
@@ -2587,6 +2688,8 @@ export class Game {
     this.netEmit('jail', { seat: p.id });
     this.scene.shake(0.007, 340);
     await this.scene.jumpToken(p.id, JAIL_TILE);
+    // Quân đáp xuống rồi song mới dựng
+    this.scene.syncJail(st);
     this.hud.refresh();
     this.sync();
     this.scene.highlightTile(JAIL_TILE, p.token.color);
@@ -2607,6 +2710,7 @@ export class Game {
       if (at < 0 || !st.dropCard(p.id, at)) return;
     }
     st.releaseFromJail(p);
+    this.scene.syncJail(st);
     audio.sfx('jail');
     this.hud.refresh();
     this.sync();
@@ -2640,6 +2744,7 @@ export class Game {
       if (!(await this.payBank(p.id, JAIL_FINE))) { await this.endTurn(); return; }
     }
     st.releaseFromJail(p);
+    this.scene.syncJail(st);
     this.hud.refresh();
     await this.takeRoll();
   }
@@ -2661,6 +2766,7 @@ export class Game {
 
     if (d.isDouble) {
       st.releaseFromJail(p);
+      this.scene.syncJail(st);
       st.rolled = true;
       this.hud.refresh();
       await this.bc.show('RA ĐÔI, ĐƯỢC THA',
@@ -2685,6 +2791,7 @@ export class Game {
         { kind: 'bad' });
       if (!free && !(await this.payBank(p.id, JAIL_FINE))) { await this.endTurn(); return; }
       st.releaseFromJail(p);
+      this.scene.syncJail(st);
       st.rolled = true;
       this.hud.refresh();
       await this.advance(p, d.sum + await this.iceSlide(p), d);
@@ -3004,7 +3111,7 @@ export class Game {
       `<b>${p.name}</b> vỡ nợ! ${props} ô đất cùng toàn bộ nhà cửa được trả về <b>ngân hàng</b>.`,
       { kind: 'bad', ms: 5000 });
     await this.scene.bankruptFx(playerId);
-    // Còn nợ ai thì ngân hàng trả thay ngay tại đây, đừng để chủ nợ mất trắng
+    // Còn nợ ai thì chuyển số gom được từ tiền mặt + nhà đất cho chủ nợ
     await this.coverDebt(playerId);
 
     // Pháo hoa tiễn người thua — cũng là một cách kết thúc có hậu
@@ -3044,6 +3151,7 @@ export class Game {
     if (!w) return false;
     st.over = true;
     st.endedAt = Date.now();
+    if (!this.bot.active) this.analytics.gameEnd(st, w);
     this.clock = null;
     this.hud.setClock(null);
     this.hud.refresh();
@@ -3075,6 +3183,10 @@ export class Game {
     // Ván đã hạ màn — quay về "màn hình chờ", nhạc nền nổi lại (bản Giáng Sinh
     // có riêng một bài cho lúc này)
     audio.startMusic('win');
+    /* Gửi nốt số liệu trước khi người chơi bấm gì: bản online sẽ rời trang
+       ngay sau hộp này. Máy ngồi xem cũng gửi — nó có thể còn batch từ lúc
+       chính nó cầm lái. */
+    await this.analytics.flushNow({ keepalive: true, timeoutMs: 500 });
     const again = await winnerModal(this.state, winner);
 
     /* Ván online hạ màn thì phòng cũng hết việc: mã phòng cũ đã mang trạng
