@@ -13,6 +13,7 @@ import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
 import { DEFAULT_THEME, themeKey } from '../data/themes.js';
 import { has, param, roll, ownerRentMult, ownerRentFlat, houseImmune, credit, miniRoom, levelOf } from './skills.js';
 import { uuid, track } from './telemetry.js';
+import { blankHistory, sampleMoney } from './history.js';
 
 /**
  * Bảng màu quân — quân cờ chỉ phân biệt bằng MÀU, không mang biểu tượng riêng.
@@ -268,6 +269,12 @@ export class GameState {
      * để mọi máy từng cầm lái trong ván ghi về cùng một mã.
      */
     this.gameId = uuid();
+    /**
+     * Sổ tiền từng người qua từng lượt, cho biểu đồ thống kê cuối ván. Luật
+     * không đọc nó. Xem `core/history.js`.
+     */
+    this.hist = blankHistory(this.players.length);
+    sampleMoney(this);
   }
 
   // ------------------------------------------------- hiệu ứng đang hiệu lực
@@ -944,6 +951,7 @@ export class GameState {
         this.turn = idx;
         // Đếm đổ đôi xoá ở đây, không ở `beginTurn` — xem `rolled`
         this.players[idx].doubles = 0;
+        sampleMoney(this);
         return this.players[idx];
       }
     }
