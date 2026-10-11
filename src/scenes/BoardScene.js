@@ -37,6 +37,7 @@ import { graveLayout, pumpkinSpots, pumpkinSize } from '../render/halloweenDeco.
 import { MOVES, movePose, danceAt, STILL_AT } from '../render/dance.js';
 import { SKITS, paintSkit, skitRowAlpha, skitFrame } from '../render/skits.js';
 import { batSwarm } from '../ui/batSwarm.js';
+import { paintJailPanel, paintJailPost, JAIL_PANELS, JAIL_POSTS } from '../render/jailBars.js';
 
 /* Người dùng xin bớt chuyển động thì ô đổi trạng thái ngay, không diễn */
 /** Ảnh khung nhảy của bộ xương nghĩa địa: bề rộng, bề cao, cỡ bộ xương, chỗ bàn chân (tỉ lệ bề cao). */
@@ -279,7 +280,15 @@ export default class BoardScene extends Phaser.Scene {
     /** Mỗi ghế: màu hào quang (`ultColor`) hoặc null — bóng mờ khi đi lấy màu ở đây. */
     this.auraColor = [];
     this.events.on('update', (time) => this.tickAuras(time));
+    /* Song sắt ô tù (`render/jailBars.js`): hai tấm dọc mép trên và mép
+       phải ô 10, nằm dưới lớp quân để quân đứng trong góc không bị che. */
+    this.jailLayer = this.add.container(0, 0).setDepth(5.95);
     this.tokenLayer = this.add.container(0, 0).setDepth(6);
+    /** Các phần song và trụ (`buildJailBars`), hoặc null khi chưa dựng. */
+    this.jailBars = null;
+    /** Song đang dựng hay đang nằm; `undefined` = chưa đồng bộ lần nào. */
+    this.jailUp = undefined;
+    this.jailState = null;
     this.fxLayer = this.add.container(0, 0).setDepth(20);
     /* Hoạt cảnh ô đất (`render/tileFx.js`): phần mặt ô (vết nứt, vết sém, ô
        rung) nằm trên nước màu chủ đất nhưng dưới vệt đèn và quân cờ; phần nổi
@@ -409,6 +418,7 @@ export default class BoardScene extends Phaser.Scene {
     this.paintHouseTextures();
     // Bia mộ và bộ xương vẽ theo chủ đề — dựng lại từ đầu
     this.clearTombs();
+    this.clearJail();
     this.walkKey = '';
     this.diceTex.forEach((tex, i) => { drawDie(tex.getSourceImage(), this.diceQ[i]); tex.refresh(); });
     this.hideHousePlaque();
@@ -1356,6 +1366,7 @@ export default class BoardScene extends Phaser.Scene {
       }
     }
     this.syncAuras(state);
+    this.syncJail(state);
     if (this.spooky) {
       this.syncTombs(state);
       this.syncWalkers();
@@ -2037,6 +2048,163 @@ export default class BoardScene extends Phaser.Scene {
         this.glowLayer.add(fl);
         this.glowFx.push({ img: fl, base: 1, id });
       }
+    }
+  }
+
+  // ------------------------------------------------------------ song sắt ô tù
+
+  /** Gỡ song và trụ (đổi chủ đề): lần đồng bộ sau dựng lại bằng texture mới, không diễn. */
+  clearJail() {
+    this.jailLayer.removeAll(true);
+    this.jailBars = null;
+    this.jailUp = undefined;
+    this.jailSize = 0;
+  }
+
+  /**
+   * Dựng song khi có ít nhất một người ngồi tù thật, hạ song khi không còn
+   * ai. Người đi ngang thăm tù cũng đứng ở ô 10 nhưng `inJail` false, nên
+   * không tính.
+   *
+   * Gọi từ `refresh` (cả máy ngồi xem, dựng từ ảnh chụp) và từ controller
+   * ngay sau `sendToJail`/`releaseFromJail`, vì máy cầm lái có thể chưa gọi
+   * `refresh` cho tới hết lượt. Chỉ diễn khi cùng một `state` đổi trạng thái;
+   * vào ván mới, nối lại giữa ván, đổi chủ đề thì đặt thẳng vào thế cuối.
+   */
+  syncJail(state) {
+    const up = state.players.some((p) => p.inJail && !p.bankrupt);
+    const was = this.jailUp;
+    const fresh = this.jailState === state && was !== undefined;
+    this.jailState = state;
+    this.jailUp = up;
+    if (!this.jailBars) this.buildJailBars();
+    // Đổi cỡ bàn: đặt lại chỗ, bỏ tween đang chạy dở theo toạ độ cũ
+    const moved = this.jailSize !== this.size;
+    if (moved) this.placeJailBars();
+    if (up === was) { if (moved) this.settleJail(); return; }
+    if (!fresh || REDUCED_MOTION()) { this.settleJail(); return; }
+    if (up) this.raiseJail(); else this.dropJail();
+  }
+
+  /**
+   * Mỗi phần (hai tấm song, ba trụ) là một ảnh kèm một bóng đổ cùng texture
+   * phủ đen, lệch về dưới-phải. Bóng nằm dưới cả song lẫn trụ, trụ nằm trên
+   * song để che hai đầu tấm. Bóng tween cùng ảnh nên co giãn khớp nhau.
+   */
+  buildJailBars() {
+    const theme = this.spooky ? 'halloween' : this.xmas ? 'christmas' : 'classic';
+    const parts = [];
+    const add = (key, paint, o) => {
+      if (!this.textures.exists(key)) this.textures.addCanvas(key, paint());
+      const shadow = this.add.image(0, 0, key).setOrigin(o.ox, o.oy).setRotation(o.rot)
+        .setTintFill(0x000000).setAlpha(0).setVisible(false);
+      const img = this.add.image(0, 0, key).setOrigin(o.ox, o.oy).setRotation(o.rot).setVisible(false);
+      parts.push({ img, shadow, ...o });
+    };
+    for (const kind of ['top', 'right']) {
+      const f = JAIL_PANELS[kind];
+      const W = 480;
+      add(`jail-${theme}-${kind}`, () => paintJailPanel(theme, kind, W, (W * f.h) / f.len),
+        { kind: 'panel', name: kind, f, ox: 0.5, oy: 1, rot: f.rot });
+    }
+    JAIL_POSTS.forEach((f, i) => {
+      add(`jail-${theme}-post-${f.big ? 'big' : 'end'}`, () => paintJailPost(theme, 128, f.big),
+        { kind: 'post', name: `post${i}`, f, ox: 0.5, oy: 0.5, rot: 0 });
+    });
+    for (const p of parts) this.jailLayer.add(p.shadow);
+    for (const kind of ['panel', 'post']) for (const p of parts) if (p.kind === kind) this.jailLayer.add(p.img);
+    this.jailBars = parts;
+  }
+
+  /** Đặt chỗ và cỡ song, trụ, bóng theo bố cục hiện tại; dựng hay nằm do `settleJail` hoặc tween quyết. */
+  placeJailBars() {
+    this.jailSize = this.size;
+    const c = tileCenter(10, TEX);
+    const sc = this.toScreen(c.x, c.y);
+    const side = DEPTH(TEX) * this.scaleF;
+    const off = side * 0.022;
+    for (const p of this.jailBars) {
+      const { f } = p;
+      const w = (p.kind === 'panel' ? f.len : f.s) * side;
+      const h = (p.kind === 'panel' ? f.h : f.s) * side;
+      const x = sc.x + f.x * side, y = sc.y + f.y * side;
+      this.tweens.killTweensOf([p.img, p.shadow]);
+      p.img.setPosition(x, y).setDisplaySize(w, h);
+      p.shadow.setPosition(x + off, y + off).setDisplaySize(w, h);
+      p.sx = p.img.scaleX; p.sy = p.img.scaleY;
+    }
+  }
+
+  settleJail() {
+    for (const p of this.jailBars) {
+      this.tweens.killTweensOf([p.img, p.shadow]);
+      for (const o of [p.img, p.shadow]) o.setScale(p.sx, p.sy).setVisible(!!this.jailUp);
+      p.img.setAlpha(1);
+      p.shadow.setAlpha(0.32);
+    }
+  }
+
+  /** Thứ tự xuất hiện: trụ góc, tấm trên, tấm phải, hai trụ đầu. */
+  jailOrder() {
+    const at = (n) => this.jailBars.find((p) => p.name === n);
+    return [at('post0'), at('top'), at('right'), at('post1'), at('post2')];
+  }
+
+  /**
+   * Trụ góc bật lên trước, song mọc từ mép vào trong ô, hai trụ đầu bật lên
+   * sau cùng. Trụ phóng to cả hai chiều, song chỉ dài ra theo bề cao.
+   */
+  raiseJail() {
+    const delays = [0, 90, 180, 300, 340];
+    this.jailOrder().forEach((p, i) => {
+      const objs = [p.img, p.shadow];
+      this.tweens.killTweensOf(objs);
+      const post = p.kind === 'post';
+      for (const o of objs) o.setVisible(true).setScale(post ? p.sx * 0.05 : p.sx, p.sy * 0.05);
+      p.img.setAlpha(1);
+      p.shadow.setAlpha(0.32);
+      this.tweens.add({
+        targets: objs, scaleX: p.sx, scaleY: p.sy, delay: delays[i],
+        duration: post ? 360 : 480, ease: 'Back.easeOut',
+        onStart: () => { if (!post) this.jailDust(p.img, 6); },
+        onComplete: () => { if (i === 2) audio.sfx('bars', { gain: 0.6 }); },
+      });
+    });
+  }
+
+  /** Song sập về mép, trụ góc sập cuối cùng rồi nện đất: bụi bắn, bàn rung nhẹ. */
+  dropJail() {
+    const order = this.jailOrder().reverse();
+    order.forEach((p, i) => {
+      const objs = [p.img, p.shadow];
+      this.tweens.killTweensOf(objs);
+      const post = p.kind === 'post';
+      this.tweens.add({
+        targets: objs, scaleX: post ? p.sx * 0.05 : p.sx, scaleY: p.sy * 0.05,
+        delay: i * 55, duration: 230, ease: 'Quad.easeIn',
+        onComplete: () => {
+          for (const o of objs) o.setVisible(false).setScale(p.sx, p.sy);
+          if (!post) this.jailDust(p.img, 12);
+          if (i === order.length - 1) { audio.sfx('bars'); this.shake(0.003, 180); }
+        },
+      });
+    });
+  }
+
+  /** Bụi bắn ra dọc chân tấm song (tấm phải xoay 90° nên chân chạy dọc). */
+  jailDust(img, n) {
+    if (REDUCED_MOTION()) return;
+    const tint = this.spooky ? 0x4A3D5C : this.xmas ? 0xF4F8FF : 0x8A7458;
+    for (let i = 0; i < n; i++) {
+      const t = (Math.random() - 0.5) * img.displayWidth;
+      const d = this.add.circle(img.x + Math.cos(img.rotation) * t, img.y + Math.sin(img.rotation) * t,
+        Math.max(2, this.size * 0.0035), tint, 0.9).setDepth(6.6);
+      const a = img.rotation - Math.PI / 2 + (Math.random() - 0.5) * 2.6;
+      const r = this.size * (0.01 + Math.random() * 0.025);
+      this.tweens.add({
+        targets: d, x: d.x + Math.cos(a) * r, y: d.y + Math.sin(a) * r * 0.5, alpha: 0,
+        duration: 420 + Math.random() * 300, ease: 'Cubic.easeOut', onComplete: () => d.destroy(),
+      });
     }
   }
 

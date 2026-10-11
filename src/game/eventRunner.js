@@ -243,6 +243,7 @@ export class EventRunner {
       st.releaseFromJail(st.players[seat]);
       audio.sfx('jail');
     }
+    this.g.scene.syncJail(st);
     this.g.hud.refresh();
     this.g.sync();
     if (plan.seats.length) {

@@ -735,7 +735,7 @@ export class Audio {
   /**
    * @param {'dice'|'shake'|'diceHit'|'step'|'coin'|'buy'|'build'|'card'|'jail'
    *        |'bankrupt'|'firework'|'trade'|'turn'|'click'|'cardTick'
-   *        |'knock'|'thud'|'rumble'|'crackle'|'redeem'} name
+   *        |'knock'|'thud'|'rumble'|'crackle'|'redeem'|'bars'} name
    * @param {object} [opts] tham số riêng của từng hiệu ứng (gain, i, …)
    */
   sfx(name, opts = {}) {
@@ -966,6 +966,37 @@ export class Audio {
           o.start(t); o.stop(t + 2.7);
         }
       },
+      /**
+       * Song sắt ô tù nện xuống đất: các bội âm lệch nhau (không theo chuỗi
+       * hoà âm) nên nghe ra kim loại, tắt nhanh; thêm một tiếng nhiễu ngắn
+       * cho cú va. `gain` nhỏ hơn 1 cho lúc song dựng lên.
+       */
+      bars(t, o = {}) {
+        const k = clamp01(o.gain ?? 1);
+        for (const [i, f] of [196, 541, 1058, 1750].entries()) {
+          const osc = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = f * (0.98 + Math.random() * 0.04);
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime((0.16 * k) / (i + 1), t + 0.004);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.9 / (i * 0.6 + 1));
+          osc.connect(g).connect(this.sfxGain);
+          g.connect(this.reverb);
+          osc.start(t); osc.stop(t + 1);
+        }
+        const n = this.noiseSource(0.08);
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = 2600;
+        bp.Q.value = 1.4;
+        const ng = this.ctx.createGain();
+        ng.gain.setValueAtTime(0.12 * k, t);
+        ng.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+        n.connect(bp).connect(ng).connect(this.sfxGain);
+        n.start(t);
+      },
+
       /** Phá sản: quãng trượt đi xuống ảm đạm. */
       bankrupt(t) {
         const o = this.ctx.createOscillator();

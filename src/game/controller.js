@@ -2644,6 +2644,8 @@ export class Game {
     this.netEmit('jail', { seat: p.id });
     this.scene.shake(0.007, 340);
     await this.scene.jumpToken(p.id, JAIL_TILE);
+    // Quân đáp xuống rồi song mới dựng
+    this.scene.syncJail(st);
     this.hud.refresh();
     this.sync();
     this.scene.highlightTile(JAIL_TILE, p.token.color);
@@ -2664,6 +2666,7 @@ export class Game {
       if (at < 0 || !st.dropCard(p.id, at)) return;
     }
     st.releaseFromJail(p);
+    this.scene.syncJail(st);
     audio.sfx('jail');
     this.hud.refresh();
     this.sync();
@@ -2697,6 +2700,7 @@ export class Game {
       if (!(await this.payBank(p.id, JAIL_FINE))) { await this.endTurn(); return; }
     }
     st.releaseFromJail(p);
+    this.scene.syncJail(st);
     this.hud.refresh();
     await this.takeRoll();
   }
@@ -2718,6 +2722,7 @@ export class Game {
 
     if (d.isDouble) {
       st.releaseFromJail(p);
+      this.scene.syncJail(st);
       st.rolled = true;
       this.hud.refresh();
       await this.bc.show('RA ĐÔI, ĐƯỢC THA',
@@ -2742,6 +2747,7 @@ export class Game {
         { kind: 'bad' });
       if (!free && !(await this.payBank(p.id, JAIL_FINE))) { await this.endTurn(); return; }
       st.releaseFromJail(p);
+      this.scene.syncJail(st);
       st.rolled = true;
       this.hud.refresh();
       await this.advance(p, d.sum + await this.iceSlide(p), d);
