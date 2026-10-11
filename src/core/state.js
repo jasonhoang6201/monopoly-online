@@ -161,12 +161,13 @@ export class GameState {
     /** Đặt true khi ván đã kết thúc. */
     this.over = false;
     /**
-     * Khoản người-trả-người đang dở dang: `{ from, to, amount }`, `null` là
-     * không nợ ai.
+     * Khoản người-trả-người đang dở dang: `{ from, to, amount, left? }`, `null`
+     * là không nợ ai. `left` là số con nợ gom được lúc vỡ nợ (tiền mặt +
+     * bán nhà + thế chấp đất), chủ nợ chỉ nhận chừng đó.
      *
      * Nằm trong trạng thái (nên đi theo ảnh chụp) vì máy con nợ có thể tắt
      * ngang giữa lúc đang hỏi họ xoay tiền hay tuyên bố phá sản. Máy khác đọc
-     * ảnh chụp mới biết còn ai chưa trả cho ai mà trả thay hoặc đòi tiếp —
+     * ảnh chụp mới biết còn ai chưa trả cho ai mà chuyển nốt hoặc đòi tiếp —
      * xem `Game.coverDebt`.
      */
     this.debt = null;
@@ -889,6 +890,13 @@ export class GameState {
    */
   bankrupt(playerId) {
     const p = this.players[playerId];
+    /* Đang dở một khoản trả người khác: bán sạch nhà, thế chấp hết đất, gom cả
+       tiền mặt trả chủ nợ, tối đa bằng khoản nợ. Ngân hàng không bù phần thiếu,
+       phần dư theo đất về ngân hàng. Chốt con số ở đây, trước khi đất bị thu
+       và ví về 0, vì `Game.coverDebt` chạy sau hoạt cảnh phá sản. */
+    if (this.debt && this.debt.from === playerId && this.debt.left == null) {
+      this.debt.left = Math.max(0, Math.min(this.liquidValue(playerId), this.debt.amount));
+    }
     for (const tileId of this.propertiesOf(playerId)) {
       const h = this.housesOn(tileId);
       if (h === 5) { this.bankHotels += 1; }

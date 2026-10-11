@@ -1506,10 +1506,11 @@ export class SkillPlay {
         for (const q of others) {
           const n = Math.floor(q.money * win);
           if (n <= 0 || q.bankrupt) continue;
-          /* Ghi cả khi `payPlayer` trả false: con nợ vỡ nợ thì `coverDebt` cho
-             ngân hàng trả thay đủ `n`, người giữ Tất Tay vẫn nhận trọn. */
+          /* Ghi theo số tiền thực vào ví: con nợ vỡ nợ thì `coverDebt` chỉ
+             chuyển số họ gom được từ tiền mặt và nhà đất, có thể không đủ `n`. */
+          const before = p.money;
           await this.g.payPlayer(q.id, p.id, n);
-          tally(p, 'ddU', n);
+          tally(p, 'ddU', p.money - before);
         }
       } else {
         const each = Math.floor(p.money * lose);

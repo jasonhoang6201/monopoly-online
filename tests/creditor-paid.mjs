@@ -1,15 +1,16 @@
 /**
- * Luật: con nợ vỡ nợ thì **chủ nợ vẫn nhận đủ** — ngân hàng trả thay.
+ * Luật: con nợ vỡ nợ thì nhà đất bị bán / thế chấp hết, chủ nợ nhận **số gom
+ * được** (tiền mặt + nhà đất, tối đa bằng khoản nợ), ngân hàng không bù.
  *
  * Mọi khoản người-trả-người đều đi qua `controller.payPlayer`, nên bộ này lần
  * lượt gọi đúng từng đường dẫn tới đó và soi túi tiền chủ nợ sau khi con nợ đã
  * phá sản:
  *   1. Tiền thuê, con nợ hết sạch tài sản → vỡ nợ ép buộc.
  *   2. Tiền thuê, con nợ còn đất nhưng tự bấm "Tuyên bố phá sản".
- *   3. Thẻ tiền mừng: một người góp vỡ nợ, người rút vẫn phải đủ phần của họ.
- *   4. Cưỡng chiếm: người dùng thẻ vỡ nợ lúc đền tiền — chủ đất nhận đủ tiền
- *      đền và **giữ nguyên đất**.
- *   5. Đấu giá bán lại cho chủ cũ: người thắng vỡ nợ, chủ cũ vẫn nhận tiền.
+ *   3. Thẻ tiền mừng: một người góp vỡ nợ, người rút chỉ nhận phần họ còn.
+ *   4. Cưỡng chiếm: người dùng thẻ vỡ nợ lúc đền tiền — chủ đất nhận phần
+ *      tiền còn lại và **giữ nguyên đất**.
+ *   5. Đấu giá bán lại cho chủ cũ: người thắng vỡ nợ, chủ cũ nhận phần còn lại.
  *   6. Chủ nợ đã phá sản từ trước → không trả cho ai (đừng in tiền vô chủ).
  */
 import { launchChrome } from './launch.mjs';
@@ -61,7 +62,7 @@ async function idle(maxMs = 40000) {
  * Chờ tới khi túi tiền của một người bằng đúng `want`.
  *
  * Chuỗi vỡ nợ chạy mất gần chục giây (bảng thông báo, pháo hoa, rồi mới tới
- * lượt ngân hàng trả thay), mà mấy kịch bản ở đây gọi thẳng `payPlayer` chứ
+ * lượt chuyển phần tiền còn lại), mà mấy kịch bản ở đây gọi thẳng `payPlayer` chứ
  * không qua `guard` nên `controller.busy` luôn là false — `idle()` về ngay chứ
  * không chờ hộ. Đọc số dư đúng lúc nó vừa đổi thì phải hỏi lại từng nhịp.
  */
@@ -138,7 +139,7 @@ await idle();
 let s = await st();
 log(`  Cô Ba bk=${s.p[1].bk} · Bảy Viễn 1000$ → ${s.p[0].m}$`);
 check(s.p[1].bk === true, 'con nợ vỡ nợ');
-check(s.p[0].m === 1400, 'chủ đất nhận đủ 400$');
+check(s.p[0].m === 1020, 'chủ đất chỉ nhận 20$ con nợ còn, ngân hàng không bù');
 
 /* ====== 2. TIỀN THUÊ — CON NỢ CÒN ĐẤT NHƯNG TỰ CHỌN PHÁ SẢN ====== */
 log('\n=== 2. TIỀN THUÊ: con nợ tự bấm "Tuyên bố phá sản" ===');
@@ -169,7 +170,7 @@ await idle();
 s = await st();
 log(`  Cô Ba bk=${s.p[1].bk} · Bảy Viễn 1000$ → ${s.p[0].m}$`);
 check(s.p[1].bk === true, 'tự chọn phá sản thì vẫn vỡ nợ');
-check(s.p[0].m === 1400, 'chủ đất nhận đủ 400$ dù con nợ tự bỏ cuộc');
+check(s.p[0].m === 1400, 'con nợ tự bỏ cuộc: thế chấp 2 ô + 100$ tiền mặt đủ trả 400$');
 
 /* ============ 3. THẺ TIỀN MỪNG — MỘT NGƯỜI GÓP VỠ NỢ ============ */
 log('\n=== 3. THẺ TIỀN MỪNG: một người góp vỡ nợ ===');
@@ -192,7 +193,7 @@ s = await st();
 log(`  Cô Ba bk=${s.p[1].bk} · Bảy Viễn 1000$ → ${s.p[0].m}$ · Chú Hoả 1000$ → ${s.p[2].m}$`);
 check(s.p[1].bk === true, 'người góp không nổi thì vỡ nợ');
 check(s.p[2].m === 880, 'người góp còn tiền trả đủ 120$');
-check(s.p[0].m === 1240, 'người rút thẻ nhận đủ cả hai phần góp (240$)');
+check(s.p[0].m === 1140, 'người rút thẻ nhận 120$ + 20$ người vỡ nợ còn lại');
 
 /* ====== 4. CƯỠNG CHẾ MUA ĐẤT — NGƯỜI DÙNG THẺ VỠ NỢ LÚC ĐỀN TIỀN ====== */
 log('\n=== 4. CƯỠNG CHẾ MUA ĐẤT: người dùng thẻ vỡ nợ lúc đền tiền ===');
@@ -214,11 +215,11 @@ s = await st();
 const owner39 = Object.fromEntries(s.owner)[39];
 log(`  Cô Ba bk=${s.p[1].bk} · Bảy Viễn 1000$ → ${s.p[0].m}$ · chủ ô 39 = ${owner39}`);
 check(s.p[1].bk === true, 'người dùng thẻ vỡ nợ');
-check(s.p[0].m === 1500, 'chủ đất nhận đủ 500$ tiền đền (giá gốc +25%)');
+check(s.p[0].m === 1020, 'chủ đất chỉ nhận 20$ người cưỡng chế còn lại');
 check(owner39 === 0, 'đất không sang tên khi người cưỡng chế mua vỡ nợ');
 
-/* ====== 5. ĐẤU GIÁ BÁN LẠI — NGƯỜI THẮNG VỠ NỢ, CHỦ CŨ VẪN NHẬN ====== */
-log('\n=== 5. ĐẤU GIÁ: người thắng vỡ nợ, chủ cũ vẫn nhận tiền ===');
+/* ====== 5. ĐẤU GIÁ BÁN LẠI — NGƯỜI THẮNG VỠ NỢ, CHỦ CŨ NHẬN PHẦN CÒN LẠI ====== */
+log('\n=== 5. ĐẤU GIÁ: người thắng vỡ nợ, chủ cũ nhận phần còn lại ===');
 await reset([1000, 20, 1000]);
 await page.evaluate(() => {
   const c = window.__monopoly.controller;
@@ -235,7 +236,7 @@ await drain(12000);
 await idle();
 s = await st();
 log(`  Cô Ba bk=${s.p[1].bk} · Bảy Viễn 1000$ → ${s.p[0].m}$`);
-check(s.p[0].m === 1300, 'chủ cũ nhận đủ tiền bán dù người thắng vỡ nợ');
+check(s.p[0].m === 1020, 'chủ cũ chỉ nhận 20$ người thắng còn lại');
 
 /* ====== 6. CHỦ NỢ ĐÃ PHÁ SẢN TỪ TRƯỚC → KHÔNG TRẢ CHO AI ====== */
 log('\n=== 6. CHỦ NỢ ĐÃ PHÁ SẢN → không ai được trả ===');

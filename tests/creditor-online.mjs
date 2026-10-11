@@ -1,5 +1,5 @@
 /**
- * Chủ nợ có nhận được tiền không — **bản online, hai máy**.
+ * Chủ nợ nhận phần tiền con nợ còn lại — **bản online, hai máy**.
  *
  * Bản một máy đã có `creditor-paid.mjs` lo. Bộ này soi đúng những chỗ chỉ bản
  * online mới có: khoản tiền do máy con nợ tính ra, chủ đất ngồi máy khác chỉ
@@ -7,7 +7,7 @@
  *   1. Con nợ vỡ nợ ngay trên máy mình → máy chủ đất phải thấy tiền vào.
  *   2. Con nợ tải lại trang giữa lúc đang nợ → khoản nợ được đòi tiếp, chứ
  *      không phải cứ nối lại máy là thoát.
- *   3. Con nợ tắt máy luôn, trọng tài tịch thu → chủ đất vẫn phải được trả.
+ *   3. Con nợ tắt máy luôn, trọng tài tịch thu → chủ đất vẫn nhận phần còn lại.
  *
  * Chạy: cần dev server ở cổng 5179
  *   npx vite --port 5179 --strictPort &
@@ -121,8 +121,8 @@ await B.waitForTimeout(8000);
 
 await A.bringToFront();
 ok(await until(async () => await bankruptOf(A, sb), 30000), 'máy chủ đất thấy con nợ đã phá sản');
-ok(await until(async () => (await moneyOf(A, sa)) === 1400, 30000),
-  'máy chủ đất thấy đủ 400$ tiền thuê', `${await moneyOf(A, sa)}$`);
+ok(await until(async () => (await moneyOf(A, sa)) === 1020, 30000),
+  'máy chủ đất thấy 20$ con nợ còn lại, không phải đủ 400$', `${await moneyOf(A, sa)}$`);
 
 /* ====== 2. CON NỢ TẢI LẠI TRANG GIỮA LÚC ĐANG NỢ → ĐÒI TIẾP ====== */
 console.log('\n▸ 2. Con nợ tải lại trang giữa lúc đang nợ');
@@ -153,8 +153,8 @@ ok(await until(async () => (await B.locator('.scrim.show button.btn-danger').cou
 await B.locator('.scrim.show button.btn-danger').first().click();
 
 await A.bringToFront();
-ok(await until(async () => (await moneyOf(A, sa)) === 1250, 60000),
-  'chủ đất nhận đủ 250$ sau khi con nợ vào lại rồi vỡ nợ', `${await moneyOf(A, sa)}$`);
+ok(await until(async () => (await moneyOf(A, sa)) === 1020, 60000),
+  'chủ đất nhận 20$ còn lại sau khi con nợ vào lại rồi vỡ nợ', `${await moneyOf(A, sa)}$`);
 
 /* ====== 3. CON NỢ TẮT MÁY GIỮA LÚC ĐANG NỢ → TRỌNG TÀI TỊCH THU ====== */
 console.log('\n▸ 3. Con nợ tắt máy giữa lúc hộp thoại vỡ nợ còn mở');
@@ -226,8 +226,8 @@ if (!evicted) {
 }
 ok(evicted, 'trọng tài tịch thu người mất kết nối');
 // Tiền vào sau chuỗi hiệu ứng tịch thu, nên chờ chứ đừng đọc ngay
-const paid = await until(async () => (await moneyOf(A, sa)) === 1300, 40000);
-ok(paid, 'chủ đất vẫn nhận đủ 300$ dù con nợ tắt máy giữa chừng', `${await moneyOf(A, sa)}$`);
+const paid = await until(async () => (await moneyOf(A, sa)) === 1020, 40000);
+ok(paid, 'chủ đất nhận 20$ còn lại dù con nợ tắt máy giữa chừng', `${await moneyOf(A, sa)}$`);
 
 console.log(`\n=== KẾT QUẢ: ${fails.length === 0 ? 'ĐẠT' : 'HỎNG ' + fails.length} ===`);
 for (const f of fails) console.log('  ✗ ' + f);
