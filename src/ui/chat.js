@@ -74,7 +74,7 @@ class ChatDock {
     this.btn.id = 'chat-btn';
     this.btn.type = 'button';
     this.btn.hidden = true;
-    this.btn.title = 'Chat với cả bàn (Enter)';
+    this.btn.title = 'Chat với cả bàn (Y)';
     this.btn.setAttribute('aria-label', 'Mở khung chat');
     this.btn.setAttribute('aria-expanded', 'false');
     this.btn.innerHTML = '<span aria-hidden="true">💬</span><b class="chat-badge" hidden></b>';
@@ -119,14 +119,16 @@ class ChatDock {
       if (e.key === 'Escape') { e.preventDefault(); this.close(); this.input.blur(); }
     });
 
-    /* Enter ở ngoài mọi ô nhập, lúc không có hộp thoại nào mở, là mở khung và
-       đặt con trỏ vào ô gõ — khỏi phải với chuột. Có hộp thoại mở thì Enter là
-       "đồng ý" của hộp ấy, không giành. */
+    /* Y ở ngoài mọi ô nhập, lúc không có hộp thoại nào mở, là mở khung và đặt
+       con trỏ vào ô gõ — khỏi phải với chuột. Không dùng Enter vì Enter đã là
+       "đồng ý" của hộp thoại và là phím bấm nút đang focus. preventDefault để
+       chữ y không lọt vào ô gõ vừa nhận focus. */
     window.addEventListener('keydown', (e) => {
-      if (!this.room || e.key !== 'Enter' || e.repeat) return;
+      if (!this.room || e.key.toLowerCase() !== 'y' || e.repeat) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const t = e.target;
       if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement
-        || t instanceof HTMLButtonElement || (t instanceof HTMLElement && t.isContentEditable)) return;
+        || t instanceof HTMLSelectElement || (t instanceof HTMLElement && t.isContentEditable)) return;
       if (document.querySelector('#modal-root .scrim:not(.hide)')) return;
       e.preventDefault();
       this.open();
