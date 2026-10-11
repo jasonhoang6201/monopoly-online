@@ -2,8 +2,13 @@
  * Trang cân bằng kỹ năng (/stats.html) với dữ liệu mẫu: không có khoá Supabase
  * nên gắn `window.__statsRpc` trả dữ liệu giả, rồi kiểm bày bảng, làm mờ dòng
  * n nhỏ, sắp xếp, và bộ lọc gửi đúng tham số. Cần dev server ở cổng 5178.
+ *
+ *   node --experimental-websocket tests/stats.mjs
+ *
+ * Cờ là cho Node 20: supabase-js ≥ 2.117 dựng Realtime ngay lúc tạo client và
+ * đòi `WebSocket` có sẵn trong Node, Node 22 trở lên mới bật mặc định.
  */
-import { createServer } from 'vite';
+import { createServer, loadEnv } from 'vite';
 import { launchChrome } from './launch.mjs';
 
 const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
@@ -85,12 +90,19 @@ check((await page.locator('#skill-table tbody tr.dim').count()) === 10, 'n tối
 
 await page.screenshot({ path: 'test-result/stats.png', fullPage: true }).catch(() => {});
 
-// Không có khoá và không có móc giả → lời nhắc, không văng lỗi
-const p2 = await browser.newPage({ viewport: { width: 900, height: 700 } });
-p2.on('pageerror', (e) => errors.push('PAGEERROR(p2): ' + e.message));
-await p2.goto('http://localhost:5178/stats.html', { waitUntil: 'networkidle' });
-await p2.waitForTimeout(500);
-check(/Chưa có khoá Supabase/.test(await p2.locator('#status').textContent()) && (await p2.locator('#report').isHidden()), 'thiếu khoá: hiện lời nhắc, không bày bảng');
+// Không có khoá và không có móc giả → lời nhắc, không văng lỗi. Máy có
+// .env.local thì dev server nạp khoá thật, trang đi gọi Supabase chứ không
+// rơi vào nhánh này, nên chỉ kiểm được trên máy chưa điền khoá.
+const env = loadEnv('development', process.cwd(), 'VITE_');
+if (env.VITE_SUPABASE_URL && env.VITE_SUPABASE_ANON_KEY) {
+  console.log('  · bỏ qua "thiếu khoá": máy này có khoá Supabase trong .env');
+} else {
+  const p2 = await browser.newPage({ viewport: { width: 900, height: 700 } });
+  p2.on('pageerror', (e) => errors.push('PAGEERROR(p2): ' + e.message));
+  await p2.goto('http://localhost:5178/stats.html', { waitUntil: 'networkidle' });
+  await p2.waitForTimeout(500);
+  check(/Chưa có khoá Supabase/.test(await p2.locator('#status').textContent()) && (await p2.locator('#report').isHidden()), 'thiếu khoá: hiện lời nhắc, không bày bảng');
+}
 
 await browser.close();
 if (errors.length) { console.log('\nLỗi trang:'); for (const e of errors) console.log('  ' + e); }

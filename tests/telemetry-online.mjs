@@ -5,10 +5,15 @@
  * sao rồi nhắn máy cầm lái học thật — bài này đếm sự kiện `learn` ở cả hai
  * máy và đòi đúng **một**, nằm ở máy cầm lái. Cần dev server ở cổng 5179.
  */
+import { loadEnv } from 'vite';
 import { launchChrome } from './launch.mjs';
 import { playRollOff } from './rolloff.mjs';
 
 const BASE = 'http://localhost:5179/';
+/* Có khoá Supabase trong .env thì phòng đi qua Supabase và ghi mode "online";
+   không có thì đường truyền cục bộ trong trình duyệt, ghi "local". */
+const env = loadEnv('development', process.cwd(), 'VITE_');
+const MODE = env.VITE_SUPABASE_URL && env.VITE_SUPABASE_ANON_KEY ? 'online' : 'local';
 const errors = [];
 const fails = [];
 const browser = await launchChrome();
@@ -81,8 +86,8 @@ await playRollOff([A, B]);
 await A.bringToFront();
 ok(await until(async () => A.evaluate(() => !!window.__monopoly.controller.state.order)), 'ván đã khai cuộc');
 const starts = await A.evaluate(() => window.__sent.filter((x) => x.url.endsWith('/games')).flatMap((x) => x.rows));
-ok(starts.length === 1 && starts[0].phase === 'start' && starts[0].mode === 'local' && starts[0].players === 2,
-  'chủ phòng gửi games phase=start (mode local vì không có khoá)', JSON.stringify(starts));
+ok(starts.length === 1 && starts[0].phase === 'start' && starts[0].mode === MODE && starts[0].players === 2,
+  `chủ phòng gửi games phase=start (mode ${MODE})`, JSON.stringify(starts));
 ok((await B.evaluate(() => window.__sent.length)) === 0, 'máy vào phòng không gửi games start');
 ok(await until(async () => (await A.evaluate(() => window.__monopoly.controller.state.gameId)) === (await B.evaluate(() => window.__monopoly.controller.state.gameId))),
   'hai máy cùng gameId');

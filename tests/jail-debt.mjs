@@ -242,7 +242,7 @@ s = await st();
 log(`  Chú Hoả bankrupt=${s.p[2].bk}`);
 check(s.p[2].bk === true, 'người chơi bị tuyên vỡ nợ ngay');
 
-/* ====== 4. CON NỢ VỠ NỢ → NGÂN HÀNG TRẢ THAY CHO CHỦ ĐẤT ====== */
+/* ====== 4. CON NỢ VỠ NỢ → CHỦ ĐẤT NHẬN PHẦN CÒN LẠI, NGÂN HÀNG KHÔNG BÙ ====== */
 log('\n=== 4. VỠ NỢ GIỮA LÚC PHẢI TRẢ TIỀN THUÊ ===');
 await page.evaluate(() => {
   const c = window.__monopoly.controller;
@@ -266,8 +266,8 @@ await idle();
 s = await st();
 log(`  Cô Ba bankrupt=${s.p[1].bk} · Bảy Viễn ${1000}$ → ${s.p[0].m}$`);
 check(s.p[1].bk === true, 'không xoay nổi thì vẫn vỡ nợ như cũ');
-check(s.p[0].m === 1400, 'chủ đất vẫn nhận đủ 400$ — ngân hàng trả thay con nợ');
-await page.screenshot({ path: `${SHOT}/54-bank-covers-rent.png` });
+check(s.p[0].m === 1020, 'chủ đất nhận 20$ con nợ còn lại, ngân hàng không bù phần thiếu');
+await page.screenshot({ path: `${SHOT}/54-creditor-gets-rest.png` });
 
 log(`\n=== KẾT QUẢ: ${fails.length === 0 ? 'ĐẠT' : 'HỎNG ' + fails.length} ===`);
 for (const f of fails) log('  ✘ ' + f);
