@@ -511,3 +511,22 @@ export const PRESSURE = {
   /** Có người phải cắm đất lấy tiền mặt — dấu hiệu bàn đang cạn. */
   mortgage: 3,
 };
+
+/**
+ * Hội Đồng Hồn Ma: người đã phá sản bầu thẻ Thời Cuộc kế tiếp.
+ *
+ * Phá sản xong thì người ấy chỉ còn ngồi xem, có khi cả nửa ván. Cho họ một
+ * lá phiếu vào đúng thứ đổi cục diện của cả bàn là cách giữ họ ở lại bàn mà
+ * không đụng tới tiền hay đất của ai.
+ *
+ * Phiếu chỉ **tăng tỉ lệ ra** chứ không chọn hẳn: lúc rút, các thẻ được bầu
+ * nặng `perVote` mỗi phiếu, còn cả chồng bài gộp lại nặng 1. Một phiếu thì thẻ
+ * ấy ra 60%, hai phiếu dồn một thẻ thì 75%, ba phiếu 82%. Không ai bầu thì
+ * rút như cũ.
+ *
+ * Phiên họp mở ngay sau một lần nổ (thanh vừa về 0, còn lâu mới tới lần sau),
+ * hoặc khi thanh đầy tới `at` mà chu kỳ này chưa họp — lần nổ đầu ván, hay
+ * vừa có người phá sản giữa chừng. Không bao giờ chờ: hết `ms` thì hộp tự
+ * đóng, ván vẫn chạy trong lúc hồn ma bầu.
+ */
+export const GHOST_VOTE = { at: 0.7, ms: 10000, cards: 3, perVote: 1.5 };

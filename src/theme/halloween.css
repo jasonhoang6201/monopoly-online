@@ -596,3 +596,10 @@
   --gs-seg-ink: #171024;
 }
 :root[data-theme="halloween"] .modal-edge-tab { border-color: #FFFFFF; }
+
+/* Hội Đồng Hồn Ma: ánh hồn ma tím phù thuỷ, khung tím đêm như mọi bảng khác */
+:root[data-theme="halloween"] {
+  --gc-glow: #C9A8FF;
+  --gc-glow-rgb: 201, 168, 255;
+}
+:root[data-theme="halloween"] .gc-panel { background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(201, 168, 255, .18), transparent 65%), var(--h-panel); }

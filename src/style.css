@@ -4003,3 +4003,260 @@ html, body {
   .gs-bar { margin: 0 0 4px; }
 }
 @media (prefers-reduced-motion: reduce) { .modal-edge-tab { animation: none; } }
+
+/* ============================================================
+   HỘI ĐỒNG HỒN MA — hộp bầu thẻ Thời Cuộc của người đã phá sản
+   Lớp riêng, nằm trên hộp thoại (mặt thẻ vừa nổ có thể còn mở) nhưng chỉ
+   chặn cú bấm trong khung. Màu đọc qua biến chủ đề, cộng --gc-glow là ánh
+   sáng hồn ma: mỗi chủ đề khai một sắc trong theme/*.css.
+   ============================================================ */
+:root {
+  --gc-glow: #BFE6D8;
+  --gc-glow-rgb: 191, 230, 216;
+}
+
+.gc-layer {
+  position: fixed; inset: 0; z-index: 58;
+  display: grid; place-items: center;
+  padding: 16px;
+  pointer-events: none;
+}
+.gc-veil {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 60% 55% at 50% 50%, rgba(var(--gc-glow-rgb), .10), transparent 70%),
+    radial-gradient(ellipse at 50% 50%, transparent 35%, rgba(5, 3, 2, .55) 100%);
+  opacity: 0; transition: opacity .5s var(--ease-soft);
+}
+.gc-layer.show .gc-veil { opacity: 1; }
+
+.gc-panel {
+  position: relative;
+  width: min(660px, 96vw);
+  padding: 18px 20px 14px;
+  border-radius: 16px;
+  pointer-events: auto;
+  color: var(--paper);
+  background:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(var(--gc-glow-rgb), .16), transparent 65%),
+    linear-gradient(180deg, var(--ground-light) 0%, var(--ground) 38%, var(--ground-deep) 100%);
+  border: 1px solid rgba(var(--gc-glow-rgb), .38);
+  box-shadow:
+    var(--shadow-lg),
+    0 0 0 1px rgba(0, 0, 0, .35),
+    0 0 46px rgba(var(--gc-glow-rgb), .16),
+    inset 0 1px 0 rgba(255, 255, 255, .08);
+  opacity: 0;
+  transform: translateY(30px) scale(.94);
+  filter: blur(6px);
+  transition: opacity .45s var(--ease-soft), transform .55s var(--ease-out-back), filter .45s var(--ease-soft);
+}
+.gc-layer.show .gc-panel { opacity: 1; transform: none; filter: none; }
+.gc-layer.hide .gc-panel {
+  opacity: 0; transform: translateY(-18px) scale(.97); filter: blur(8px);
+  transition-duration: .38s;
+}
+.gc-layer.hide .gc-veil { opacity: 0; transition-duration: .38s; }
+
+/* --- đầu hộp --- */
+.gc-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.gc-ghost {
+  flex: none; width: 46px; height: 52px;
+  color: var(--gc-glow);
+  filter: drop-shadow(0 0 10px rgba(var(--gc-glow-rgb), .55));
+  animation: gc-float 3.2s ease-in-out infinite;
+}
+.gc-ghost svg { width: 100%; height: 100%; display: block; }
+@keyframes gc-float {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50%      { transform: translateY(-6px) rotate(3deg); }
+}
+.gc-heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.gc-eyebrow {
+  font-family: var(--display); font-size: 10.5px; letter-spacing: .34em;
+  color: var(--gc-glow); opacity: .92;
+}
+.gc-name { font-family: var(--display); font-size: 21px; letter-spacing: .02em; color: var(--gold-pale); }
+.gc-sub { font-size: 12px; color: var(--paper-deep); opacity: .85; }
+
+/* --- bản một máy: chọn hồn ma đang bầu --- */
+.gc-seats {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin: -4px 0 12px;
+}
+.gc-seats-label {
+  font-size: 9.5px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--paper-deep); opacity: .75; margin-right: 2px;
+}
+.gc-seat {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px 4px 6px; border-radius: 999px;
+  font: 600 12px var(--sans); color: var(--paper);
+  background: rgba(255, 255, 255, .04);
+  border: 1px solid rgba(var(--gc-glow-rgb), .2);
+  cursor: pointer;
+  transition: background .2s, border-color .2s;
+}
+.gc-seat svg { width: 14px; height: 16px; color: var(--tok); }
+.gc-seat.on { background: rgba(var(--gc-glow-rgb), .16); border-color: rgba(var(--gc-glow-rgb), .7); }
+.gc-seat.done::after { content: '✓'; font-size: 11px; color: var(--gc-glow); }
+
+/* --- ba thẻ --- */
+.gc-cards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 12px;
+}
+.gc-card {
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center;
+  min-height: 218px; padding: 16px 12px 10px;
+  border-radius: 11px;
+  font: inherit; text-align: center; color: var(--ink);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, .22), transparent 60%),
+    linear-gradient(170deg, var(--paper), var(--paper-warm) 70%, var(--paper-deep));
+  border: 2px solid color-mix(in srgb, var(--ev) 70%, transparent);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(16px) rotate(calc((var(--i) - 1) * 1.6deg));
+  transition: transform .3s var(--ease-out-back), box-shadow .3s, opacity .3s, filter .3s;
+}
+.gc-layer.show .gc-card {
+  opacity: 1;
+  transform: rotate(calc((var(--i) - 1) * 1.2deg));
+  transition-delay: calc(.12s + var(--i) * .08s), calc(.12s + var(--i) * .08s), 0s, 0s, 0s;
+}
+/* Sương phủ mặt thẻ — trôi chậm, vệt sáng màu hồn ma */
+.gc-card::before {
+  content: ''; position: absolute; inset: -40% -60%;
+  background: linear-gradient(105deg, transparent 38%, rgba(var(--gc-glow-rgb), .30) 50%, transparent 62%);
+  transform: translateX(-60%);
+  animation: gc-mist 4.8s ease-in-out infinite;
+  animation-delay: calc(var(--i) * .7s);
+  pointer-events: none;
+}
+@keyframes gc-mist {
+  0%, 15% { transform: translateX(-60%); }
+  70%, 100% { transform: translateX(60%); }
+}
+/* Dải màu tính chất thẻ ở mép trên */
+.gc-card::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 4px;
+  background: var(--ev);
+}
+.gc-layer.show .gc-card:hover {
+  transform: translateY(-5px) rotate(0deg);
+  box-shadow: var(--shadow-lg), 0 0 22px rgba(var(--gc-glow-rgb), .4);
+  transition-delay: 0s;
+}
+.gc-card:focus-visible { outline: 2px solid var(--gc-glow); outline-offset: 3px; }
+
+.gc-kind {
+  font-family: var(--display); font-size: 9.5px; letter-spacing: .28em;
+  color: var(--ev); margin-bottom: 6px;
+}
+.gc-sigil { font-size: 30px; line-height: 1; color: var(--ev); margin-bottom: 6px; }
+.gc-title {
+  font-family: var(--display); font-size: 15px; line-height: 1.2; letter-spacing: .04em;
+  color: var(--ink); margin-bottom: 8px; min-height: 2.4em;
+  display: flex; align-items: center;
+}
+.gc-lines {
+  display: flex; flex-direction: column; gap: 4px;
+  width: 100%; padding-top: 8px;
+  border-top: 1px dashed color-mix(in srgb, var(--ink-soft) 40%, transparent);
+  font-family: var(--serif); font-size: 11.5px; line-height: 1.4; color: var(--ink-soft);
+  text-align: left;
+}
+.gc-lines span { position: relative; padding-left: 11px; }
+.gc-lines span::before { content: '›'; position: absolute; left: 1px; font-weight: 700; color: var(--ev); }
+
+.gc-foot {
+  margin-top: auto; padding-top: 10px; width: 100%;
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 6px;
+  min-height: 30px;
+}
+.gc-voters { display: flex; flex-wrap: wrap; gap: 3px; }
+.gc-voter {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 6px 2px 3px; border-radius: 999px;
+  background: rgba(23, 17, 12, .78);
+  color: #F4EFE3;
+  font: 600 10px var(--sans);
+  animation: gc-pop .4s var(--ease-out-back) both;
+}
+.gc-voter svg { width: 12px; height: 14px; color: var(--tok); --gc-eye: #17110C; }
+.gc-voter b { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+@keyframes gc-pop { from { transform: scale(.3) translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+.gc-count { font: 700 12px var(--serif); color: var(--ink); white-space: nowrap; }
+
+/* Thẻ đã có phiếu: sáng viền */
+.gc-card.voted { border-color: var(--ev); }
+/* Thẻ máy này vừa bầu: nhấc lên, quầng sáng, đóng dấu */
+.gc-layer.show .gc-card.mine {
+  transform: translateY(-8px) rotate(0deg);
+  box-shadow: var(--shadow-lg), 0 0 0 2px rgba(var(--gc-glow-rgb), .9), 0 0 30px rgba(var(--gc-glow-rgb), .55);
+}
+/* Dấu đóng ngang hàng biểu tượng, lệch phải: giữa thẻ thì che tên và dòng luật */
+.gc-stamp {
+  position: absolute; top: 38px; right: 6px;
+  padding: 2px 7px;
+  font-family: var(--display); font-size: 11px; letter-spacing: .16em;
+  color: #A3241B; border: 2px solid #A3241B; border-radius: 4px;
+  background: rgba(255, 250, 240, .4);
+  transform: rotate(14deg) scale(1.8);
+  opacity: 0; pointer-events: none;
+  mix-blend-mode: multiply;
+  transition: opacity .18s, transform .32s var(--ease-out-back);
+}
+.gc-card.mine .gc-stamp { opacity: .9; transform: rotate(14deg) scale(1); }
+/* Có thẻ đã bầu thì hai thẻ kia lùi lại một chút */
+.gc-cards:has(.mine) .gc-card:not(.mine) { filter: saturate(.6) brightness(.9); }
+
+/* --- thanh thời gian --- */
+.gc-time { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.gc-bar {
+  flex: 1; height: 7px; border-radius: 99px; overflow: hidden;
+  background: rgba(0, 0, 0, .35);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .5), 0 0 0 1px rgba(var(--gc-glow-rgb), .14);
+}
+.gc-bar i {
+  display: block; height: 100%;
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--gold), var(--gc-glow));
+  box-shadow: 0 0 10px rgba(var(--gc-glow-rgb), .7);
+  animation-name: gc-drain; animation-timing-function: linear; animation-fill-mode: both;
+}
+@keyframes gc-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.gc-layer.late .gc-bar i { background: linear-gradient(90deg, #B3322A, #E66A4F); box-shadow: 0 0 10px rgba(230, 106, 79, .7); }
+.gc-sec {
+  flex: none; min-width: 28px; text-align: right;
+  font: 700 13px var(--serif); font-variant-numeric: tabular-nums; color: var(--gold-pale);
+}
+.gc-layer.late .gc-sec { color: #FF8A7A; }
+
+/* Dòng ghi trên mặt thẻ Thời Cuộc khi thẻ ra theo phiếu hồn ma */
+.ev-ghost {
+  margin-top: 8px; padding: 4px 10px; display: inline-block;
+  border-radius: 999px;
+  font-family: var(--display); font-size: 10.5px; letter-spacing: .14em;
+  color: var(--ink); background: rgba(var(--gc-glow-rgb), .55);
+  border: 1px solid rgba(23, 17, 12, .2);
+}
+
+/* Màn ngang thấp (điện thoại): bỏ dòng luật, thu thẻ */
+@media (max-height: 520px) {
+  .gc-panel { padding: 10px 14px 10px; }
+  .gc-head { margin-bottom: 8px; gap: 10px; }
+  .gc-ghost { width: 30px; height: 34px; }
+  .gc-name { font-size: 16px; }
+  .gc-sub { display: none; }
+  .gc-card { min-height: 0; padding: 10px 8px 8px; }
+  .gc-sigil { font-size: 22px; margin-bottom: 3px; }
+  .gc-title { font-size: 12.5px; margin-bottom: 4px; }
+  .gc-lines { display: none; }
+  .gc-time { margin-top: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc-ghost, .gc-card::before { animation: none; }
+}

@@ -413,3 +413,11 @@
   --gs-seg-ink: var(--x-ice-ink);
 }
 :root[data-theme="christmas"] .modal-edge-tab { border-color: #FFFFFF; }
+
+/* Hội Đồng Hồn Ma: ánh hồn ma xanh băng, khung xanh đêm Noel */
+:root[data-theme="christmas"] {
+  --gc-glow: #CDEBFF;
+  --gc-glow-rgb: 205, 235, 255;
+}
+:root[data-theme="christmas"] .gc-panel { background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(205, 235, 255, .2), transparent 65%), var(--x-panel); }
+:root[data-theme="christmas"] .gc-stamp { color: #B3262E; border-color: #B3262E; }

@@ -14,7 +14,7 @@
  *      cờ đứng im mười phút.
  */
 import { BOARD, GROUPS, GROUP_TILES, money, tileLabel, tileShortLabel } from '../data/board.js';
-import { drawEvent, planEvent, autoRaise } from '../core/events.js';
+import { drawEvent, planEvent, autoRaise, ghostPick, ghostTally } from '../core/events.js';
 import { houseImmune, deedHolds } from '../core/skills.js';
 import { handoff } from '../ui/modal.js';
 import {
@@ -76,8 +76,15 @@ export class EventRunner {
    */
   async run() {
     const st = this.state;
-    const card = drawEvent(st);
-    const plan = card ? planEvent(st, card) : null;
+    /* Hồn ma bầu trước: trúng phần phiếu bầu thì ra thẻ ấy, trượt (hay thẻ
+       được bầu lập không ra kế hoạch) thì rút chồng bài như thường. */
+    let card = ghostPick(st);
+    let plan = card ? planEvent(st, card) : null;
+    const votes = plan ? (ghostTally(st.ghostVote)[card.id] ?? 0) : 0;
+    if (!plan) {
+      card = drawEvent(st);
+      plan = card ? planEvent(st, card) : null;
+    }
 
     // Không thẻ nào hợp cảnh (bàn chưa ai xây nhà, chưa ai cắm đất…): xả bớt
     // áp lực rồi thôi, đừng nổ một sự kiện rỗng.
@@ -87,9 +94,11 @@ export class EventRunner {
     st.eventTally = { ...st.eventTally, [card.id]: (st.eventTally?.[card.id] ?? 0) + 1 };
     st.pressure = 0;
     st.dryTurn = false;   // sự kiện chính là "có chuyện xảy ra"
+    st.ghostVote = null;  // chu kỳ mới, phiên họp mới
     this.g.sync();
 
-    const detail = this.detailOf(card, plan);
+    const detail = this.detailOf(card, plan) + (votes
+      ? `<div class="ev-ghost">Hội Đồng Hồn Ma bầu thẻ này · ${votes} phiếu</div>` : '');
     /* Tiếng bóc thẻ do băng chuyền phát lúc mặt thẻ hiện ra, không phát ở đây
        nữa. Seed gửi kèm để máy ngồi xem dựng đúng dải ấy và dừng đúng ô ấy.
 

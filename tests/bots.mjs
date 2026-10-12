@@ -10,7 +10,8 @@
  *   4. Không có màn "Chuyền máy" (bàn chỉ một người thật).
  *   5. Bot Khó dùng thẻ cưỡng chế mua trong túi để gom đủ bộ.
  *   6. Bàn hai người thật + một bot: màn chuyền máy giữa lượt bot không bị
- *      bot đóng hộ, chuyền sang ghế máy thì bỏ qua, nút cây kỹ năng hỏi ai học.
+ *      bot đóng hộ, chuyền sang ghế máy thì bỏ qua, nút cây kỹ năng hỏi ai học,
+ *      ghế máy phá sản không vào Hội Đồng Hồn Ma.
  *
  *   node tests/bots.mjs        (cần dev server ở cổng 5178)
  */
@@ -260,6 +261,17 @@ if (inBotTurn) {
   await page.keyboard.press('Escape');
   await page.locator('.st-close').click().catch(() => {});
 }
+
+// Hội Đồng Hồn Ma: ghế máy phá sản không có ai ngồi bấm, không được vào hội đồng
+ok(await page.evaluate(() => {
+  const c = window.__monopoly.controller;
+  const p = c.state.players[2];
+  const was = p.bankrupt;
+  p.bankrupt = true;
+  const empty = c.ghosts.localGhosts().length === 0 && c.ghosts.presentGhosts().length === 0;
+  p.bankrupt = was;
+  return empty;
+}), 'ghế máy phá sản không nhận hộp bầu của Hội Đồng Hồn Ma');
 
 ok(errors.length === 0, `không lỗi trang${errors.length ? ':\n' + errors.join('\n') : ''}`);
 

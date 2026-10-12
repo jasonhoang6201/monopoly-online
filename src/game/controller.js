@@ -20,6 +20,7 @@ import {
 import { cardOf, CARD_KINDS, cardName, cardEffect, DECKS } from '../data/cards.js';
 import { inventoryModal } from '../ui/inventory.js';
 import { EventRunner } from './eventRunner.js';
+import { GhostCouncil } from './ghostCouncil.js';
 import { SkillPlay } from './skillPlay.js';
 import { Bot } from './bot.js';
 import { has, offSpent, grantLapPoint, deedHolds } from '../core/skills.js';
@@ -95,6 +96,7 @@ export class Game {
     this.cardChain = 0;
     /** Người thi hành thẻ Thời Cuộc — xem `game/eventRunner.js`. */
     this.events = new EventRunner(this);
+    this.ghosts = new GhostCouncil(this);
     /** Kỹ năng trong lượt chơi — xem `game/skillPlay.js`. */
     this.skills = new SkillPlay(this);
     /** Ghế giao cho máy chơi (bản một máy) — xem `game/bot.js`. */
@@ -675,6 +677,10 @@ export class Game {
     if (name === 'meme') { this.memes.receive(data.seat, data.id); return; }
     // Học kỹ năng ngoài lượt: chỉ máy cầm lái xử lý, không phải hoạt cảnh
     if (name === 'learn') { this.skills.onLearnMsg(data); return; }
+    /* Hội Đồng Hồn Ma: hộp bầu và lá phiếu không phải hoạt cảnh, vào ngay chứ
+       không xếp hàng sau xí ngầu — hộp chỉ đứng mười giây. */
+    if (name === 'ghostcall') { this.ghosts.onCall(data); return; }
+    if (name === 'ghostvote') { this.ghosts.onVote(data); return; }
     // Trọng tài nhờ phát ván cho người vừa vào lại — xem `room.onNeedSync`
     if (name === 'needsync') { if (this.isDriver()) this.sync(); return; }
     const sc = this.scene;
@@ -1366,10 +1372,13 @@ export class Game {
     offSpent(st.current);
     await this.expireMini(st.current);
 
-    if (eventDue(st)) {
+    const fired = eventDue(st);
+    if (fired) {
       await this.events.run();
       if (this.checkGameOver()) { this.sync(); return; }
     }
+    // Hồn ma bầu thẻ cho lần nổ kế tiếp — không chờ, lượt sau vẫn bắt đầu ngay
+    this.ghosts.maybeOpen(fired);
 
     // Một dòng mỗi lượt cho số liệu cân bằng: tiền mặt cả bàn lúc hết lượt
     track('turn', { seat: st.turn, turn_no: st.turnNo, round: st.round, cash: st.players.map((p) => p.money) });
@@ -3173,6 +3182,7 @@ export class Game {
     // Máy cầm lái gọi từ `checkGameOver`, máy khác gọi khi ảnh chụp báo hết ván
     if (this.finishing) return;
     this.finishing = true;
+    this.ghosts.close();
     const winner = win.player;
     const why = {
       last: 'là người cuối cùng trụ lại',
