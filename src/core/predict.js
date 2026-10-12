@@ -7,16 +7,13 @@
  *     (tính cả đổ đôi được lắc tiếp, đổ đôi ba lần vào tù, ô Vào Tù).
  *   - `LONG_RUN`          — tần suất một quân đứng ở mỗi ô về lâu dài (xích
  *     Markov). Ô cam, ô đỏ đông khách hơn ô xanh đậm; công ích vắng.
- *   - `payOutlook(st, p)` — phân bố số tiền chính mình phải trả ở cú lắc tới:
- *     kỳ vọng và phân vị, để giữ đúng chừng ấy tiền mặt chứ không đoán mò.
  *   - `hitChance(st, id, seat)` — xác suất ít nhất một đối thủ đáp vào ô `id`
  *     ở lượt tới của họ: xây nhà đúng chỗ người ta sắp bước vào.
  *
  * Thẻ Cơ Hội / Khí Vận dắt quân đi thì bỏ qua: bot chỉ cần so các ô với nhau,
  * không cần con số tuyệt đối.
  */
-import { BOARD, GOTO_JAIL_TILE, JAIL_TILE } from '../data/board.js';
-import { payerRent } from './skills.js';
+import { GOTO_JAIL_TILE, JAIL_TILE } from '../data/board.js';
 
 /** P(tổng = s) và P(đôi | tổng = s) của hai con xí ngầu. */
 const SUMS = (() => {
@@ -94,38 +91,6 @@ export const LONG_RUN = (() => {
   const mean = v.reduce((a, b) => a + b, 0) / 40;
   return v.map((x) => x / mean);
 })();
-
-/** Số tiền phải trả khi dừng ở ô `id` với tổng xí ngầu `s`. */
-function costAt(st, p, id, s) {
-  const t = BOARD[id];
-  if (t.type === 'tax') return t.tax_amount ?? 0;
-  if (!t.ownable) return 0;
-  const o = st.owner.get(id);
-  if (o === undefined || o === p.id) return 0;
-  return payerRent(st, p, id, st.rentFor(id, s));
-}
-
-/**
- * Phân bố tiền phải trả trong lượt tới của chính `p`.
- * @returns {{mean:number, q:(f:number)=>number, worst:number}}
- *   `q(0.85)` = số tiền đủ trả trong 85% số trường hợp
- */
-export function payOutlook(st, p) {
-  const rows = [];
-  for (const [id, e] of nextLanding(p.pos, p.inJail)) {
-    for (const [s, w] of e.sums) rows.push({ c: costAt(st, p, id, s), w });
-  }
-  const mean = rows.reduce((n, r) => n + r.c * r.w, 0);
-  const sorted = rows.filter((r) => r.c > 0).sort((a, b) => a.c - b.c);
-  const free = 1 - sorted.reduce((n, r) => n + r.w, 0);
-  const q = (f) => {
-    let acc = Math.max(0, free);
-    if (acc >= f) return 0;
-    for (const r of sorted) { acc += r.w; if (acc >= f) return r.c; }
-    return sorted.length ? sorted[sorted.length - 1].c : 0;
-  };
-  return { mean, q, worst: sorted.length ? sorted[sorted.length - 1].c : 0 };
-}
 
 /** Xác suất ít nhất một đối thủ của `seat` dừng ở ô `id` trong lượt tới của họ. */
 export function hitChance(st, id, seat) {

@@ -36,7 +36,7 @@ src/
   core/cards.js          luật thẻ giữ trong túi
   core/raisePlan.js      gợi ý xoay tiền khi thiếu nợ
   core/botPolicy.js      luật quyết định của bot ba cấp Dễ / Vừa / Khó
-  core/predict.js        dự đoán xí ngầu cho bot: ô sắp đáp, tần suất ô, tiền sắp mất
+  core/predict.js        dự đoán xí ngầu cho bot: ô sắp đáp, tần suất ô, ai sắp bước vào ô nào
   game/controller.js     điều phối lượt chơi, nối luật ↔ hình ảnh ↔ giao diện
   game/eventRunner.js    thi hành thẻ Thời Cuộc, hỏi nhiều người cùng lúc
   game/skillPlay.js      phần kỹ năng phải hỏi người chơi hoặc có hoạt cảnh

@@ -19,14 +19,15 @@
  * Mô phỏng chỉ ra hai điều trái trực giác, nên số của Khó mới như dưới đây:
  * lối học kỹ năng quyết định gần hết sức mạnh (Khó mà học như Vừa thì tụt từ
  * ~49% xuống ~25% khi đấu 3 bot Vừa), và giữ tiền mặt phòng thân — kể cả giữ
- * theo dự đoán cú lắc tới — thua đem hết tiền đi xây (`riskQ` 0.9: 45%, 0: 49%).
+ * đủ trả cú lắc tới ở phân vị 0.9 theo dự đoán — thua đem hết tiền đi xây
+ * (45% so với 49%), nên `buildReserve` của Khó là 0.
  */
 import { BOARD, GROUP_TILES, JAIL_FINE, JAIL_TILE } from '../data/board.js';
 import { SKILLS } from '../data/skills.js';
 import { cardOf } from '../data/cards.js';
 import { canLearn, levelOf } from './skills.js';
 import { cardTargets, cardType, demolishGroups, seizePrice, useReason } from './cards.js';
-import { LONG_RUN, hitChance, payOutlook, nextLanding } from './predict.js';
+import { LONG_RUN, hitChance, nextLanding } from './predict.js';
 
 /**
  * @typedef {object} Level
@@ -52,9 +53,7 @@ import { LONG_RUN, hitChance, payOutlook, nextLanding } from './predict.js';
  * @property {string[][]} [paths] lối học cho `skills: 'path'` (mặc định `HARD_PATHS`)
  * @property {0|1|2} predict dùng dự đoán xí ngầu (`core/predict.js`) tới đâu:
  *   0 không, 1 tần suất dài hạn của từng ô, 2 thêm lượt tới — ai sắp bước vào
- *   ô nào, cú lắc tới của mình có thể mất bao nhiêu
- * @property {number} riskQ (predict 2) giữ thêm đủ tiền trả cú lắc tới ở phân vị
- *   này; 0 là không giữ
+ *   ô nào, ra tù đi một lượt kỳ vọng mất bao nhiêu tiền thuê
  */
 
 /** @type {Record<string, Level>} */
@@ -69,7 +68,7 @@ export const LEVELS = {
     tradeMargin: -0.1, tradeGuard: 1,
     propose: 0,
     skills: 'branch',
-    predict: 0, riskQ: 0,
+    predict: 0,
   },
   normal: {
     key: 'normal', name: 'Vừa',
@@ -81,7 +80,7 @@ export const LEVELS = {
     tradeMargin: 0.1, tradeGuard: 2,
     propose: 0,
     skills: 'path', paths: null,
-    predict: 1, riskQ: 0,
+    predict: 1,
   },
   hard: {
     key: 'hard', name: 'Khó',
@@ -93,7 +92,7 @@ export const LEVELS = {
     tradeMargin: 0.2, tradeGuard: 3,
     propose: 1.5,
     skills: 'path',
-    predict: 2, riskQ: 0,
+    predict: 2,
   },
 };
 
@@ -103,21 +102,6 @@ export const levelOfKey = (key) => LEVELS[key] ?? LEVELS.normal;
 /* ================================================================
    Đọc thế cờ
    ================================================================ */
-
-/** Các đối thủ còn trong ván. */
-const rivals = (st, seat) => st.players.filter((q) => !q.bankrupt && q.id !== seat);
-
-/** Tiền thuê đắt nhất mình có thể phải trả lúc này — thước đo "bàn nguy hiểm cỡ nào". */
-export function danger(st, seat) {
-  let max = 0;
-  for (const q of rivals(st, seat)) {
-    for (const id of st.propertiesOf(q.id)) {
-      if (st.isMortgaged(id)) continue;
-      max = Math.max(max, st.rentFor(id, 7));
-    }
-  }
-  return max;
-}
 
 /** Số ô có thể mua còn nằm ở ngân hàng — đầu ván nhiều, cuối ván cạn. */
 const unowned = (st) => BOARD.filter((t) => t.price && st.owner.get(t.id) === undefined).length;
@@ -144,17 +128,6 @@ const inFullSet = (st, seat, id) => {
 };
 
 /**
- * Dự trữ tiền mặt: mức cố định của cấp, cộng (khi `riskQ` > 0) đủ trả cú lắc
- * tới ở phân vị ấy theo dự đoán — đứng ngay trước dãy khách sạn thì giữ
- * nhiều, vừa qua khỏi thì tiêu mạnh tay. Mô phỏng hiện cho thấy không giữ
- * thêm mới mạnh nhất, nên cả ba cấp đặt 0; để lại cửa này cho lúc luật đổi.
- */
-function reserveFor(st, p, lv, base) {
-  if (lv.predict >= 2 && lv.riskQ > 0) return Math.min(600, base + payOutlook(st, p).q(lv.riskQ));
-  return base;
-}
-
-/**
  * Ô này đáng tiền cỡ nào theo dự đoán: 1 là ô bình thường. Cấp 1 nhìn tần
  * suất dài hạn (ô cam đông khách hơn ô xanh đậm); cấp 2 cộng thêm xác suất
  * đối thủ bước vào ngay lượt tới.
@@ -177,7 +150,7 @@ export function wantBuy(st, p, tileId, lv, rand = Math.random) {
   const v = lv.setAware ? setValue(st, p.id, tileId) : 0;
   if (v < 1 && rand() > lv.buyChance) return false;
   // Đầu ván đất là thứ hiếm nhất — Khó vét sạch tiền mua
-  let reserve = lv.shrewd && unowned(st) >= 12 ? 0 : reserveFor(st, p, lv, lv.buyReserve);
+  let reserve = lv.shrewd && unowned(st) >= 12 ? 0 : lv.buyReserve;
   if (v >= 2) reserve = 0;
   else if (v >= 1) reserve = Math.min(reserve, 40);
   return p.money - t.price >= reserve;
@@ -189,7 +162,7 @@ export function bidFor(st, p, tileId, lv, rand = Math.random) {
   const v = lv.setAware ? setValue(st, p.id, tileId) : 0;
   const [lo, hi] = lv.bid;
   const mult = (lo + rand() * (hi - lo)) + (v >= 1 ? lv.bidSet * (v >= 2 ? 1 : 0.6) : 0);
-  const cap = p.money - reserveFor(st, p, lv, lv.buyReserve);
+  const cap = p.money - lv.buyReserve;
   return Math.max(0, Math.floor(Math.min(cap, t.price * mult) / 5) * 5);
 }
 
@@ -205,7 +178,7 @@ export function bidFor(st, p, tileId, lv, rand = Math.random) {
  */
 export function manage(st, p, lv, rand = Math.random) {
   const acts = [];
-  const keep = reserveFor(st, p, lv, lv.buildReserve);
+  const keep = lv.buildReserve;
 
   // Chuộc trước: ô trong bộ đủ màu chuộc xong là xây được, nên Khó chuộc chúng trước tiên
   const mort = st.propertiesOf(p.id).filter((id) => st.isMortgaged(id))
@@ -285,8 +258,7 @@ export function jailChoice(st, p, lv, free = false) {
      lì trong tù — mỗi lượt ngồi là một lượt khỏi lo đáp vào khách sạn. "Dày"
      đo bằng dự đoán: ra tù đi một lượt kỳ vọng mất bao nhiêu tiền thuê. Vé ra
      tù giữ lại cho lúc cần. */
-  const out = lv.predict >= 2 ? expectedRent(st, p, JAIL_TILE) : 0;
-  const hot = lv.predict >= 2 ? out >= 45 : danger(st, p.id) >= 250 || houses >= 10;
+  const hot = expectedRent(st, p, JAIL_TILE) >= 45;
   if (hot && unowned(st) < 6) return 'roll';
   if (card) return 'card';
   return free || p.money >= JAIL_FINE + 60 ? 'pay' : 'roll';
