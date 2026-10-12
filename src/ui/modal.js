@@ -342,6 +342,9 @@ export function handoff(playerName, cssColor, note) {
   return openModal({
     eyebrow: 'CHUYỀN MÁY',
     title: 'Đổi người chơi',
+    /* Màn chuyền máy luôn dành cho người thật: hiện giữa lượt bot (người thật
+       thiếu tiền, nhận đất thế chấp) thì bot cầm lái không được đóng hộ. */
+    manual: true,
     body: `<div class="handoff">
         <div class="handoff-eye">🤝</div>
         <div class="handoff-name" style="color:${cssColor}">${playerName}</div>

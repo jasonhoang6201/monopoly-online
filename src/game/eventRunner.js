@@ -875,8 +875,16 @@ export class EventRunner {
     if (g.bot.is(q.seat)) return g.bot.answer(q);
 
     if (!g.net) {
-      // Lượt của bot mà hỏi tới người: hộp này là của người, bot đừng đóng hộ
-      if (g.bot.is(st.turn)) return g.bot.human(() => q.local());
+      /* Lượt của bot mà hỏi tới người: hộp này là của người, bot đừng đóng hộ.
+         Bàn nhiều người thật thì vẫn chuyền máy cho đúng người (giá đấu kín);
+         bàn một người thật thì `handoff` tự bỏ qua. */
+      if (g.bot.is(st.turn)) {
+        return g.bot.human(async () => {
+          await handoff(st.players[q.seat].name, st.players[q.seat].token.css,
+            `${st.players[q.seat].name}: ${q.note}. Chuyền máy cho họ quyết định.`);
+          return q.local();
+        });
+      }
       if (q.seat !== st.turn) {
         await handoff(st.players[q.seat].name, st.players[q.seat].token.css,
           `${st.players[q.seat].name}: ${q.note}. Chuyền máy cho họ quyết định.`);

@@ -23,7 +23,9 @@
  */
 import { BOARD, GROUP_TILES, JAIL_FINE, JAIL_TILE } from '../data/board.js';
 import { SKILLS } from '../data/skills.js';
+import { cardOf } from '../data/cards.js';
 import { canLearn, levelOf } from './skills.js';
+import { cardTargets, cardType, demolishGroups, seizePrice, useReason } from './cards.js';
 import { LONG_RUN, hitChance, payOutlook, nextLanding } from './predict.js';
 
 /**
@@ -358,6 +360,63 @@ export function proposeTrade(st, p, lv, tried = new Map()) {
     if (p.money - price < 120) continue;
     tried.set(id, st.turnNo);
     return { to: q, give: [], giveMoney: price, get: [id], getMoney: 0 };
+  }
+  return null;
+}
+
+/* ================================================================
+   Thẻ trong túi
+   ================================================================ */
+
+/**
+ * Lôi tấm nào trong túi ra dùng lúc này, nhắm vào đâu — hoặc null. Vé ra tù
+ * không xét ở đây: `jailChoice` lo.
+ *
+ * Cấp có `setAware` chỉ dùng khi thẻ đổi được thế bộ màu: cưỡng chế lô làm
+ * mình đủ bộ hay chặn bộ người khác, giải toả lô mình cần rồi tranh đấu giá,
+ * dỡ nhà ở khu đang thu tiền thuê đắt nhất. Dễ thì có mục tiêu là dùng, nhắm
+ * bừa.
+ *
+ * @returns {?{at:number, target:(number|string|null)}} `at` là chỉ số trong
+ *   túi; `target` là ô (cưỡng chế, giải toả), khoá khu (dỡ nhà), hoặc null
+ *   (giải toả ngẫu nhiên không hỏi mục tiêu)
+ */
+export function cardPlay(st, p, lv, rand = Math.random) {
+  const pickBy = (ids, score) => ids
+    .map((id) => ({ id, s: score(id) }))
+    .sort((a, b) => b.s - a.s)[0] ?? null;
+  const any = (ids) => (ids.length ? ids[Math.floor(rand() * ids.length)] : null);
+
+  for (let at = 0; at < p.cards.length; at++) {
+    const card = cardOf(p.cards[at]);
+    if (!card || !useReason(st, card, p.id).ok) continue;
+    const type = cardType(card);
+    const foreign = cardTargets(st, card, p.id).filter((id) => st.owner.get(id) !== p.id);
+
+    if (type === 'seize') {
+      // Trả tiền đền xong vẫn phải còn mức dự trữ như lúc mua đất
+      const ids = foreign.filter((id) => p.money - seizePrice(id) >= lv.buyReserve);
+      if (!lv.setAware) { const id = any(ids); if (id != null) return { at, target: id }; continue; }
+      const best = pickBy(ids, (id) => setValue(st, p.id, id) * 1000 + BOARD[id].price);
+      if (best && setValue(st, p.id, best.id) >= 0.5) return { at, target: best.id };
+    } else if (type === 'demolish') {
+      const groups = demolishGroups(st, card, p.id);
+      if (!lv.setAware) { const g = any(groups); if (g) return { at, target: g }; continue; }
+      const hits = new Set(cardTargets(st, card, p.id));
+      const rentIn = (g) => GROUP_TILES[g].filter((id) => hits.has(id))
+        .reduce((n, id) => n + st.rentFor(id, 7) * traffic(st, p.id, id, lv), 0);
+      const best = pickBy(groups, rentIn);
+      if (best) return { at, target: best.id };
+    } else if (type === 'resume') {
+      if (!lv.setAware) { const id = any(foreign); if (id != null) return { at, target: id }; continue; }
+      // Giải toả rồi mới đấu giá: chỉ đáng khi lô ấy làm mình đủ bộ hoặc chặn bộ
+      const best = pickBy(foreign, (id) => setValue(st, p.id, id));
+      if (best && best.s >= 1) return { at, target: best.id };
+    } else if (type === 'resume-random') {
+      // Bốc thăm cả lô của mình: đa số mục tiêu là đất người khác mới đáng bốc
+      const all = cardTargets(st, card, p.id);
+      if (!lv.setAware || foreign.length * 2 >= all.length) return { at, target: null };
+    }
   }
   return null;
 }

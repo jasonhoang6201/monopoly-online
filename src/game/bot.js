@@ -23,7 +23,7 @@
 import { BOARD, tileLabel } from '../data/board.js';
 import { has, skillById, levelOf, learnSkill } from '../core/skills.js';
 import * as BP from '../core/botPolicy.js';
-import { dismissTopModal, setHandoffSkip } from '../ui/modal.js';
+import { dismissTopModal, handoff, openModal, setHandoffSkip } from '../ui/modal.js';
 import { describe, tradeReviewModal } from '../ui/modals.js';
 import { litTiles } from '../ui/tilePicker.js';
 
@@ -53,7 +53,10 @@ export class Bot {
     this.queued = false;
     /** Người thật ngồi trước màn hình lúc này — xem `homeSeat`. */
     this.home = null;
-    this.pilot = setInterval(() => this.tick(), 400);
+    /** Ô / khu bot đã chọn cho tấm thẻ đang lôi ra — `answer` trả khi được hỏi. */
+    this.aim = null;
+    /** Nhịp canh, chỉ chạy khi ván có ghế máy. */
+    this.pilot = null;
   }
 
   get st() { return this.g.state; }
@@ -69,12 +72,21 @@ export class Bot {
     this.humanAsks = 0;
     this.queued = false;
     this.home = null;
+    this.aim = null;
+    clearInterval(this.pilot);
+    this.pilot = this.active ? setInterval(() => this.tick(), 400) : null;
     const st = this.st;
-    const botNames = new Set(st.players.filter((p) => this.levels.has(p.id)).map((p) => p.name));
+    const named = (bot) => new Set(st.players.filter((p) => this.levels.has(p.id) === bot).map((p) => p.name));
+    const botNames = named(true);
+    const humanNames = named(false);
     const humans = st.players.length - this.levels.size;
     /* Chuyền máy chỉ có nghĩa giữa hai người thật cùng ngồi quanh máy: sang ghế
-       máy thì không ai cầm, còn bàn một người thật thì chẳng có ai để chuyền. */
-    setHandoffSkip(this.active ? (name) => humans <= 1 || botNames.has(name) : null);
+       máy thì không ai cầm, còn bàn một người thật thì chẳng có ai để chuyền.
+       `handoff` chỉ biết tên, nên tên mà người thật cũng mang thì vẫn chuyền —
+       thừa một màn chuyền máy còn hơn bỏ mất màn của người thật. */
+    setHandoffSkip(this.active
+      ? (name) => humans <= 1 || (botNames.has(name) && !humanNames.has(name))
+      : null);
   }
 
   /** Ván này có ghế máy không. Bản online không có bot. */
@@ -98,6 +110,32 @@ export class Bot {
       this.home = st.players.find((p) => !this.is(p.id) && !p.bankrupt)?.id ?? -1;
     }
     return this.home;
+  }
+
+  /** Người thật còn trong ván. */
+  humans() {
+    return this.st.players.filter((p) => !this.is(p.id) && !p.bankrupt);
+  }
+
+  /**
+   * Ai học kỹ năng khi bấm nút cây kỹ năng giữa lượt bot. Bàn một người thật
+   * thì là người ấy; nhiều người thì không biết ai đang cầm máy, nên hỏi.
+   * @returns {Promise<number>} ghế, −1 nếu bỏ ngang
+   */
+  async pickHuman() {
+    const list = this.humans();
+    if (list.length <= 1) return list[0]?.id ?? -1;
+    const v = await openModal({
+      manual: true,   // người tự mở — bot cầm lái không đóng hộ
+      eyebrow: 'CÂY KỸ NĂNG',
+      title: 'Ai học kỹ năng?',
+      buttons: [
+        ...list.map((p) => ({ label: p.name, value: p.id, cls: 'btn-gold' })),
+        { label: 'Thôi', value: -1, cls: 'btn-ghost' },
+      ],
+      escValue: -1,
+    });
+    return typeof v === 'number' ? v : -1;
   }
 
   /** Bot đang cầm lái và không chờ người nào trả lời. */
@@ -155,6 +193,9 @@ export class Bot {
       return g.rollInJail();
     }
 
+    // Thẻ trước khi xây: cưỡng chế cần tiền mặt, mà đủ bộ rồi mới có chỗ xây
+    if (!st.rolled) await this.playCards(p);
+    if (st.over || p.bankrupt) return;
     await this.manage(p);
     if (!st.rolled) await this.propose(p);
     if (st.over || p.bankrupt) return;
@@ -199,6 +240,24 @@ export class Bot {
   }
 
   /**
+   * Lôi thẻ trong túi ra dùng theo `cardPlay` (core/botPolicy.js). Đi đúng
+   * đường nút "Túi thẻ" của người: `useHeldCard` hỏi mục tiêu qua
+   * `events.askOne`, `answer` trả về đúng ô / khu đã chọn ở `aim`.
+   */
+  async playCards(p) {
+    const st = this.st;
+    for (let n = 0; n < 3 && !st.over && !p.bankrupt; n++) {
+      const play = BP.cardPlay(st, p, this.lv(p.id));
+      if (!play) return;
+      const before = p.cards.length;
+      this.aim = { seat: p.id, target: play.target };
+      try { await this.g.useHeldCard(play.at); } finally { this.aim = null; }
+      // Thẻ không rời túi (mục tiêu vừa hết hợp lệ) thì thôi, kẻo lặp lại mãi
+      if (p.cards.length >= before) return;
+    }
+  }
+
+  /**
    * Bot hỏi mua ô còn thiếu của bộ (cấp có `propose`). Người thật nhận hộp
    * duyệt y như đề nghị của người khác; bot khác duyệt bằng luật của nó.
    */
@@ -215,7 +274,11 @@ export class Bot {
       { kind: 'trade', ms: 3600 });
     const accepted = this.is(B.id)
       ? await this.reviewTrade(offer, B.id, p.id)
-      : await this.human(() => litTiles(g.scene, offer.get, () => tradeReviewModal(st, offer)));
+      : await this.human(async () => {
+        // Bàn nhiều người thật: chuyền máy cho người được hỏi (một người thì `handoff` tự bỏ qua)
+        await handoff(B.name, B.token.css, `${p.name} gửi một đề nghị giao dịch. Chuyền máy cho ${B.name} xem xét.`);
+        return litTiles(g.scene, offer.get, () => tradeReviewModal(st, offer));
+      });
     // Soát lại trước khi chốt: hộp duyệt có thể nằm đó khá lâu
     if (!accepted || p.bankrupt || B.bankrupt || p.money < offer.giveMoney
       || offer.get.some((id) => st.owner.get(id) !== B.id)) {
@@ -270,6 +333,10 @@ export class Bot {
     const lots = q.data?.lots ?? [];
     // Chi tiền cứu nhà khi còn dư sau đó — Dễ giữ tiền chặt tay hơn
     const spare = (key) => p.money - lots.reduce((s, l) => s + (l[key] ?? 0), 0) >= lv.buyReserve + 50;
+    // Mục tiêu cho tấm thẻ bot vừa lôi ra (`playCards`)
+    if (this.aim?.seat === q.seat && (q.name === 'ev-pick' || q.name === 'ev-group')) {
+      return this.aim.target;
+    }
     switch (q.name) {
       case 'ev-brace': return spare('brace') ? 'brace' : null;
       case 'ev-fire':
