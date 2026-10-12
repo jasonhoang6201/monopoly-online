@@ -49,6 +49,7 @@ import { MemeDeck } from '../ui/memes.js';
 import { skillIcon } from '../ui/skillIcons.js';
 import { fateCase, eventCase, newSeed } from '../ui/caseOpen.js';
 import { setTheme } from '../theme/theme.js';
+import { noteRent, sampleMoney } from '../core/history.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -1667,6 +1668,7 @@ export class Game {
       `<b>${p.name}</b> trả <span class="down">${money(rent)}</span> cho <b>${owner.name}</b>
        tại <b>${tileLabel(t.id)}</b>${this.skills.rentNote(p, t.id, bill)}.`, { kind: 'bad' });
     if (await this.payPlayer(p.id, ownerId, rent)) {
+      noteRent(st, p.id, ownerId, rent, t.id);
       this.skills.rentPaid(owner, bill);
       await this.skills.stakeShare(owner, rent);
     }
@@ -3151,6 +3153,8 @@ export class Game {
     if (!w) return false;
     st.over = true;
     st.endedAt = Date.now();
+    // Mốc cho lượt cuối đang dở, để biểu đồ thống kê có điểm kết
+    sampleMoney(st, st.turnNo + 1);
     if (!this.bot.active) this.analytics.gameEnd(st, w);
     this.clock = null;
     this.hud.setClock(null);

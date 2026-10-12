@@ -2,7 +2,10 @@
  * net/analytics.js dưới Node: cổng chặn bot, gom batch, hàng đợi và gửi lại.
  * Mọi thứ ngoài (fetch, localStorage, location, navigator) đều tiêm giả.
  *
- *   node tests/analytics.mjs
+ *   node --experimental-websocket tests/analytics.mjs
+ *
+ * Cờ là cho Node 20: supabase-js ≥ 2.117 dựng Realtime ngay lúc tạo client và
+ * đòi `WebSocket` có sẵn trong Node, Node 22 trở lên mới bật mặc định.
  */
 import { createServer } from 'vite';
 

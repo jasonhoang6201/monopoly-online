@@ -23,6 +23,7 @@ import { paintSkeletonToken } from '../render/pieces.js';
 import { raisePlan } from '../core/raisePlan.js';
 import { has, param, skillById, ownerRentParts, ownerRentFlat, lateFee } from '../core/skills.js';
 import { modLabel } from '../core/events.js';
+import { statsModal } from './statsModal.js';
 import { LEVELS, LEVEL_KEYS } from '../core/botPolicy.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => (
@@ -1343,6 +1344,14 @@ export function bankruptModal(state, playerId, forced, owed, raisable) {
 }
 
 
+/** Biểu tượng đường biểu đồ cho nút thống kê ở mép màn hạ màn. */
+const STATS_ICON = `<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+  <path d="M3 16.5h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M3.5 12.5 7.5 8l3 3 5.5-6.5" fill="none" stroke="currentColor" stroke-width="1.8"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="16" cy="4.5" r="1.7" fill="currentColor"/>
+</svg>`;
+
 export function winnerModal(state, winner) {
   const rank = finalRanking(state, winner);
   // Halloween: thay vương miện bằng bộ xương đội mũ màu người thắng cúi chào
@@ -1368,7 +1377,17 @@ export function winnerModal(state, winner) {
           ${p.bankrupt ? '' : `<span class="arow-side" style="font-family:var(--serif);color:var(--gold-light)">${money(state.netWorth(p.id))}</span>`}
         </div>`).join('')}`,
     buttons: [{ label: 'Chơi ván mới', value: 'again', cls: 'btn-primary' }],
-    onMount: (body) => {
+    onMount: (body, close, modal) => {
+      /* Nút thống kê dính ở mép phải hộp: mở hộp biểu đồ chồng lên, màn hạ
+         màn vẫn nằm dưới để quay về. */
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = 'modal-edge-tab';
+      tab.innerHTML = `${STATS_ICON}<span>Thống kê</span>`;
+      tab.title = 'Xem biểu đồ tiền bạc cả trận';
+      tab.addEventListener('click', () => statsModal(state, winner.id));
+      modal.appendChild(tab);
+
       const cv = body.querySelector('.win-skel');
       if (!cv) return;
       // Ba khung: đứng, cúi nửa, cúi hẳn — chạy tới lui như người cúi chào

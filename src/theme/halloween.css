@@ -574,3 +574,25 @@
   color: var(--gold-pale);
 }
 :root[data-theme="halloween"] .chat-note { color: var(--h-rose); }
+
+/* Thống kê cuối ván (ui/statsModal.js): nét tím mảnh, chữ trắng xương; nút
+   mép và nút đang chọn là trắng xương chữ tím đêm như nút số người */
+:root[data-theme="halloween"] {
+  --gs-line: var(--h-line);
+  --gs-line-2: var(--h-line-strong);
+  --gs-card: rgba(183, 155, 224, .05);
+  --gs-win-row: rgba(183, 155, 224, .12);
+  --gs-text-2: rgba(244, 239, 227, .74);
+  --gs-text-3: rgba(244, 239, 227, .55);
+  --gs-grid: rgba(244, 239, 227, .08);
+  --gs-grid-2: rgba(244, 239, 227, .28);
+  --gs-grid-faint: rgba(244, 239, 227, .045);
+  --gs-surface: #120B1D;
+  --gs-halo: rgba(10, 6, 17, .86);
+  --gs-tip: rgba(20, 13, 32, .96);
+  --gs-tab-bg: #ECE6D6;
+  --gs-tab-ink: #171024;
+  --gs-seg-on: #ECE6D6;
+  --gs-seg-ink: #171024;
+}
+:root[data-theme="halloween"] .modal-edge-tab { border-color: #FFFFFF; }

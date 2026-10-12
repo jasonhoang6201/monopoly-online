@@ -3851,3 +3851,155 @@ html, body {
   #chat-dock { bottom: calc(max(10px, env(safe-area-inset-bottom)) + 46px); height: calc(100vh - 70px); }
   #chat-peek { right: calc(max(14px, env(safe-area-inset-right)) + 46px); }
 }
+
+/* ------------------------------------------------------------
+   Nút thống kê ở mép màn hạ màn + hộp thống kê (ui/statsModal.js)
+   Màu đọc qua biến --gs-*: theme/christmas.css và theme/halloween.css
+   ghi đè cho chủ đề của mình.
+   ------------------------------------------------------------ */
+:root {
+  --gs-line: rgba(200, 160, 72, .22);
+  --gs-line-2: rgba(200, 160, 72, .4);
+  --gs-card: rgba(255, 255, 255, .03);
+  --gs-win-row: rgba(200, 160, 72, .1);
+  --gs-text-2: rgba(239, 226, 198, .72);
+  --gs-text-3: rgba(239, 226, 198, .55);
+  --gs-grid: rgba(239, 226, 198, .09);
+  --gs-grid-2: rgba(239, 226, 198, .28);
+  --gs-grid-faint: rgba(239, 226, 198, .05);
+  --gs-surface: #170F0A;          /* nền hộp: viền chấm cắt bằng màu này */
+  --gs-halo: rgba(14, 9, 5, .82); /* quầng tối dưới mỗi đường, tách hai đường chồng nhau */
+  --gs-tip: rgba(16, 10, 6, .95);
+  --gs-tab-bg: linear-gradient(180deg, var(--gold-light), var(--gold));
+  --gs-tab-ink: var(--ink);
+  --gs-seg-on: var(--gold);
+  --gs-seg-ink: var(--ink);
+}
+
+.modal-edge-tab {
+  position: absolute; z-index: 3;
+  left: 100%; top: 64px;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 12px 7px 14px 6px;
+  color: var(--gs-tab-ink);
+  background: var(--gs-tab-bg);
+  border: 1px solid var(--gold-deep); border-left: none;
+  border-radius: 0 10px 10px 0;
+  box-shadow: 6px 8px 18px rgba(0, 0, 0, .4);
+  font: 700 11.5px/1 var(--sans); letter-spacing: .1em; text-transform: uppercase;
+  cursor: pointer;
+  transform-origin: left center;
+  animation: edge-tab-in .55s .5s var(--ease-out-back) both;
+  transition: padding .18s var(--ease-soft), filter .18s var(--ease-soft);
+}
+.modal-edge-tab span { writing-mode: vertical-rl; }
+.modal-edge-tab:hover { padding-right: 11px; filter: brightness(1.08); }
+.modal-edge-tab:focus-visible { outline: 2px solid var(--gold-pale); outline-offset: 2px; }
+@keyframes edge-tab-in { from { opacity: 0; transform: scaleX(0); } }
+
+.stats-modal { width: min(1000px, 95vw); }
+.stats-modal .modal-body { overflow-x: hidden; }
+
+.gs-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.gs-tile {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--gs-line); border-radius: 10px;
+  background: var(--gs-card);
+}
+.gs-tile-k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--gs-text-3); }
+.gs-tile-v { font-family: var(--display); font-size: 22px; font-weight: 700; color: var(--gold-pale); font-variant-numeric: tabular-nums; }
+.gs-tile-n { font-size: 11.5px; color: var(--gs-text-2); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+
+.gs-chip { display: inline-block; flex: none; width: 9px; height: 9px; border-radius: 3px; margin-right: 6px; }
+.gs-tile-n .gs-chip { margin-right: 0; }
+
+.gs-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 16px 0 6px; }
+.gs-seg { display: inline-flex; padding: 3px; border-radius: 9px; background: var(--gs-card); border: 1px solid var(--gs-line); }
+.gs-seg button {
+  padding: 6px 13px; border: 0; border-radius: 6px; cursor: pointer;
+  background: transparent; color: var(--gs-text-2);
+  font: 600 12.5px var(--sans);
+  transition: background .16s var(--ease-soft), color .16s var(--ease-soft);
+}
+.gs-seg button.on { background: var(--gs-seg-on); color: var(--gs-seg-ink); }
+.gs-legend { display: flex; flex-wrap: wrap; gap: 4px; }
+.gs-leg {
+  display: inline-flex; align-items: center;
+  padding: 4px 9px; border-radius: 7px; cursor: pointer;
+  background: transparent; border: 1px solid transparent;
+  color: var(--paper); font: 500 12.5px var(--sans);
+}
+.gs-leg i { font-style: normal; margin-left: 4px; color: var(--gs-text-3); }
+.gs-leg:hover, .gs-leg.on { border-color: var(--gs-line-2); background: var(--gs-card); }
+
+.gs-chart { position: relative; }
+.sc-svg { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--sans); }
+.sc-grid { stroke: var(--gs-grid); stroke-width: 1; }
+.sc-grid.zero { stroke: var(--gs-grid-2); }
+.sc-xgrid { stroke: var(--gs-grid-faint); stroke-width: 1; }
+.sc-ytick { fill: var(--gs-text-3); font-size: 11px; text-anchor: end; font-variant-numeric: tabular-nums; }
+.sc-xtick { fill: var(--gs-text-3); font-size: 11px; text-anchor: middle; }
+.sc-base { stroke: var(--gold); stroke-opacity: .5; stroke-width: 1; stroke-dasharray: 4 5; }
+.sc-base-label {
+  fill: var(--gold-light); fill-opacity: .8; font-size: 10.5px; font-style: italic; text-anchor: end;
+  paint-order: stroke; stroke: var(--gs-halo); stroke-width: 4px; stroke-linejoin: round;
+}
+.sc-halo { fill: none; stroke: var(--gs-halo); stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; }
+.sc-stroke { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.sc-stroke.win { stroke-width: 2.8; }
+.sc-x-halo { stroke: var(--gs-halo); stroke-width: 5.5; stroke-linecap: round; }
+.sc-dot, .sc-cross-dot { stroke: var(--gs-surface); stroke-width: 2; }
+.sc-label-name { fill: var(--paper); font-size: 12px; font-weight: 600; }
+.sc-label-val { fill: var(--gs-text-2); font-size: 11px; font-variant-numeric: tabular-nums; }
+.sc-ribbon-frame { fill: none; stroke: var(--gs-halo); stroke-width: 1; }
+.sc-cross-line { stroke: var(--gs-text-3); stroke-width: 1; }
+.sc-hit { fill: transparent; cursor: crosshair; touch-action: pan-y; }
+.sc-svg [data-s] { transition: opacity .18s var(--ease-soft); }
+.sc-svg.focusing [data-s]:not(.on) { opacity: .14; }
+
+.gs-tip {
+  position: absolute; z-index: 2; pointer-events: none;
+  min-width: 170px; padding: 8px 10px;
+  border-radius: 9px; border: 1px solid var(--gs-line-2);
+  background: var(--gs-tip);
+  box-shadow: var(--shadow-md);
+  font-size: 12px; color: var(--paper);
+}
+.gs-tip-head { margin-bottom: 5px; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--gs-text-3); }
+.gs-tip-row { display: flex; align-items: center; padding: 2px 0; }
+.gs-tip-row.out { opacity: .5; }
+.gs-tip-name { flex: 1; margin-right: 12px; }
+.gs-tip-row b { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+.gs-table-wrap { margin-top: 14px; overflow-x: auto; }
+.gs-table { width: 100%; border-collapse: collapse; font-size: 12.5px; color: var(--paper); font-variant-numeric: tabular-nums; }
+.gs-table th, .gs-table td { padding: 7px 9px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--gs-grid); }
+.gs-table thead th { font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--gs-text-3); }
+.gs-table th[scope="row"], .gs-table thead th:first-child { text-align: left; font-weight: 600; }
+.gs-table td small { margin-left: 5px; font-size: 10.5px; color: var(--gs-text-3); }
+.gs-table tr.win { background: var(--gs-win-row); }
+.gs-out { color: var(--gs-text-3); font-style: italic; }
+
+/* Màn ngang thấp: hộp hạ màn gần chạm mép màn, nút mép không còn chỗ thò ra.
+   Thu thành viên thuốc ở góc trái đầu hộp, đối xứng với nút con mắt. */
+@media (max-height: 520px) {
+  .modal-edge-tab {
+    left: 7px; top: 7px; flex-direction: row; gap: 5px;
+    padding: 5px 9px; border-left: 1px solid var(--gold-deep); border-radius: 8px;
+    font-size: 10px; transform-origin: left top;
+  }
+  .modal-edge-tab span { writing-mode: horizontal-tb; }
+  .modal-edge-tab svg { width: 14px; height: 14px; }
+  .modal-edge-tab:hover { padding-right: 9px; }
+  /* Biểu đồ lên trước, ô số xuống dưới, và biểu đồ vừa một màn: mở ra phải
+     thấy ngay đường tiền */
+  .stats-modal .modal-body { display: flex; flex-direction: column; padding-top: 10px; }
+  .stats-modal .gs-tiles { order: 2; margin-top: 12px; }
+  .stats-modal .gs-table-wrap { order: 3; }
+  .sc-svg { height: max(180px, calc(100dvh - 190px)); }
+  .gs-tile { padding: 7px 9px; }
+  .gs-tile-v { font-size: 17px; }
+  .gs-bar { margin: 0 0 4px; }
+}
+@media (prefers-reduced-motion: reduce) { .modal-edge-tab { animation: none; } }

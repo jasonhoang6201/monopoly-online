@@ -392,3 +392,24 @@
   color: var(--x-ice-ink);
 }
 :root[data-theme="christmas"] .chat-note { color: var(--x-rose); }
+
+/* Thống kê cuối ván (ui/statsModal.js): nét xanh băng, chữ trắng băng, nút
+   mép và nút đang chọn là trắng băng chữ xanh đậm như nút chính */
+:root[data-theme="christmas"] {
+  --gs-line: var(--x-line);
+  --gs-line-2: var(--x-line-strong);
+  --gs-win-row: rgba(156, 199, 230, .12);
+  --gs-text-2: rgba(234, 243, 250, .74);
+  --gs-text-3: rgba(234, 243, 250, .56);
+  --gs-grid: rgba(234, 243, 250, .09);
+  --gs-grid-2: rgba(234, 243, 250, .3);
+  --gs-grid-faint: rgba(234, 243, 250, .05);
+  --gs-surface: #10243D;
+  --gs-halo: rgba(9, 22, 38, .85);
+  --gs-tip: rgba(13, 30, 52, .96);
+  --gs-tab-bg: var(--x-ice);
+  --gs-tab-ink: var(--x-ice-ink);
+  --gs-seg-on: var(--x-ice);
+  --gs-seg-ink: var(--x-ice-ink);
+}
+:root[data-theme="christmas"] .modal-edge-tab { border-color: #FFFFFF; }

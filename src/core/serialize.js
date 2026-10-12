@@ -85,6 +85,9 @@ export function snapshot(st) {
     startedAt: st.startedAt,
     endedAt: st.endedAt,
     gameId: st.gameId,
+    /* Sổ tiền cho biểu đồ cuối ván (`core/history.js`): toàn số và mảng,
+       chép qua JSON là sạch. */
+    hist: JSON.parse(JSON.stringify(st.hist)),
   };
 }
 
@@ -176,6 +179,8 @@ export function applySnapshot(st, snap) {
   if ('endedAt' in snap) st.endedAt = snap.endedAt;
   /* Ảnh chụp của bản trước khi có số liệu cân bằng không mang `gameId`: giữ mã tự sinh. */
   if (snap.gameId) st.gameId = snap.gameId;
+  // Ảnh chụp cũ chưa có sổ tiền thì giữ sổ đang có
+  if (snap.hist) st.hist = JSON.parse(JSON.stringify(snap.hist));
   if (snap.eventTally) st.eventTally = { ...snap.eventTally };
   if (snap.eventPile) st.eventPile = [...snap.eventPile];
   else if (snap.eventPiles) st.eventPile = [...(snap.eventPiles[1] ?? []), ...(snap.eventPiles[2] ?? [])];
