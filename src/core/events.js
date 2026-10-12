@@ -15,7 +15,7 @@
  */
 import { BOARD, GROUP_TILES, GROUPS } from '../data/board.js';
 import {
-  EVENTS, EVENT_LEVELS, UNLOCK_LAPS, PRESSURE, LATE_AFTER, LATE_RARE, LATE_PRIORITY,
+  EVENTS, EVENT_LEVELS, UNLOCK_LAPS, PRESSURE, LATE_AFTER, LATE_RARE, LATE_PRIORITY, GHOST_VOTE,
 } from '../data/events.js';
 import { cardInTheme } from '../data/themes.js';
 
@@ -329,6 +329,93 @@ export function drawEvent(st, fresh = false) {
      thì chồng không bao giờ rỗng và sự kiện tắt hẳn. Xáo lại cả bộ, thử lần nữa. */
   if (!chosen && !fresh) return drawEvent(st, true);
   return chosen;
+}
+
+/* ==================================================================
+   Hội Đồng Hồn Ma — xem `GHOST_VOTE` trong data/events.js
+   ================================================================== */
+
+/**
+ * Tới lúc mở phiên họp chưa. Gọi ở cuối lượt, trên máy cầm lái.
+ *
+ * Mỗi chu kỳ (khoảng giữa hai lần nổ) họp đúng một lần: `ghostVote.n` ghi số
+ * lần nổ lúc mở, nổ xong thì `eventsFired` tăng và chu kỳ mới được họp lại.
+ *
+ * @param {boolean} justFired lượt này vừa nổ một thẻ
+ */
+export function ghostVoteDue(st, justFired = false) {
+  if (!eventsOn(st) || !unlocked(st) || st.over) return false;
+  if (!st.players.some((p) => p.bankrupt)) return false;
+  if (st.ghostVote?.n === st.eventsFired) return false;
+  return justFired || pressureRatio(st) >= GHOST_VOTE.at;
+}
+
+/**
+ * Mở phiên họp: bốc `GHOST_VOTE.cards` thẻ khác nhau, thẻ nào cũng phải đang
+ * dùng được. Bầu một thẻ vô nghĩa lúc này (Ân Xá khi không ai ngồi tù) là phí
+ * lá phiếu. Thẻ bị gạt hẳn ở pha cuối (`late: 'off'`) cũng không đưa ra.
+ *
+ * Bàn hợp cảnh chưa tới hai thẻ thì không họp: chọn một trong một không phải
+ * là bầu.
+ *
+ * @returns {?{n:number, cards:string[], votes:Record<number,string>}}
+ */
+export function openGhostVote(st) {
+  const late = (st.eventsFired ?? 0) >= LATE_AFTER;
+  const pool = EVENTS.filter((e) => usable(st, e) && !(late && e.late === 'off'));
+  const cards = shuffle(pool).slice(0, GHOST_VOTE.cards).map((e) => e.id);
+  if (cards.length < 2) return null;
+  st.ghostVote = { n: st.eventsFired, cards, votes: {} };
+  return st.ghostVote;
+}
+
+/**
+ * Ghi một lá phiếu. Bầu lại thì phiếu sau đè phiếu trước — mỗi hồn ma một
+ * phiếu. Phiếu của phiên cũ (tin tới trễ sau khi đã nổ) bị bỏ.
+ *
+ * @returns {boolean} phiếu có được ghi không
+ */
+export function castGhostVote(st, { n, seat, id }) {
+  const gv = st.ghostVote;
+  if (!gv || gv.n !== n || !gv.cards.includes(id)) return false;
+  if (!st.players[seat]?.bankrupt) return false;
+  if (gv.votes[seat] === id) return false;
+  gv.votes = { ...gv.votes, [seat]: id };
+  return true;
+}
+
+/** Số phiếu từng thẻ: id → số phiếu. */
+export function ghostTally(gv) {
+  const out = {};
+  for (const id of Object.values(gv?.votes ?? {})) out[id] = (out[id] ?? 0) + 1;
+  return out;
+}
+
+/**
+ * Rút theo phiếu bầu. Mỗi phiếu nặng `perVote`, cả chồng bài nặng 1: trúng
+ * phần chồng bài thì trả `null` và `drawEvent` rút như thường.
+ *
+ * Thẻ được bầu mà lúc rút đã hết dùng được (nhà cửa đổi chủ giữa chừng) thì
+ * phiếu của nó không tính. Thẻ trúng được rút khỏi chồng, kẻo vài lượt sau
+ * chồng bài lại ra đúng nó lần nữa.
+ */
+export function ghostPick(st) {
+  const gv = st.ghostVote;
+  if (!gv || gv.n !== st.eventsFired) return null;
+  const weights = Object.entries(ghostTally(gv))
+    .map(([id, n]) => [EVENTS.find((e) => e.id === id), n * GHOST_VOTE.perVote])
+    .filter(([card]) => card && usable(st, card));
+  const total = weights.reduce((s, [, w]) => s + w, 0);
+  let r = Math.random() * (total + 1);
+  if (r >= total) return null;
+  for (const [card, w] of weights) {
+    r -= w;
+    if (r < 0) {
+      st.eventPile = (st.eventPile ?? []).filter((id) => id !== card.id);
+      return card;
+    }
+  }
+  return null;
 }
 
 function shuffledIds(deck) { return shuffle(deck.map((e) => e.id)); }

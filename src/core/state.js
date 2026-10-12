@@ -223,6 +223,12 @@ export class GameState {
      * theo con số này. @type {Record<string, number>}
      */
     this.eventTally = {};
+    /**
+     * Phiên họp của Hội Đồng Hồn Ma cho chu kỳ đang chạy — `null` khi chưa họp
+     * hoặc vừa nổ xong. Xem `openGhostVote` trong core/events.js.
+     * @type {?{n:number, cards:string[], votes:Record<number,string>}}
+     */
+    this.ghostVote = null;
 
     /**
      * Ô mang biển Di Sản (kỹ năng Phố Cổ): thuê ×1.5, không bị dỡ hay ép mua.

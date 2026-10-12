@@ -76,6 +76,9 @@ export function snapshot(st) {
     mods: st.mods.map((m) => ({ ...m })),
     eventPile: [...st.eventPile],
     eventTally: { ...st.eventTally },
+    /* Phiếu của hồn ma: máy cầm lái đổi người giữa phiên họp thì máy mới vẫn
+       rút theo đúng số phiếu đã bầu. */
+    ghostVote: st.ghostVote ? JSON.parse(JSON.stringify(st.ghostVote)) : null,
     /* Cây kỹ năng: biển Di Sản và bộ đếm lượt cho kỹ năng "mỗi lượt 1 lần". */
     heritage: [...st.heritage],
     miniLeft: [...st.miniLeft],
@@ -182,6 +185,7 @@ export function applySnapshot(st, snap) {
   // Ảnh chụp cũ chưa có sổ tiền thì giữ sổ đang có
   if (snap.hist) st.hist = JSON.parse(JSON.stringify(snap.hist));
   if (snap.eventTally) st.eventTally = { ...snap.eventTally };
+  if ('ghostVote' in snap) st.ghostVote = snap.ghostVote ? JSON.parse(JSON.stringify(snap.ghostVote)) : null;
   if (snap.eventPile) st.eventPile = [...snap.eventPile];
   else if (snap.eventPiles) st.eventPile = [...(snap.eventPiles[1] ?? []), ...(snap.eventPiles[2] ?? [])];
   return st;
