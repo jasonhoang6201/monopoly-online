@@ -37,7 +37,8 @@ export class GhostCouncil {
   presentGhosts() {
     const st = this.st;
     const net = this.g.net;
-    return st.players.filter((p) => p.bankrupt
+    // Ghế máy phá sản không bầu: không ai ngồi đó để bấm
+    return st.players.filter((p) => p.bankrupt && !this.g.bot.is(p.id)
       && (!net || (net.seats[p.id] && !net.seats[p.id].kicked && net.seats[p.id].online)))
       .map((p) => p.id);
   }
@@ -45,7 +46,7 @@ export class GhostCouncil {
   /** Ghế hồn ma bầu được trên máy này. */
   localGhosts() {
     const st = this.st;
-    if (!this.g.net) return st.players.filter((p) => p.bankrupt).map((p) => p.id);
+    if (!this.g.net) return st.players.filter((p) => p.bankrupt && !this.g.bot.is(p.id)).map((p) => p.id);
     const me = st.players[this.g.mySeat];
     return me?.bankrupt ? [me.id] : [];
   }

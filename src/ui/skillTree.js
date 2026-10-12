@@ -663,6 +663,7 @@ export function openSkillTree(player, o = {}) {
   }
 
   const done = openModal({
+    manual: true,
     eyebrow: 'Cây kỹ năng',
     title: `<span class="st-title-dot" style="background:${o.color ?? 'var(--gold)'}"></span>${esc(player.name)}`,
     body: view.el,

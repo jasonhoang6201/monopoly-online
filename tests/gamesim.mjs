@@ -40,6 +40,7 @@ const K = await vite.ssrLoadModule('/src/core/skills.js');
 const D = await vite.ssrLoadModule('/src/data/skills.js');
 const B = await vite.ssrLoadModule('/src/data/board.js');
 const C = await vite.ssrLoadModule('/src/data/cards.js');
+const BP = await vite.ssrLoadModule('/src/core/botPolicy.js');
 await vite.close();
 
 const { BOARD, GROUP_TILES, GO_SALARY } = B;
@@ -86,8 +87,17 @@ const BUILDS = {
 
 /* ------------------------------------------------------------ một ván */
 
-function game(names, builds = BUILDS) {
+/**
+ * @param {string[]} names lối học của từng ghế (khoá của `builds`)
+ * @param {object} [builds]
+ * @param {Array<?object>} [pol] ghế nào có cấp bot (`LEVELS` của
+ *   core/botPolicy.js) thì mọi quyết định của ghế ấy đi theo đúng luật bot
+ *   trong ván thật thay cho luật đơn giản ở đây
+ */
+function game(names, builds = BUILDS, pol = []) {
   const st = new S.GameState(names);
+  const memo = names.map(() => ({}));
+  const tried = names.map(() => new Map());
   st.settings.events = 'off';
   const P = st.players;
   const path = new Map(P.map((p, i) => [p.id, builds[names[i]]]));
@@ -98,6 +108,7 @@ function game(names, builds = BUILDS) {
 
   /* ---- trả tiền: Bảo Hiểm Xã Hội, bán nhà, thế chấp, rồi mới phá sản */
   function raise(p, need) {
+    if (pol[p.id]) { BP.raise(st, p, need, pol[p.id]); return; }
     for (let guard = 0; p.money < need && guard < 200; guard++) {
       const built = st.propertiesOf(p.id).filter((id) => st.canSellHouse(p.id, id).ok);
       if (built.length) { st.sellHouse(p.id, built[0]); continue; }
@@ -121,6 +132,13 @@ function game(names, builds = BUILDS) {
 
   /* ---- học theo lối: ô nào chưa đủ điều kiện lên level thì bỏ qua, học ô sau */
   function learn(p) {
+    if (pol[p.id]) {
+      for (let n = 0; n < 12 && p.skillPoints > 0; n++) {
+        const id = BP.nextSkill(st, p, pol[p.id], memo[p.id]);
+        if (!id || !learnSkill(p, id, st).ok) return;
+      }
+      return;
+    }
     const need = new Map();
     for (const id of path.get(p.id)) {
       need.set(id, (need.get(id) ?? 0) + 1);
@@ -261,7 +279,7 @@ function game(names, builds = BUILDS) {
     const owner = st.ownerOf(id);
     if (!owner) {
       // Mua nếu còn dư 100$ sau khi mua
-      if (p.money - t.price >= 100) {
+      if (pol[p.id] ? BP.wantBuy(st, p, id, pol[p.id]) : p.money - t.price >= 100) {
         st.buy(p.id, id);
         if (has(p, 'dcX2')) bank(p, 'dcX2', t.price * roll(param(p, 'dcX2').back));
         for (const q of others(p)) if (has(q, 'dc1')) bank(q, 'dc1', t.price * roll(param(q, 'dc1').rate));
@@ -325,6 +343,7 @@ function game(names, builds = BUILDS) {
 
   /* ---- quản lý tài sản: chuộc đất, xây nhà theo lời / vốn */
   function manage(p) {
+    if (pol[p.id]) { BP.manage(st, p, pol[p.id]); return; }
     for (const id of [...st.mortgaged]) if (st.owner.get(id) === p.id && p.money - BOARD[id].redeem > 400) st.redeem(p.id, id);
     for (let guard = 0; guard < 40; guard++) {
       const opts = st.propertiesOf(p.id).map((id) => ({ id, c: st.canBuild(p.id, id) }))
@@ -338,6 +357,14 @@ function game(names, builds = BUILDS) {
 
   /* ---- giao dịch: thiếu đúng 1 ô của bộ thì hỏi mua ô ấy giá 1.5× */
   function trade(p) {
+    if (pol[p.id]) {
+      const o = BP.proposeTrade(st, p, pol[p.id], tried[p.id]);
+      if (!o) return;
+      const q = st.players[o.to];
+      const yes = pol[q.id] ? BP.acceptTrade(st, o, q.id, p.id, pol[q.id]) : Math.random() < 0.6;
+      if (yes) { give(p, q, o.giveMoney); for (const id of o.get) st.transfer(id, p.id); }
+      return;
+    }
     for (const g of Object.keys(GROUP_TILES)) {
       const ids = GROUP_TILES[g];
       const miss = ids.filter((x) => st.owner.get(x) !== p.id);
@@ -475,7 +502,8 @@ function game(names, builds = BUILDS) {
 
       if (p.inJail) {
         p.jailTurns++;
-        if (dbl || p.jailTurns >= 3 || p.money > 400) {
+        const out = pol[p.id] ? BP.jailChoice(st, p, pol[p.id], has(p, 'cnX2')) !== 'roll' : p.money > 400;
+        if (dbl || p.jailTurns >= 3 || out) {
           if (!dbl && !has(p, 'cnX2')) pay(p, 50);
           st.releaseFromJail(p);
           if (!p.bankrupt) moveBy(p, sum, sum);
@@ -515,6 +543,54 @@ const shuffle = (a) => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { co
 const pct = (x) => (x * 100).toFixed(1).padStart(5) + '%';
 const NAMES = Object.keys(BUILDS);
 const FIELD = NAMES.filter((n) => n !== 'Không kỹ năng');
+
+/* ------------------------------------------------------------ cấp bot */
+
+/**
+ * `--bots N`: các cấp bot của ván thật (core/botPolicy.js) đấu nhau, N ván
+ * mỗi bảng. Ba bảng:
+ *   - mỗi cấp một mình đấu 3 bot Vừa (kỳ vọng 25% nếu ngang Vừa)
+ *   - Dễ · Vừa · Khó cùng bàn (kỳ vọng 33%)
+ * Ghế xáo mỗi ván để người đi trước không lợi.
+ */
+if (arg('--bots')) {
+  const M = Number(arg('--bots')) || 4000;
+  const L = BP.LEVELS;
+  const play = (lineup) => {
+    const seats = shuffle(lineup.map((lv, i) => ({ lv, i })));
+    const names = seats.map(() => 'Không kỹ năng');
+    const r = game(names, BUILDS, seats.map((x) => x.lv));
+    return { win: seats[r.winner].i, r, seats };
+  };
+  const table = (title, lineup, labels) => {
+    const w = lineup.map(() => 0);
+    let turns = 0;
+    for (let k = 0; k < M; k++) { const { win, r } = play(lineup); w[win]++; turns += r.turns; }
+    console.log(`\n${title} — ${M} ván, TB ${(turns / M / lineup.length).toFixed(0)} lượt mỗi người`);
+    labels.forEach((l, i) => { if (l) console.log(`  ${l.padEnd(10)} ${pct(w[i] / M)}`); });
+    return w.map((x) => x / M);
+  };
+  /* `--vary '{"tên": {thông số}, …}'`: thử từng biến thể của một cấp (mặc định
+     Khó, đổi bằng `--base easy|normal`) đấu 3 bot Vừa, để dò thông số. */
+  if (arg('--vary')) {
+    const base = L[arg('--base', 'hard')];
+    const vars = { 'gốc': {}, ...JSON.parse(arg('--vary')) };
+    for (const [n, o] of Object.entries(vars)) table(`${base.name} · ${n}`, [{ ...base, ...o }, L.normal, L.normal, L.normal], [n]);
+    process.exit(0);
+  }
+  const out = {};
+  for (const k of BP.LEVEL_KEYS) {
+    out[k] = table(`${L[k].name} đấu 3 bot Vừa (kỳ vọng 25%)`, [L[k], L.normal, L.normal, L.normal], [L[k].name])[0];
+  }
+  const three = table('Dễ · Vừa · Khó cùng bàn (kỳ vọng 33%)', [L.easy, L.normal, L.hard], ['Dễ', 'Vừa', 'Khó']);
+  const lim = Number(arg('--check', 0));
+  if (lim) {
+    const okOrder = three[2] > three[1] + lim / 100 && three[1] > three[0] + lim / 100;
+    console.log(`\nKhó > Vừa > Dễ mỗi nấc cách ít nhất ${lim} điểm %: ${okOrder ? 'đạt' : 'KHÔNG đạt'}`);
+    process.exit(okOrder ? 0 : 1);
+  }
+  process.exit(0);
+}
 
 /* ------------------------------------------------------------ từng kỹ năng */
 

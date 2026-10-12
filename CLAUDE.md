@@ -14,6 +14,7 @@ thẳng ở gốc repo.
 | `npm test` | bộ kiểm thử một máy | cần dev server ở **5178** |
 | `npm run test:online` | bộ kiểm thử nhiều máy | cần dev server ở **5179** |
 | `npm run sim:skills` | cân bằng kỹ năng: bot chơi trọn ván, báo tối thượng lệch | không cần |
+| `npm run sim:bots` | ba cấp bot Dễ / Vừa / Khó đấu nhau, báo nếu thứ bậc lệch | không cần |
 | `npm run test:telemetry` | luật ghi số liệu kỹ năng, chạy thuần Node | không cần dev server |
 
 ## Quy ước sửa mã
@@ -34,9 +35,12 @@ src/
   core/skills.js         luật học kỹ năng
   core/cards.js          luật thẻ giữ trong túi
   core/raisePlan.js      gợi ý xoay tiền khi thiếu nợ
+  core/botPolicy.js      luật quyết định của bot ba cấp Dễ / Vừa / Khó
+  core/predict.js        dự đoán xí ngầu cho bot: ô sắp đáp, tần suất ô, ai sắp bước vào ô nào
   game/controller.js     điều phối lượt chơi, nối luật ↔ hình ảnh ↔ giao diện
   game/eventRunner.js    thi hành thẻ Thời Cuộc, hỏi nhiều người cùng lúc
   game/skillPlay.js      phần kỹ năng phải hỏi người chơi hoặc có hoạt cảnh
+  game/bot.js            nối luật bot vào ván thật (chỉ bản một máy)
   scenes/BoardScene.js   Phaser: bàn cờ, quân, xí ngầu
   render/                hình học bàn cờ, hoa văn, biểu tượng, quân cờ, trang trí theo mùa
   ui/                    HUD, hộp thoại, bảng xem nhanh, cây kỹ năng (HTML phủ lên canvas)

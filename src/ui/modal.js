@@ -99,6 +99,8 @@ window.addEventListener('blur', () => setPeek(false));
  *   (mặc định: như `escValue`) — xem `dismissTopModal`
  * @param {boolean}[o.enter]    false = không cho Enter bấm nút đầu tiên
  * @param {boolean}[o.yieldToNext] true = hộp thoại nào mở sau sẽ đẩy hộp này đi
+ * @param {boolean}[o.manual]   true = hộp người chơi tự mở để xem (cây kỹ năng,
+ *   bảng xem ô), bot cầm lái không được đóng hộ — xem `dismissTopModal`
  * @param {Function}[o.onMount] (bodyEl, close, modalEl, footEl, stash) — gắn sự
  *   kiện động. `stash(true/false)` cất hộp thoại đi rồi gọi nó về, dùng khi
  *   người chơi cần thao tác thẳng trên bàn cờ.
@@ -271,6 +273,8 @@ export function openModal(o) {
   scrim._autoValue = 'timeoutValue' in o ? o.timeoutValue : escValue;
   scrim._dismissible = o.dismissible !== false;
   scrim._yield = !!o.yieldToNext;
+  scrim._manual = !!o.manual;
+  scrim._t0 = Date.now();
 
   /* Tạm cất hộp thoại đi để người chơi thao tác thẳng trên bàn cờ (chọn đất
      lúc dựng đề nghị giao dịch). Khác `setPeek`: peek chỉ làm mờ và cú bấm kế
@@ -302,10 +306,15 @@ export function openModal(o) {
  *
  * @returns {boolean} có đóng được hộp nào không.
  */
-export function dismissTopModal() {
-  const open = root()?.querySelectorAll('.scrim:not(.hide):not(.stashed)');
-  const scrim = open?.[open.length - 1];
+export function dismissTopModal(o = {}) {
+  let open = [...(root()?.querySelectorAll('.scrim:not(.hide):not(.stashed)') ?? [])];
+  /* Bot đóng hộ thì chừa hộp người chơi tự mở (bảng xem ô mở đè lên hộp hỏi
+     của bot vẫn để yên), và để hộp nằm đủ lâu cho người ngồi xem kịp đọc máy
+     vừa được hỏi gì. */
+  if (o.skipManual) open = open.filter((s) => !s._manual);
+  const scrim = open[open.length - 1];
   if (!scrim || scrim._dismissible === false) return false;
+  if (o.minAge && Date.now() - scrim._t0 < o.minAge) return false;
   scrim._close?.(scrim._autoValue);
   return true;
 }
@@ -319,11 +328,23 @@ export function flashModal(o, ms = 1600) {
   return new Promise((r) => setTimeout(r, ms + 300));
 }
 
+/**
+ * Có nên bỏ qua màn chuyền máy cho người này không. Ván có bot thì chuyền máy
+ * sang ghế máy là vô nghĩa, và bàn chỉ một người thật thì chẳng có ai để chuyền.
+ * @type {?(name:string) => boolean}
+ */
+let skipHandoff = null;
+export function setHandoffSkip(fn) { skipHandoff = fn; }
+
 /** Màn hình chuyển máy giữa hai người chơi (giữ kín thông tin). */
 export function handoff(playerName, cssColor, note) {
+  if (skipHandoff?.(playerName)) return Promise.resolve(true);
   return openModal({
     eyebrow: 'CHUYỀN MÁY',
     title: 'Đổi người chơi',
+    /* Màn chuyền máy luôn dành cho người thật: hiện giữa lượt bot (người thật
+       thiếu tiền, nhận đất thế chấp) thì bot cầm lái không được đóng hộ. */
+    manual: true,
     body: `<div class="handoff">
         <div class="handoff-eye">🤝</div>
         <div class="handoff-name" style="color:${cssColor}">${playerName}</div>

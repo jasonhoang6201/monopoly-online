@@ -660,7 +660,14 @@ export class SkillPlay {
   async openAnyTime() {
     const g = this.g;
     const st = this.st;
-    const p = st.players[g.mySeat];
+    if (st.over || this.treeOpen) return;
+    let seat = g.mySeat;
+    // Lượt bot ở bàn nhiều người thật: không biết ai đang cầm máy, phải hỏi
+    if (g.bot.is(st.turn)) {
+      this.treeOpen = true;
+      try { seat = await g.bot.pickHuman(); } finally { this.treeOpen = false; }
+    }
+    const p = st.players[seat];
     if (!p || p.bankrupt || st.over || this.treeOpen) return;
     if (st.order && st.turn === p.id && g.isDriver() && !g.busy) {
       g.guard(() => this.openTree(p));
