@@ -613,11 +613,15 @@ export const SKILLS = [
     lvText: 'Hoa hồng {%rate} giá đất',
   },
   {
-    id: 'dc2a', branch: 'dauco', tier: 2, slot: 'a', kind: 'passive', span: 'forever', icon: 'swap',
-    requires: ['dc1'],
+    id: 'dc2a', branch: 'dauco', tier: 3, slot: 'c', kind: 'passive', span: 'forever', icon: 'swap',
+    requires: ['dc2b'],
     name: 'Cò Đất',
-    levels: [{ rate: [0.25, 0.35], cap: 250 }, { rate: 0.35, cap: 350 }, { rate: 0.45, cap: 500 }],
-    grow: { by: 'gain', at: [60, 180] },
+    /* Giao dịch giữa hai người khác hiếm, cả ván thường chỉ một hai lần, nên
+       mỗi lần phải đáng tiền: ở tầng 2 với 25–45% giá đất thì học xong gần như
+       không thấy tiền về. Đổi chỗ với Nhặt Hàng Thừa lên tầng 3 và tăng gấp
+       đôi; ngưỡng lên level tính theo một, hai giao dịch. */
+    levels: [{ rate: [0.5, 0.7], cap: 500 }, { rate: 0.7, cap: 700 }, { rate: 0.9, cap: 1000 }],
+    grow: { by: 'gain', at: [150, 400] },
     short: 'Người khác giao dịch đất với nhau, bạn có tiền cò.',
     effect: 'Mỗi giao dịch có đất đổi chủ giữa hai người khác, bạn nhận {%rate} giá gốc số đất đó, tối đa {$cap} mỗi giao dịch. Ngân hàng trả. Giao dịch bạn đứng ra làm thì không có tiền cò.',
     lvText: '{%rate} giá đất, tối đa {$cap}',
@@ -634,7 +638,7 @@ export const SKILLS = [
   },
   {
     id: 'dc3', branch: 'dauco', tier: 3, slot: 'a', kind: 'active', auto: true, icon: 'magnet',
-    requires: ['dc2a'],
+    requires: ['dcS1'],
     name: 'Thâu Tóm',
     uses: '1 lần, rồi chờ vài lần qua ô Bắt Đầu',
     when: 'khi bạn dừng trên đất chưa có nhà của người khác',
@@ -708,8 +712,8 @@ export const SKILLS = [
     lvText: 'Hoàn {%back} giá mua',
   },
   {
-    id: 'dcS1', branch: 'dauco', tier: 3, slot: 'c', kind: 'active', once: true, icon: 'basket',
-    requires: ['dc2b'],
+    id: 'dcS1', branch: 'dauco', tier: 2, slot: 'a', kind: 'active', once: true, icon: 'basket',
+    requires: ['dc1'],
     name: 'Nhặt Hàng Thừa',
     /* Bấm để dùng trong lượt của mình, không phải hộp hỏi chen vào lúc người
        khác vừa bỏ qua ô: không ai phải đứng chờ, và hai người cùng học kỹ năng

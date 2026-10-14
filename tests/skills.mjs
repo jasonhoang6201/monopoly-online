@@ -163,7 +163,7 @@ const rent = await run(`
   const me = s.turn, other = (s.turn + 1) % 3;
   for (const id of [5, 15]) s.owner.set(id, other);       // 2 bến ga → vé $50
   const base = s.rentFor(5, 7);
-  s.players[other].skills = ['dc1','dc2a','dc3','dcU'];
+  s.players[other].skills = ['dc1','dcS1','dc3','dcU'];
   const fever = s.rentFor(5, 7);
   s.players[me].skills = ['dh1'];
   const payer = c.skills.rent(s.players[me], 5, { sum: 7 });
@@ -581,7 +581,7 @@ await reset();
 await run(`
   const me = s.current, other = s.players[(s.turn + 1) % 3];
   s.owner.set(21, other.id);
-  me.skills = ['dc1','dc2a','dc3'];
+  me.skills = ['dc1','dcS1','dc3'];
   me.skillLv = { dc3: 2 };
   const { BOARD } = await import('/src/data/board.js');
   window.__seize = c.resolveOwnable(me, BOARD[21], { sum: 7 });
@@ -598,7 +598,7 @@ log('\n=== 4b. MÔI GIỚI · CÒ ĐẤT ===');
 await reset();
 const fees = await run(`
   const [a, b, broker] = [s.players[s.turn], s.players[(s.turn + 1) % 3], s.players[(s.turn + 2) % 3]];
-  broker.skills = ['dc1', 'dc2a'];
+  broker.skills = ['dc1', 'dc2b', 'dc2a'];
   broker.skillLv = { dc1: 2, dc2a: 2 };
   s.owner.set(1, a.id); s.owner.set(3, b.id);                // hai lô nâu 60$
   const m0 = broker.money;
@@ -609,7 +609,7 @@ const fees = await run(`
   return { broke, cut: broker.money - m1, swapped: s.owner.get(1) === b.id && s.owner.get(3) === a.id };
 `);
 check(fees.broke === 48, `Môi Giới level 2: người khác mua lô 400$ → +12% = 48$ (được ${fees.broke})`);
-check(fees.swapped && fees.cut === 42, `Cò Đất level 2: hai người khác đổi 2 lô 60$ → +35% = 42$ (được ${fees.cut})`);
+check(fees.swapped && fees.cut === 84, `Cò Đất level 2: hai người khác đổi 2 lô 60$ → +70% = 84$ (được ${fees.cut})`);
 
 /* ------------------------------------------------ 4c. Chuyến Tàu Xuyên Việt */
 log('\n=== 4c. XUYÊN VIỆT ===');
@@ -1137,7 +1137,7 @@ const bal = await run(`
   a.pos = pos0; me.laps = 0;
 
   // Thâu Tóm: bộ đủ màu chưa xây vẫn lấy được, ô lẻ và bến/ga cũng được, bộ có nhà thì không
-  me.skills = ['dc1', 'dc2a', 'dc3'];
+  me.skills = ['dc1', 'dcS1', 'dc3'];
   for (const id of [1, 3]) s.owner.set(id, a.id);            // bộ nâu đủ màu
   s.owner.set(6, a.id); s.owner.set(5, a.id);
   const seize = { full: K.canSeize(s, me, 1), lone: K.canSeize(s, me, 6), station: K.canSeize(s, me, 5) };
@@ -1201,7 +1201,7 @@ check(bal.heldCd === 1 && bal.staleCd === 0, `Xuyên Việt: lượt bay giữ t
 await reset();
 const selfCut = await run(`
   const [a, b] = [s.players[s.turn], s.players[(s.turn + 1) % 3]];
-  a.skills = ['dc1', 'dc2a']; a.skillLv = { dc2a: 2 };
+  a.skills = ['dc1', 'dc2b', 'dc2a']; a.skillLv = { dc2a: 2 };
   s.owner.set(39, a.id);
   const m0 = a.money;
   await c.executeTrade({ give: [39], get: [], giveMoney: 0, getMoney: 400 }, a, b);

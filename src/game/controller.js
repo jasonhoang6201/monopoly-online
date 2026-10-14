@@ -526,9 +526,16 @@ export class Game {
     const seat = this.state.turn;
     if (seat === this.net.mySeat) return true;
     /* Vắng chưa quá `skipGraceMs` thì chưa ai nhận cầm lái: máy người ấy có
-       thể vẫn đang chạy lượt, chỉ là presence hụt một nhịp. */
-    const abandoned = this.state.players[seat]?.bankrupt
-      || (!this.net.isSeatLive(seat) && this.net.awayFor(seat) >= this.skipGraceMs);
+       thể vẫn đang chạy lượt, chỉ là presence hụt một nhịp.
+
+       Phá sản **không** phải lý do để trọng tài nhận lái. `doBankrupt` phát ảnh
+       chụp ngay lúc `turn` còn trỏ vào người vừa vỡ nợ, trong khi máy họ còn
+       diễn pháo hoa, gom nợ rồi mới tự `endTurn`. Trọng tài mà nhận lái ở nhịp
+       ấy là hai máy cùng trao lượt: ảnh chụp hai bên đè nhau, có máy còn đang
+       giữa một hộp thoại thì xong việc bày ra thanh nút của người khác (bấm
+       được luôn, hỏi cả cược Chẵn Lẻ của người ta). Máy người phá sản tắt hẳn
+       thì vẫn rơi vào nhánh vắng mặt dưới đây. */
+    const abandoned = !this.net.isSeatLive(seat) && this.net.awayFor(seat) >= this.skipGraceMs;
     return abandoned && this.net.isArbiter;
   }
 
@@ -541,7 +548,7 @@ export class Game {
     const st = this.state;
     if (!this.net || !st || st.over || !st.order || this.busy) return;
     if (this.net.linkLost || st.turn === this.net.mySeat) return;
-    if (st.players[st.turn]?.bankrupt) return;
+    // Người phá sản tắt máy giữa lượt cũng cần nhịp này để trọng tài trao lượt
     if (this.isDriver()) this.beginTurn();
   }
 
@@ -1203,7 +1210,14 @@ export class Game {
       return;
     }
 
-    if (p.bankrupt) { this.endTurn(); return; }
+    /* Bọc `guard`: nhịp canh `checkAbandonedTurn` gọi lại `beginTurn` mỗi lần
+       rảnh tay, mà `endTurn` còn chờ thẻ Thời Cuộc — không bọc thì lượt bị trao
+       hai lần. Đang trong `guard` rồi thì gọi thẳng. */
+    if (p.bankrupt) {
+      if (this.busy) this.endTurn();
+      else this.guard(() => this.endTurn());
+      return;
+    }
 
     /* Vào lại giữa chừng mà còn khoản nợ treo (tắt máy đúng lúc hộp thoại vỡ nợ
        đang mở): đòi cho xong rồi mới bày nút, kẻo nối lại máy là thoát được
@@ -1239,6 +1253,10 @@ export class Game {
   setTurnActions(rolled = false) {
     const st = this.state;
     const p = st.current;
+    /* Một mạch chạy dở (hộp thoại, hoạt cảnh) xong thì gọi `restoreActions`,
+       nhưng trong lúc chờ ảnh chụp của máy khác có thể đã trao lượt đi. Bày nút
+       theo `st.current` lúc ấy là bày nút của người khác lên máy mình. */
+    if (this.net && !this.mayAct(p)) { this.showWaiting(); return; }
     st.rolled = rolled;
     this.refreshSkillBtn();
 
@@ -1280,7 +1298,7 @@ export class Game {
 
     if (p.inJail) {
       const ticket = st.jailCardAt(p.id);
-      this.hud.setActions([
+      this.hud.setActions(this.ownActions(p, [
         // Có vé thì bày trước tiên — ra tù miễn phí thì chẳng ai muốn nộp tiền
         ...(ticket >= 0 ? [{
           label: 'Dùng vé ra tù', key: 'v', cls: 'btn-jade', icon: coinSvg(), pulse: true,
@@ -1298,18 +1316,41 @@ export class Game {
           icon: diceSvg(), title: 'Ra đôi thì được thả ngay',
           onClick: () => this.guard(() => this.rollInJail()) },
         ...this.skills.buttons(p, rolled), ...bag, trade, manage, bankrupt,
-      ]);
+      ]));
       return;
     }
 
-    this.hud.setActions([
+    this.hud.setActions(this.ownActions(p, [
       rolled
         ? { label: 'Kết thúc lượt', key: 'e', cls: 'btn-primary', pulse: true, icon: doneSvg(),
             onClick: () => this.guard(() => this.endTurn()) }
         : { label: 'Lắc xí ngầu', key: 'r', cls: 'btn-primary', pulse: true, icon: diceSvg(),
             onClick: () => this.guard(() => this.takeRoll()) },
       ...this.skills.buttons(p, rolled), ...bag, trade, manage, bankrupt,
-    ]);
+    ]));
+  }
+
+  /**
+   * Máy này còn được thao tác thay `p` không: đúng lượt `p`, và bản online thì
+   * `p` phải là ghế của chính máy này, máy này đang cầm lái, đường truyền thông.
+   */
+  mayAct(p) {
+    const st = this.state;
+    if (!st || st.over || !p || p.bankrupt || st.turn !== p.id) return false;
+    if (!this.net) return true;
+    return p.id === this.net.mySeat && !this.net.linkLost && this.isDriver();
+  }
+
+  /**
+   * Xét lại `mayAct` ngay lúc bấm. Thanh nút bày ra rồi mà lượt bị trao đi
+   * (ảnh chụp về trong lúc không có hộp nào mở) thì cú bấm chỉ dọn thanh nút,
+   * không chạy nước đi của người khác.
+   */
+  ownActions(p, list) {
+    return list.map((a) => (a.onClick ? {
+      ...a,
+      onClick: () => (this.mayAct(p) ? a.onClick() : this.beginTurn()),
+    } : a));
   }
 
   /** Chặn bấm nút chồng chéo khi đang chạy hiệu ứng. */

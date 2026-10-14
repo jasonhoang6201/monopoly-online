@@ -76,7 +76,7 @@ const BUILDS = {
   'DĐ Tất Tay': ['dd1', 'dd2b', 'dd3', 'ddU', 'ddU', 'ddU', 'dd3', 'dd3'],
   'DĐ Xổ Số': ['dd1', 'dd2a', 'ddX1', 'ddV', 'ddV', 'ddV', 'ddX1', 'ddX1'],
   'DĐ Cờ Bạc': ['dd1', 'dd2a', 'ddX2', 'ddS2', 'ddS1', 'ddS2', 'ddS2', 'dd2a', 'dd2a'],
-  'ĐC Cơn Sốt': ['dc1', 'dc2a', 'dc3', 'dcU', 'dcU', 'dcU', 'dc3', 'dc3'],
+  'ĐC Cơn Sốt': ['dc1', 'dcS1', 'dc3', 'dcU', 'dcU', 'dcU', 'dc3', 'dc3'],
   'ĐC Siết Nợ': ['dc1', 'dc2b', 'dcX1', 'dcV', 'dcV', 'dcV', 'dc1', 'dc1'],
   'ĐC Môi Giới + Góp Vốn': ['dc1', 'dc2b', 'dcX2', 'dcS2', 'dc1', 'dc1', 'dcS2', 'dcS2', 'dcS1'],
   'AC Phố Cổ': ['acX2', 'ac2a', 'ac3', 'acU', 'acU', 'acU', 'ac2a', 'ac2a'],

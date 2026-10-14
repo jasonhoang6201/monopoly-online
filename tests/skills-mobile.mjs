@@ -212,7 +212,7 @@ for (const [W, H] of SIZES) {
   /* ---- hộp Thâu Tóm ---- */
   await run(page, `
     const me = s.current, other = s.players[(s.turn + 1) % 3];
-    s.owner.set(39, other.id); me.skills.push('dc1','dc2a','dc3');
+    s.owner.set(39, other.id); me.skills.push('dc1','dcS1','dc3');
     const { BOARD } = await import('/src/data/board.js');
     window.__sz = c.skills.trySeize(me, 39, 50);
   `);
