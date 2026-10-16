@@ -52,11 +52,12 @@ const run = (fn, arg) => page.evaluate(async ([src, a]) => {
 /** Đưa bàn về trạng thái sạch cho từng phần kiểm. */
 const reset = () => run(`
   for (const p of s.players) {
-    p.money = 1500; p.skills = []; p.skillPoints = 0; p.laps = 0; p.cooldowns = {}; p.usedTurn = {};
+    p.money = 1500; p.skills = []; p.skillPoints = 0; p.laps = 0; p.cooldowns = {}; p.cdTurns = {}; p.usedTurn = {};
+    p.boughtPoints = 0;
     p.skillLv = {}; p.skillOff = []; p.betSet = null; p.lapUses = {}; p.jails = 0; p.skillUse = {};
     p.pos = 5; p.inJail = false; p.bankrupt = false;
   }
-  s.owner.clear(); s.houses.clear(); s.mortgaged.clear(); s.heritage.clear(); s.miniLeft.clear();
+  s.owner.clear(); s.houses.clear(); s.mortgaged.clear(); s.heritage.clear(); s.miniLeft.clear(); s.miniAt.clear();
   s.bankHouses = 32; s.bankHotels = 12; s.mods = []; s.pot = 0;
   c.hud.refresh(); c.scene.refresh(s);
 `);
@@ -178,10 +179,10 @@ const rent = await run(`
   return { base, fever, payer, payer3, fever3, colors };
 `);
 check(rent.base === 50, `vé 2 bến ga gốc $50 (được ${rent.base})`);
-check(rent.fever === 150, `Cơn Sốt Đất ×3 → $150 (được ${rent.fever})`);
-check(rent.payer === 90, `Vé Tháng level 1 trả 60% của $150 → $90 (được ${rent.payer})`);
-check(rent.payer3 === 30, `Vé Tháng level 3 trả 20% của $150 → $30 (được ${rent.payer3})`);
-check(rent.fever3 === 225, `Cơn Sốt Đất level 3 ×4.5 → $225 (được ${rent.fever3})`);
+check(rent.fever === 100, `Cơn Sốt Đất ×2 → $100 (được ${rent.fever})`);
+check(rent.payer === 60, `Vé Tháng level 1 trả 60% của $100 → $60 (được ${rent.payer})`);
+check(rent.payer3 === 20, `Vé Tháng level 3 trả 20% của $100 → $20 (được ${rent.payer3})`);
+check(rent.fever3 === 150, `Cơn Sốt Đất level 3 ×3 → $150 (được ${rent.fever3})`);
 check(rent.colors === 53, `Đất Nhiều Màu level 1, 2 màu +6% → $53 (được ${rent.colors})`);
 
 await reset();
@@ -245,48 +246,94 @@ const mini = await run(`
   const me = s.turn, other = (s.turn + 1) % 3;
   s.owner.set(21, me); s.owner.set(23, me); s.owner.set(24, other);   // 2/3 bộ đỏ
   s.owner.set(6, me);                                                  // 1/3 bộ xanh nhạt
-  s.players[me].skills = ['acX2', 'ac2b', 'acS1'];                    // level 1: đứng 3 lượt
+  // ageMini chạy mỗi lần chủ đất qua ô Bắt Đầu; lần qua ngay trong lượt vừa xây không tính
+  s.players[me].skills = ['acX2', 'ac2b', 'acS1'];                    // level 2: đứng 2 lần qua
+  s.players[me].skillLv = { acS1: 2 };
   s.build(me, 21); s.build(me, 6);
   const life = s.miniLeft.get(21);
-  s.build(me, 23);
-  // Level 2: căn thứ hai trên ô 21 cộng 4 lượt (3 - 1 + 4 = 6)
-  s.players[me].skillLv = { acS1: 2 };
-  s.ageMini(me); s.build(me, 21);
+  const fresh = s.ageMini(me).length === 0 && s.miniLeft.get(21) === 2;  // cùng lượt xây: giữ hạn
+  s.turnNo += 1;
+  s.ageMini(me);                                                       // ô 21, ô 6 còn 1
+  s.build(me, 21);                                                     // căn thứ hai: +1 lần qua
   const extended = s.miniLeft.get(21);
-  s.players[me].skillLv = {};
-  s.ageMini(me);                                                       // ô 23 còn 1, ô 21 còn 5
-  s.ageMini(other);                                                    // lượt người khác không tính
+  s.build(me, 23);                                                     // ô 23: 2 lần qua
+  s.turnNo += 1;
+  s.ageMini(other);                                                    // người khác qua ô Bắt Đầu không tính
   const left = s.miniLeft.get(23);
   // Gom đủ bộ xanh nhạt trước khi hết hạn: ô 6 thành nhà thường
   s.owner.set(8, me); s.owner.set(9, me);
   const m0 = s.players[me].money;
-  const gone23 = s.ageMini(me).map((g) => g.id);                      // ô 23 hết hạn trước
-  for (let i = 0; i < 3; i++) s.ageMini(me);
-  const gone = s.ageMini(me);
+  s.ageMini(me);                                                       // ô 21 còn 1, ô 23 còn 1
+  s.turnNo += 1;
+  const gone = s.ageMini(me);                                          // ô 21, ô 23 hết hạn cùng lúc
   const snap = S.fromSnapshot(S.snapshot(s));
-  return { life, left, extended, gone23, gone, refund: s.players[me].money - m0, h21: s.housesOn(21), h6: s.housesOn(6),
+  return { life, fresh, left, extended, gone, refund: s.players[me].money - m0, h21: s.housesOn(21), h6: s.housesOn(6),
     kept6: !s.miniLeft.has(6), snapOk: snap.miniLeft.size === s.miniLeft.size };
 `);
-check(mini.life === 3 && mini.extended === 6 && mini.left === 1, `Chung Cư Mini: hạn gốc 3 lượt, level 2 căn thứ hai +4 (${mini.life}, ${mini.extended}, còn ${mini.left})`);
-check(mini.gone23.join() === '23' && mini.gone.map((g) => g.id).join() === '21' && mini.h21 === 0, `Chung Cư Mini hết hạn: ngân hàng mua lại nhà ô lẻ (${mini.gone23}, ${JSON.stringify(mini.gone)})`);
-check(mini.refund === 225 && mini.h6 === 1 && mini.kept6, `Chung Cư Mini: gom đủ bộ trước hạn thì nhà ở lại (hoàn ${mini.refund}$, ô 6 còn ${mini.h6} căn)`);
+check(mini.life === 2 && mini.fresh && mini.extended === 2 && mini.left === 2, `Chung Cư Mini level 2: hạn gốc 2 lần qua, căn thứ hai +1, lượt vừa xây không trừ (${mini.life}, ${mini.fresh}, ${mini.extended}, còn ${mini.left})`);
+check(mini.gone.map((g) => g.id).sort().join() === '21,23' && mini.h21 === 0, `Chung Cư Mini hết hạn: ngân hàng mua lại nhà ô lẻ (${JSON.stringify(mini.gone)})`);
+check(mini.refund > 0 && mini.h6 === 1 && mini.kept6, `Chung Cư Mini: gom đủ bộ trước hạn thì nhà ở lại (hoàn ${mini.refund}$, ô 6 còn ${mini.h6} căn)`);
 check(mini.snapOk, 'Chung Cư Mini: hạn nhà đi theo ảnh chụp');
 
 await reset();
 const snap = await run(`
   const p = s.players[1];
-  p.skills = ['dd1','dd2a']; p.skillPoints = 3; p.laps = 4; p.cooldowns = { ddU: 2 };
+  p.skills = ['dd1','dd2a']; p.skillPoints = 3; p.laps = 4; p.cooldowns = { ddU: 2 }; p.cdTurns = { dd3: 4 };
   p.skillLv = { dd1: 3 }; p.lapUses = { dd3: 1 }; p.jails = 2;
   s.heritage.add(16);
   const snap = JSON.parse(JSON.stringify(S.snapshot(s)));
   const t = S.fromSnapshot(snap);
   const q = t.players[1];
-  return { skills: q.skills, pts: q.skillPoints, laps: q.laps, cd: q.cooldowns, lv: q.skillLv,
+  return { skills: q.skills, pts: q.skillPoints, laps: q.laps, cd: q.cooldowns, cdT: q.cdTurns, lv: q.skillLv,
            uses: q.lapUses, jails: q.jails, her: [...t.heritage] };
 `);
-check(JSON.stringify(snap) === JSON.stringify({ skills: ['dd1', 'dd2a'], pts: 3, laps: 4, cd: { ddU: 2 },
+check(JSON.stringify(snap) === JSON.stringify({ skills: ['dd1', 'dd2a'], pts: 3, laps: 4, cd: { ddU: 2 }, cdT: { dd3: 4 },
   lv: { dd1: 3 }, uses: { dd3: 1 }, jails: 2, her: [16] }),
   `ảnh chụp online mang đủ kỹ năng, level, điểm, số lần qua, hồi chiêu, số lần đã dùng, số lần vào tù, Di Sản (${JSON.stringify(snap)})`);
+
+// Mua điểm, Nhặt Hàng Thừa loại trừ Siết Nợ, Thâu Tóm không hồi lượt nhờ tẩy điểm
+await reset();
+const extra = await run(`
+  const p = s.current;
+  p.money = 1200;
+  const b1 = K.buyPoint(p).ok, b2 = K.buyPoint(p).ok, b3 = K.buyPoint(p);
+  const buy = { b1, b2, b3: b3.ok, pts: p.skillPoints, money: p.money, bought: p.boughtPoints };
+
+  p.skillPoints = 20; p.money = 5000;
+  for (const id of ['dc1', 'dcS1', 'dc2b', 'dcX1']) K.learnSkill(p, id, s);
+  const ex = { state: K.skillState(p, 'dcV'), ok: K.canLearn(p, 'dcV', s).ok };
+  K.respec(p);
+  for (const id of ['dc1', 'dc2b', 'dcX1', 'dcV']) K.learnSkill(p, id, s);
+  ex.back = K.canLearn(p, 'dcS1', s).ok;
+  ex.dcV = p.skills.includes('dcV');
+
+  // Thâu Tóm level 3 (2 lần): dùng 1 lần, tẩy, học lại level 1 (1 lần) thì hết lượt dùng
+  K.respec(p);
+  p.skillPoints = 20; p.skillUse = { dc3: { n: 5, gain: 0 } };   // đủ điều kiện lên level 3
+  for (const id of ['dc1', 'dcS1', 'dcU', 'dc3', 'dc3', 'dc3']) K.learnSkill(p, id, s);
+  const other = s.players[(s.turn + 1) % 3];
+  s.owner.set(6, other.id);
+  K.spend(p, 'dc3');
+  const seize = { l3: K.canSeize(s, p, 6) };
+  K.respec(p);
+  for (const id of ['dc1', 'dcS1', 'dcU', 'dc3']) K.learnSkill(p, id, s);
+  seize.l1 = K.canSeize(s, p, 6);
+  K.onLap(p, s.turnNo);
+  seize.lap = K.canSeize(s, p, 6);
+  K.spend(p, 'dc3');
+  K.respec(p);
+  for (const id of ['dc1', 'dcS1', 'dcU', 'dc3']) K.learnSkill(p, id, s);
+  seize.cd = p.cooldowns.dc3;
+  seize.again = K.canSeize(s, p, 6);
+  s.owner.delete(6);
+  return { buy, ex, seize };
+`);
+check(extra.buy.b1 && extra.buy.b2 && !extra.buy.b3 && extra.buy.pts === 2 && extra.buy.money === 200 && extra.buy.bought === 2,
+  `Mua điểm: 500$ một điểm, thiếu tiền thì không mua được (${JSON.stringify(extra.buy)})`);
+check(extra.ex.state === 'locked' && !extra.ex.ok && !extra.ex.back && extra.ex.dcV,
+  `Nhặt Hàng Thừa và Siết Nợ loại trừ nhau, tẩy điểm thì đổi được (${JSON.stringify(extra.ex)})`);
+check(extra.seize.l3 && !extra.seize.l1 && extra.seize.lap && extra.seize.cd === 1 && !extra.seize.again,
+  `Thâu Tóm: tẩy rồi học lại không hồi lượt dùng, qua ô Bắt Đầu mới hồi (${JSON.stringify(extra.seize)})`);
 
 /* ------------------------------------------------ 2. qua ô Bắt Đầu */
 log('\n=== 2. QUA Ô BẮT ĐẦU ===');
@@ -498,25 +545,39 @@ const xg = { lit: await markedTiles(page), dice: await dicePickable(page),
 check(JSON.stringify(xg.lit) === '[17]' && xg.dice && xg.acts === 0 && xg.modal === 0,
   `Xí Ngầu Gian: sáng ô sẽ tới 17 + hai viên xí ngầu, không hộp thoại, không nút phụ (${JSON.stringify(xg)})`);
 await clickDie(page, 1);
-const ar = await run('const r = await window.__ar; return { sum: r.d.sum, a: r.d.a, cd: s.current.cooldowns.dd3 };');
+const ar = await run('const r = await window.__ar; return { sum: r.d.sum, a: r.d.a, cd: s.current.cdTurns.dd3 };');
 check(ar.a === 3 && ar.sum >= 4 && ar.sum <= 9, `Xí Ngầu Gian: giữ viên 3, lắc lại viên kia (tổng ${ar.sum})`);
-check(ar.cd === 4, `Xí Ngầu Gian level 1: dùng xong chờ 4 lần qua ô Bắt Đầu (${ar.cd})`);
+check(ar.cd === 7, `Xí Ngầu Gian level 1: dùng xong chờ 7 lượt (${ar.cd})`);
 
-// Level 2: vẫn 1 lần, chờ ngắn hơn (3 lần qua)
+// Level 2: vẫn 1 lần, chờ ngắn hơn (6 lượt)
 await run(`
-  const p = s.current; p.cooldowns = {}; p.lapUses = {}; p.skillLv = { dd3: 2 };
+  const p = s.current; p.cdTurns = {}; p.lapUses = {}; p.skillLv = { dd3: 2 };
   window.__ar = c.skills.afterRoll(p, { a: 3, b: 4, sum: 7, isDouble: false });
 `);
 await page.locator('.tile-pick[data-quick]:not(.out)').waitFor({ timeout: 5000 });
 await page.evaluate(() => { window.__monopoly.scene.onTileClick(17); });
-const arGo = await run('const r = await window.__ar; return { sum: r.d.sum, cd: s.current.cooldowns.dd3 ?? 0 };');
+const arGo = await run('const r = await window.__ar; return { sum: r.d.sum, cd: s.current.cdTurns.dd3 ?? 0 };');
 check(arGo.cd === 0, `bấm ô sáng là đi luôn, không tốn lượt Xí Ngầu Gian (${JSON.stringify(arGo)})`);
 await run(`window.__ar = c.skills.afterRoll(s.current, { a: 3, b: 4, sum: 7, isDouble: false });`);
 await page.locator('.tile-pick[data-quick]:not(.out)').waitFor({ timeout: 5000 });
 await clickDie(page, 1);
-const ar2 = await run('await window.__ar; return { cd: s.current.cooldowns.dd3 ?? 0, used: s.current.lapUses.dd3 ?? 0 };');
-check(ar2.cd === 3 && ar2.used === 0, `Xí Ngầu Gian level 2: dùng xong chờ 3 lần qua ô Bắt Đầu (${JSON.stringify(ar2)})`);
-await run('const p = s.current; p.cooldowns = { dd3: 1 }; p.skillLv = {};');
+const ar2 = await run('await window.__ar; return { cd: s.current.cdTurns.dd3 ?? 0, used: s.current.lapUses.dd3 ?? 0 };');
+check(ar2.cd === 6 && ar2.used === 0, `Xí Ngầu Gian level 2: dùng xong chờ 6 lượt (${JSON.stringify(ar2)})`);
+// Hồi theo lượt: hết lượt trừ 1 (tính cả lượt vừa dùng), qua ô Bắt Đầu không trừ, tẩy điểm không xoá
+const xgCd = await run(`
+  const p = s.current; p.money = 2000; p.cdTurns = { dd3: 2 };
+  K.onLap(p, s.turnNo);
+  const afterLap = p.cdTurns.dd3;
+  K.respec(p); K.learnSkill(p, 'dd1', s); K.learnSkill(p, 'dd2b', s); K.learnSkill(p, 'dd3', s);
+  const relearned = K.ready(p, 'dd3');
+  K.tickTurns(p);
+  const t1 = p.cdTurns.dd3;
+  K.tickTurns(p);
+  return { afterLap, relearned, t1, ready: K.ready(p, 'dd3') };
+`);
+check(xgCd.afterLap === 2 && !xgCd.relearned && xgCd.t1 === 1 && xgCd.ready,
+  `Xí Ngầu Gian: qua ô Bắt Đầu không trừ lượt chờ, tẩy rồi học lại vẫn phải chờ, hết 2 lượt thì dùng được (${JSON.stringify(xgCd)})`);
+await run('const p = s.current; p.cdTurns = {}; p.cooldowns = {}; p.skillLv = {};');
 
 // Quay Đầu: ô đi tới và ô đi lùi cùng sáng trên bàn cờ, bấm ô nào đi ô ấy
 await reset();
@@ -549,8 +610,8 @@ await clickDie(page, 1);
 // Lắc lại xong thì hỏi lần nữa với tổng mới — lúc này chỉ còn Quay Đầu, chọn đi tới
 await page.waitForTimeout(2600);
 await page.locator('.tile-pick:not(.out) .tp-cancel').click({ timeout: 8000 });
-const qd3 = await run('const r = await window.__ar; return { a: r.d.a, back: r.back, dd3: s.current.cooldowns.dd3 ?? 0 };');
-check(qd3.a === 3 && !qd3.back && qd3.dd3 === 4, `bấm viên phải chạy Xí Ngầu Gian rồi hỏi lại (${JSON.stringify(qd3)})`);
+const qd3 = await run('const r = await window.__ar; return { a: r.d.a, back: r.back, dd3: s.current.cdTurns.dd3 ?? 0 };');
+check(qd3.a === 3 && !qd3.back && qd3.dd3 === 7, `bấm viên phải chạy Xí Ngầu Gian rồi hỏi lại (${JSON.stringify(qd3)})`);
 
 await run('c.restoreActions();');
 await run('window.__bet = c.skills.beforeRoll(s.current);');
@@ -581,7 +642,7 @@ await reset();
 await run(`
   const me = s.current, other = s.players[(s.turn + 1) % 3];
   s.owner.set(21, other.id);
-  me.skills = ['dc1','dcS1','dc3'];
+  me.skills = ['dc1','dcS1','dcU','dc3'];
   me.skillLv = { dc3: 2 };
   const { BOARD } = await import('/src/data/board.js');
   window.__seize = c.resolveOwnable(me, BOARD[21], { sum: 7 });
@@ -590,7 +651,7 @@ await clickModal('Thâu Tóm');
 await run('await window.__seize;');
 const seized = await run(`const me = s.current; return { owner: s.owner.get(21), me: me.id, money: me.money, cd: me.cooldowns.dc3 };`);
 check(seized.owner === seized.me, 'Thâu Tóm: lô 21 sang tên');
-check(seized.money === 1500 - 242, `Thâu Tóm level 2: trả 110% giá gốc $242 (còn ${seized.money})`);
+check(seized.money === 1500 - 198, `Thâu Tóm level 2: trả 90% giá gốc $198 (còn ${seized.money})`);
 check(seized.cd === 1, 'Thâu Tóm level 2: chờ 1 lần qua ô Bắt Đầu');
 
 /* ------------------------------------------------ 4b. ăn tiền từ việc người khác làm */
@@ -993,11 +1054,11 @@ const rentx = await run(`
   return { late: late.total, lateFee: late.late, both: both.total, bothLate: both.late, rich: rich.total, richLate: rich.late,
            note: c.skills.rentNote(me, 39, both), dcU: owner.skillUse.dcU };
 `);
-check(rentx.late === 225 && rentx.lateFee === 75, `Chủ Nợ: thuê 150$ (Cơn Sốt ×3), người trả có ô thế chấp → +50% = 225$ (${rentx.late})`);
-check(rentx.both === 90 && rentx.bothLate === 30, `Sống Sót dưới 250$ trả 40% = 60$, Chủ Nợ phạt 50% phần còn lại = 90$ (${rentx.both})`);
-check(rentx.rich === 150 && rentx.richLate === 0, 'không còn ô thế chấp, đủ tiền thì không phạt, không giảm');
+check(rentx.late === 150 && rentx.lateFee === 50, `Chủ Nợ: thuê 100$ (Cơn Sốt ×2), người trả có ô thế chấp → +50% = 150$ (${rentx.late})`);
+check(rentx.both === 60 && rentx.bothLate === 20, `Sống Sót dưới 250$ trả 40% = 40$, Chủ Nợ phạt 50% phần còn lại = 60$ (${rentx.both})`);
+check(rentx.rich === 100 && rentx.richLate === 0, 'không còn ô thế chấp, đủ tiền thì không phạt, không giảm');
 check(rentx.note.includes('Sống Sót') && rentx.note.includes('Chủ Nợ'), 'dòng loan tin ghi cả giảm và tiền thêm của Chủ Nợ');
-check(rentx.dcU.gain === 100, `Cơn Sốt Đất ghi 100$ tiền thuê thu thêm (${JSON.stringify(rentx)})`);
+check(rentx.dcU.gain === 50, `Cơn Sốt Đất ghi 50$ tiền thuê thu thêm (${JSON.stringify(rentx)})`);
 
 // Lão Làng: đếm lần qua từ lúc học, tặng điểm theo nhịp
 await reset();
@@ -1137,7 +1198,7 @@ const bal = await run(`
   a.pos = pos0; me.laps = 0;
 
   // Thâu Tóm: bộ đủ màu chưa xây vẫn lấy được, ô lẻ và bến/ga cũng được, bộ có nhà thì không
-  me.skills = ['dc1', 'dcS1', 'dc3'];
+  me.skills = ['dc1', 'dcS1', 'dcU', 'dc3'];
   for (const id of [1, 3]) s.owner.set(id, a.id);            // bộ nâu đủ màu
   s.owner.set(6, a.id); s.owner.set(5, a.id);
   const seize = { full: K.canSeize(s, me, 1), lone: K.canSeize(s, me, 6), station: K.canSeize(s, me, 5) };

@@ -77,6 +77,13 @@ export const KINDS = {
 export const RESPEC_FEE = 50;
 
 /**
+ * Mua thêm điểm kỹ năng bằng tiền mặt, trong lượt của mình. Một điểm ngang
+ * 2,5 lần lương qua ô Bắt Đầu: người dư tiền đổi được tiền ra điểm, nhưng
+ * vẫn đắt hơn đi một vòng nhận lương kèm 1 điểm.
+ */
+export const POINT_PRICE = 500;
+
+/**
  * Màu hào quang khi học tối thượng ở **2–3 nhánh**: mỗi tổ hợp một màu riêng,
  * không tổ hợp nào trùng màu tổ hợp nào. Không pha đúng kiểu pha sơn — pha thật
  * thì xanh trời + đỏ cam ra nâu xám, hào quang trông đục.
@@ -176,6 +183,9 @@ export const BRANCHES = [
  *   'lap'     — phần thưởng reset và chạy lại mỗi lần qua ô Bắt Đầu
  *   'cooldown'— tự chạy khi đủ điều kiện, rồi chờ `cooldown` lần qua ô Bắt
  *               Đầu; `uses` ghi câu tả nhịp ấy như kỹ năng bấm để dùng
+ * `turns` (trong levels) thay cho `cooldown`: chờ theo lượt của chính mình
+ * chứ không theo lần qua ô Bắt Đầu (Xí Ngầu Gian).
+ * `excludes`: ô loại trừ nhau ngoài cặp tối thượng; học ô này thì ô kia khoá.
  * Kỹ năng bấm để dùng ghi `uses` (dùng được mấy lần) và `when` (dùng được
  * lúc nào) — chúng nằm trong kho "Dùng kỹ năng". Không có `charges` lẫn
  * `cooldown` thì là công tắc vĩnh viễn (Xe Đạp, Cò Quay). `once: true` là kỹ năng làm
@@ -507,13 +517,18 @@ export const SKILLS = [
     id: 'dd3', branch: 'doden', tier: 3, slot: 'a', kind: 'active', auto: true, icon: 'reroll',
     requires: ['dd2b'],
     name: 'Xí Ngầu Gian',
-    uses: '1 lần, rồi chờ vài lần qua ô Bắt Đầu',
+    /* Hồi theo lượt của mình chứ không theo lần qua ô Bắt Đầu: một vòng bàn
+       chừng 5 lượt, chờ 4 lần qua là gần 20 lượt mới lắc lại được một viên.
+       Mỗi level bớt 1 lượt để lên level nào cũng thấy khác. Chờ 5/4/3 lượt
+       thì bộ mô phỏng (npm run sim:skills) cho tỉ lệ thắng 31.8%, trên trung
+       bình cấp 3 tới 11 điểm %; 7/6/5 kéo về chừng 28%. */
+    uses: '1 lần, rồi chờ vài lượt của bạn',
     when: 'ngay sau khi lắc, trước khi quân đi',
-    levels: [{ charges: 1, cooldown: 4 }, { charges: 1, cooldown: 3 }, { charges: 1, cooldown: 2 }],
+    levels: [{ charges: 1, turns: 7 }, { charges: 1, turns: 6 }, { charges: 1, turns: 5 }],
     grow: { by: 'uses', at: [1, 3], say: 'Lắc lại {n} lần' },
     short: 'Lắc lại một viên xí ngầu tuỳ chọn.',
-    effect: 'Sau khi lắc, được lắc lại 1 viên (bạn chọn viên nào) để đổi ô sẽ tới. Kết quả mới là kết quả cuối, kể cả khi xấu hơn. Cược và Tất Tay đã chốt theo cú lắc đầu, không đổi theo. Dùng xong phải qua ô Bắt Đầu {cooldown} lần mới dùng lại được.',
-    lvText: 'Dùng xong chờ {cooldown} lần qua ô Bắt Đầu',
+    effect: 'Sau khi lắc, được lắc lại 1 viên (bạn chọn viên nào) để đổi ô sẽ tới. Kết quả mới là kết quả cuối, kể cả khi xấu hơn. Cược và Tất Tay đã chốt theo cú lắc đầu, không đổi theo. Dùng xong thì {turns} lượt sau của bạn mới dùng lại được.',
+    lvText: 'Dùng xong chờ {turns} lượt',
   },
   {
     id: 'ddU', branch: 'doden', tier: 4, slot: 'a', kind: 'active', once: true, icon: 'allin',
@@ -637,26 +652,30 @@ export const SKILLS = [
     lvText: 'Xây +{$build}, bán/dỡ +{$sell}',
   },
   {
-    id: 'dc3', branch: 'dauco', tier: 3, slot: 'a', kind: 'active', auto: true, icon: 'magnet',
-    requires: ['dcS1'],
+    /* Tối thượng của đường trái (đổi chỗ với Cơn Sốt Đất): ép mua là việc
+       riêng của nhánh này, còn tăng thuê thì Đất Nhiều Màu đã làm. Id giữ là
+       `dc3` để số liệu cũ vẫn nối đúng kỹ năng. */
+    id: 'dc3', branch: 'dauco', tier: 4, slot: 'a', kind: 'active', auto: true, icon: 'magnet',
+    requires: ['dcU'],
     name: 'Thâu Tóm',
-    uses: '1 lần, rồi chờ vài lần qua ô Bắt Đầu',
+    uses: 'Reset mỗi khi qua ô Bắt Đầu',
     when: 'khi bạn dừng trên đất chưa có nhà của người khác',
     levels: [
-      { premium: [1.1, 1.3], cooldown: 1 },
-      { premium: 1.1, cooldown: 1 },
-      { premium: 1.0, cooldown: 1 },
+      { premium: 1.0, charges: 1, cooldown: 1 },
+      { premium: 0.9, charges: 1, cooldown: 1 },
+      { premium: 0.8, charges: 2, cooldown: 1 },
     ],
     grow: { by: 'uses', at: [1, 2], say: 'Thâu tóm {n} lần' },
     short: 'Ép mua đất chưa xây nhà của người khác.',
-    effect: 'Dừng trên đất chưa có nhà, bến/ga hay công ty của người khác: mua lại với giá {%premium} giá gốc, chủ đất nhận tiền và không được từ chối. Không dùng được nếu chủ đất đã xây nhà trong bộ màu đó. Dùng xong phải qua ô Bắt Đầu {cooldown} lần mới dùng lại được.',
-    lvText: 'Giá {%premium}, chờ {cooldown} lần',
+    effect: 'Dừng trên đất chưa có nhà, bến/ga hay công ty của người khác: mua lại với giá {%premium} giá gốc, chủ đất nhận tiền và không được từ chối. Không dùng được nếu chủ đất đã xây nhà trong bộ màu đó. Dùng được {charges} lần giữa hai lần qua ô Bắt Đầu.',
+    lvText: 'Giá {%premium}, {charges} lần giữa hai lần qua',
   },
   {
-    id: 'dcU', branch: 'dauco', tier: 4, slot: 'a', kind: 'passive', span: 'forever', icon: 'boom',
-    requires: ['dc3'],
+    /* Xuống cấp 3 (1 điểm thay vì 2) nên hệ số hạ theo. Id giữ là `dcU`. */
+    id: 'dcU', branch: 'dauco', tier: 3, slot: 'a', kind: 'passive', span: 'forever', icon: 'boom',
+    requires: ['dcS1'],
     name: 'Cơn Sốt Đất',
-    levels: [{ mult: 3 }, { mult: 3.5 }, { mult: 4.5 }],
+    levels: [{ mult: 2 }, { mult: 2.5 }, { mult: 3 }],
     grow: { by: 'worth', at: [2500, 3500] },
     short: 'Đất chưa xây, bến/ga, công ty của bạn thu thuê gấp nhiều lần.',
     effect: 'Mọi ô chưa có nhà của bạn (đất trống, bến/ga, công ty) thu tiền thuê ×{mult}. Ô đã xây nhà thì tính giá thuê nhà như thường.',
@@ -666,13 +685,14 @@ export const SKILLS = [
   {
     id: 'dcV', branch: 'dauco', tier: 4, slot: 'b', kind: 'active', once: true, icon: 'foreclose',
     requires: ['dcX1'],
+    excludes: ['dcS1'],
     name: 'Siết Nợ',
     /* Nhắm con nợ: người đang có ô thế chấp hoặc cạn tiền mặt dưới `poor`.
        Ô đang thế chấp mua rẻ (`bank` × số thế chấp), ô thường của con nợ mua
        theo `debt` × giá gốc. Từng chỉ nhắm ô đang thế chấp — hiếm tới mức bot
        chơi nghìn ván mới siết được chừng 2 lần mỗi ván, yếu nhất trong mười
-       tối thượng (xem `forecloseOffers` và tests/gamesim.mjs). Cơn Sốt Đất hợp
-       khi mình gom nhiều đất trống; ô này hợp khi cả bàn đang túng tiền. */
+       tối thượng (xem `forecloseOffers` và tests/gamesim.mjs). Thâu Tóm hợp
+       khi mình đang gom bộ màu; ô này hợp khi cả bàn đang túng tiền. */
     uses: 'Reset mỗi khi qua ô Bắt Đầu',
     when: 'trong lượt của bạn, khi có người đang có ô thế chấp hoặc cạn tiền mặt',
     levels: [
@@ -714,16 +734,20 @@ export const SKILLS = [
   {
     id: 'dcS1', branch: 'dauco', tier: 2, slot: 'a', kind: 'active', once: true, icon: 'basket',
     requires: ['dc1'],
+    excludes: ['dcV'],
     name: 'Nhặt Hàng Thừa',
     /* Bấm để dùng trong lượt của mình, không phải hộp hỏi chen vào lúc người
        khác vừa bỏ qua ô: không ai phải đứng chờ, và hai người cùng học kỹ năng
        này thì ai tới lượt trước người đó mua. */
+    /* Giá từng là 90/85/80%: mua rẻ hơn ngân hàng mà quân ở đâu cũng được, lại
+       ghép với Siết Nợ thì một người vừa vét ô trống vừa vét ô con nợ. Giờ đắt
+       hơn giá gốc ở level 1, và loại trừ Siết Nợ (`excludes`). */
     uses: 'Reset mỗi khi qua ô Bắt Đầu',
     when: 'trong lượt của bạn, khi có người khác đang đứng ở ô chưa có chủ',
     levels: [
-      { price: 0.9, charges: 1, cooldown: 1, early: 3 },
-      { price: 0.85, charges: 1, cooldown: 1, early: 3 },
-      { price: 0.8, charges: 2, cooldown: 1, early: 3 },
+      { price: 1.1, charges: 1, cooldown: 1, early: 3 },
+      { price: 1.0, charges: 1, cooldown: 1, early: 3 },
+      { price: 0.9, charges: 2, cooldown: 1, early: 3 },
     ],
     grow: { by: 'uses', at: [1, 2], say: 'Nhặt {n} ô' },
     short: 'Mua ô chưa có chủ mà người khác đang đứng, quân bạn ở đâu cũng được.',
@@ -843,20 +867,22 @@ export const SKILLS = [
     id: 'acS1', branch: 'ancu', tier: 3, slot: 'c', kind: 'passive', span: 'forever', icon: 'apartment',
     requires: ['ac2b'],
     name: 'Chung Cư Mini',
-    /* Nhà trên đất lẻ đứng `life` lượt của chủ đất kể từ căn đầu tiên, mỗi
-       căn xây thêm trên ô ấy cộng `ext` lượt; gom đủ bộ trước khi hết hạn thì
-       thành nhà thường, đứng mãi. Để nguyên vĩnh viễn thì người có kỹ năng
-       này khỏi cần giao dịch với ai. Hạn gốc ngắn để lượt chủ đất (cũng là
-       một vòng bàn) không kéo dài cả chục vòng. */
+    /* Nhà trên đất lẻ đứng `life` lần chủ đất qua ô Bắt Đầu kể từ căn đầu
+       tiên, mỗi căn xây thêm trên ô ấy cộng `ext` lần; gom đủ bộ trước khi hết
+       hạn thì thành nhà thường, đứng mãi. Để nguyên vĩnh viễn thì người có kỹ
+       năng này khỏi cần giao dịch với ai. Từng tính theo lượt của chủ đất (3–5
+       lượt, chưa tới một vòng); tính theo lần qua thì cùng một thước với các
+       kỹ năng hồi khác. Lần qua ô Bắt Đầu ngay trong lượt vừa xây không tính
+       (xem `GameState.ageMini`). */
     levels: [
-      { cap: 1, mult: 1.25, total: 3, life: 3, ext: 3 },
-      { cap: 2, mult: 1.25, total: 4, life: 4, ext: 4 },
-      { cap: 2, mult: 1, total: 6, life: 4, ext: 5 },
+      { cap: 1, mult: 1.25, total: 3, life: 1, ext: 1 },
+      { cap: 2, mult: 1.25, total: 4, life: 2, ext: 1 },
+      { cap: 2, mult: 1, total: 6, life: 2, ext: 2 },
     ],
     grow: { by: 'uses', at: [1, 3], say: 'Xây {n} căn trên đất lẻ' },
-    short: 'Đất chưa đủ bộ màu vẫn xây được nhà, nhưng nhà chỉ đứng một số lượt.',
-    effect: 'Ô đất chưa đủ bộ màu vẫn xây được tối đa {cap} căn nhà, giá xây ×{mult}; cộng mọi ô đất lẻ lại không quá {total} căn. Nhà trên ô lẻ đứng {life} lượt của bạn kể từ căn đầu tiên, mỗi căn xây thêm trên ô ấy cộng {ext} lượt; hết hạn thì ngân hàng mua lại như bán nhà. Gom đủ bộ màu trước khi hết hạn thì nhà thành nhà thường.',
-    lvText: 'Đất lẻ xây tối đa {cap} căn mỗi ô, {total} căn tất cả, giá ×{mult}, đứng {life} lượt, xây thêm +{ext} lượt',
+    short: 'Đất chưa đủ bộ màu vẫn xây được nhà, nhưng nhà chỉ đứng tới vài lần qua ô Bắt Đầu.',
+    effect: 'Ô đất chưa đủ bộ màu vẫn xây được tối đa {cap} căn nhà, giá xây ×{mult}; cộng mọi ô đất lẻ lại không quá {total} căn. Nhà trên ô lẻ đứng {life} lần bạn qua ô Bắt Đầu kể từ căn đầu tiên, mỗi căn xây thêm trên ô ấy cộng {ext} lần; hết hạn thì ngân hàng mua lại như bán nhà. Gom đủ bộ màu trước khi hết hạn thì nhà thành nhà thường.',
+    lvText: 'Đất lẻ xây tối đa {cap} căn mỗi ô, {total} căn tất cả, giá ×{mult}, đứng {life} lần qua, xây thêm +{ext} lần',
   },
   {
     id: 'acS2', branch: 'ancu', tier: 3, slot: 'd', kind: 'passive', span: 'forever', icon: 'neighbors',
@@ -884,13 +910,13 @@ export const BUILDS = [
   },
   {
     name: 'Địa Chủ Lấn Đất',
-    skills: ['dcS1', 'dc2a', 'dc3', 'acX2', 'ac1'],
-    note: 'Nhặt Hàng Thừa gom ô người khác bỏ, Cò Đất kiếm tiền từ người khác, đủ vốn Thâu Tóm ô còn thiếu của bộ màu rồi xây ngay với Mái Ấm.',
+    skills: ['dcS1', 'dcU', 'dc3', 'acX2', 'ac1'],
+    note: 'Nhặt Hàng Thừa gom ô người khác bỏ, Cơn Sốt Đất cho đất trống thu thuê, Thâu Tóm ô còn thiếu của bộ màu rồi xây ngay với Mái Ấm.',
   },
   {
     name: 'Cò Mồi Sài Thành',
-    skills: ['dcS1', 'dc2a', 'dc2b', 'dc3', 'dcU'],
-    note: 'Học thẳng nhánh Đầu Cơ: ô người khác bỏ thì nhặt rẻ, người khác đổi đất, xây nhà đều ra tiền cho bạn; gom càng nhiều đất lẻ thì Cơn Sốt Đất càng lời.',
+    skills: ['dcS1', 'dcU', 'dc3', 'dc2b', 'dc2a'],
+    note: 'Học thẳng nhánh Đầu Cơ: ô người khác bỏ thì nhặt, đất trống thu thuê gấp đôi, ô còn thiếu thì ép mua; người khác đổi đất, xây nhà đều ra tiền cho bạn.',
   },
   {
     name: 'Thợ Cả Tích Cóp',

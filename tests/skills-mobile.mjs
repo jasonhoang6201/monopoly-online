@@ -110,13 +110,14 @@ for (const [W, H] of SIZES) {
   await page.waitForTimeout(500);
   await shot('2-tree');
   let nodesOk = true;
-  for (const id of ['cn1', 'dcU', 'acU', 'ac2b', 'cn2a']) {
+  for (const id of ['cn1', 'dc3', 'acU', 'ac2b', 'cn2a']) {
     const b = await probe(page, `.st-node[data-id="${id}"]`);
     if (!(b.inView && b.onTop)) { nodesOk = false; console.log(`    ô ${id} ${JSON.stringify(b.rect)} ${b.topEl}`); }
   }
   ok(`${tag} · ô trên cây nằm trong khung và chạm trúng`, nodesOk);
   await tappable(tag, 'nút ✕ đóng cây', page, '.st-close');
   await tappable(tag, 'nút Tẩy điểm', page, '.st-respec');
+  await tappable(tag, 'nút Mua điểm', page, '.st-buy');
   await page.locator('.st-node[data-id="cn1"]').tap();
   await page.waitForTimeout(500);
   await shot('3-detail');
@@ -212,7 +213,7 @@ for (const [W, H] of SIZES) {
   /* ---- hộp Thâu Tóm ---- */
   await run(page, `
     const me = s.current, other = s.players[(s.turn + 1) % 3];
-    s.owner.set(39, other.id); me.skills.push('dc1','dcS1','dc3');
+    s.owner.set(39, other.id); me.skills.push('dc1','dcS1','dcU','dc3');
     const { BOARD } = await import('/src/data/board.js');
     window.__sz = c.skills.trySeize(me, 39, 50);
   `);
@@ -250,7 +251,7 @@ for (const [W, H] of SIZES) {
   await page.waitForTimeout(500);
   await shot('8-profile-tree');
   let viewOk = true;
-  for (const id of ['cn1', 'acU', 'dcU', 'ac2b']) {
+  for (const id of ['cn1', 'acU', 'dc3', 'ac2b']) {
     await page.locator(`.ppane-skills .st-node[data-id="${id}"]`).scrollIntoViewIfNeeded();
     const b = await probe(page, `.ppane-skills .st-node[data-id="${id}"]`);
     if (!(b.inView && b.onTop)) { viewOk = false; console.log(`    ô ${id} ${JSON.stringify(b.rect)} ${b.topEl}`); }

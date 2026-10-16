@@ -79,6 +79,9 @@ await page.evaluate(([lvRolls, ultB]) => {
   ];
   // Tối thượng thứ hai: đổi mọi id 'xxU' thành 'xxV'
   if (ultB) builds.forEach((b) => b.forEach((id, j) => { if (/U$/.test(id)) b[j] = id.replace(/U$/, 'V'); }));
+  /* Đầu Cơ: tối thượng a là Thâu Tóm (dc3, mọc từ Cơn Sốt Đất dcU), còn Siết
+     Nợ loại trừ Nhặt Hàng Thừa, nên đường b của ghế này viết riêng. */
+  if (ultB) builds[3] = ['dc1', 'dc2a', 'dc2b', 'dcX1', 'dcV', 'dcX2', 'dcS2', 'acX2', 'ac1', 'ac2a', 'ac2b', 'ac3', 'acV', 'acX1'];
   s.players.forEach((p, i) => { p.skills = builds[i]; p.money = 2000; p.skillPoints = 2; });
   // Level: ghế 0 toàn level 3, ghế 2 toàn level 1, ghế 1 và 3 rút theo seed
   let k = 0;

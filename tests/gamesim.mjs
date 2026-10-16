@@ -47,7 +47,7 @@ const { BOARD, GROUP_TILES, GO_SALARY } = B;
 const {
   has, param, roll, credit, ready, spend, onLap, levyEach, freeHouseTarget, tollStops, tourPassed,
   payerRent, rentGains, canLearn, learnSkill, lottoPrize, levelOf, usesLeft, leftoverOffers,
-  forecloseOffers, canSeize, setSkillOn,
+  forecloseOffers, canSeize, setSkillOn, tickTurns,
 } = K;
 const SK = new Map(D.SKILLS.map((s) => [s.id, s]));
 
@@ -76,13 +76,13 @@ const BUILDS = {
   'DĐ Tất Tay': ['dd1', 'dd2b', 'dd3', 'ddU', 'ddU', 'ddU', 'dd3', 'dd3'],
   'DĐ Xổ Số': ['dd1', 'dd2a', 'ddX1', 'ddV', 'ddV', 'ddV', 'ddX1', 'ddX1'],
   'DĐ Cờ Bạc': ['dd1', 'dd2a', 'ddX2', 'ddS2', 'ddS1', 'ddS2', 'ddS2', 'dd2a', 'dd2a'],
-  'ĐC Cơn Sốt': ['dc1', 'dcS1', 'dc3', 'dcU', 'dcU', 'dcU', 'dc3', 'dc3'],
+  'ĐC Thâu Tóm': ['dc1', 'dcS1', 'dcU', 'dc3', 'dc3', 'dc3', 'dcU', 'dcU'],
   'ĐC Siết Nợ': ['dc1', 'dc2b', 'dcX1', 'dcV', 'dcV', 'dcV', 'dc1', 'dc1'],
   'ĐC Môi Giới + Góp Vốn': ['dc1', 'dc2b', 'dcX2', 'dcS2', 'dc1', 'dc1', 'dcS2', 'dcS2', 'dcS1'],
   'AC Phố Cổ': ['acX2', 'ac2a', 'ac3', 'acU', 'acU', 'acU', 'ac2a', 'ac2a'],
   'AC Mặt Tiền': ['acX2', 'ac2b', 'acX1', 'acV', 'acV', 'acV', 'ac2b', 'ac2b'],
   'AC Chung Cư': ['acX2', 'ac2b', 'acS1', 'acS1', 'acS1', 'ac1', 'acS2', 'acS2'],
-  'Combo Nhặt + Thâu Tóm + Chung Cư': ['dc1', 'dc2b', 'dcS1', 'acX2', 'ac2b', 'acS1', 'dc2a', 'dc3', 'acS1'],
+  'Combo Nhặt + Thâu Tóm + Chung Cư': ['dc1', 'dcS1', 'dcU', 'acX2', 'ac2b', 'acS1', 'dc3', 'acS1', 'acS1'],
 };
 
 /* ------------------------------------------------------------ một ván */
@@ -176,6 +176,7 @@ function game(names, builds = BUILDS, pol = []) {
     p.money += total;
     for (const [id, n] of Object.entries(parts)) credit(p, id, n);
     onLap(p);
+    st.ageMini(p.id);   // như controller: nhà Chung Cư Mini già một nấc mỗi lần qua ô Bắt Đầu
     if (has(p, 'cnU')) for (const q of others(p)) credit(p, 'cnU', give(q, p, levyEach(p)));
     if (has(p, 'acU')) {
       for (let k = 0; k < param(p, 'acU').houses; k++) {
@@ -530,7 +531,7 @@ function game(names, builds = BUILDS, pol = []) {
   for (let n = 0; n < 4 * 120; n++) {
     const p = st.current;
     turn(p);
-    st.ageMini(p.id);   // như controller.endTurn: nhà Chung Cư Mini già thêm một lượt
+    tickTurns(p);       // như controller.endTurn: kỹ năng hồi theo lượt nhích một nấc
     const w = st.winCheck();
     if (w) { by = w.by; break; }
     if (!st.nextTurn()) break;

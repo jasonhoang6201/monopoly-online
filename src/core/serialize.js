@@ -32,6 +32,8 @@ export function snapshot(st) {
       skillOff: [...p.skillOff],
       laps: p.laps,
       cooldowns: { ...p.cooldowns },
+      cdTurns: { ...p.cdTurns },
+      boughtPoints: p.boughtPoints,
       cdHold: { ...p.cdHold },
       usedTurn: { ...p.usedTurn },
       skillLv: { ...p.skillLv },
@@ -82,6 +84,7 @@ export function snapshot(st) {
     /* Cây kỹ năng: biển Di Sản và bộ đếm lượt cho kỹ năng "mỗi lượt 1 lần". */
     heritage: [...st.heritage],
     miniLeft: [...st.miniLeft],
+    miniAt: [...st.miniAt],
     turnNo: st.turnNo,
     round: st.round,
     rolled: st.rolled,
@@ -132,6 +135,8 @@ export function applySnapshot(st, snap) {
     p.skillOff = s.skillOff ? [...s.skillOff] : (s.skills ?? []).includes('ddS2') && !s.spin ? ['ddS2'] : [];
     p.laps = s.laps ?? p.laps;
     p.cooldowns = { ...(s.cooldowns ?? p.cooldowns) };
+    p.cdTurns = { ...(s.cdTurns ?? {}) };
+    p.boughtPoints = s.boughtPoints ?? 0;
     p.cdHold = { ...(s.cdHold ?? {}) };
     p.usedTurn = { ...(s.usedTurn ?? p.usedTurn) };
     p.skillLv = { ...(s.skillLv ?? p.skillLv) };
@@ -175,6 +180,7 @@ export function applySnapshot(st, snap) {
      chồng thay vì bỏ đi, để ván đang chơi giữa lúc cập nhật không bị xáo lại. */
   if (snap.heritage) st.heritage = new Set(snap.heritage);
   if (snap.miniLeft) st.miniLeft = new Map(snap.miniLeft);
+  st.miniAt = new Map(snap.miniAt ?? []);
   st.turnNo = snap.turnNo ?? st.turnNo;
   st.round = snap.round ?? st.round;
   st.rolled = snap.rolled ?? false;

@@ -95,6 +95,10 @@ export class Player {
     this.laps = 0;
     /** id kỹ năng → số lần qua ô Bắt Đầu còn phải chờ trước khi dùng lại. */
     this.cooldowns = {};
+    /** id kỹ năng → số lượt của mình còn phải chờ (kỹ năng có `turns`, xem `tickTurns`). */
+    this.cdTurns = {};
+    /** Số điểm kỹ năng đã mua bằng tiền mặt (`buyPoint`), chỉ để ghi số liệu. */
+    this.boughtPoints = 0;
     /**
      * id kỹ năng → `turnNo` mà lần qua ô Bắt Đầu trong lượt đó không trừ thời
      * gian chờ của nó (Chuyến Tàu Xuyên Việt: chuyến tàu đi ngang ô Bắt Đầu).
@@ -236,13 +240,20 @@ export class GameState {
      */
     this.heritage = new Set();
     /**
-     * Chung Cư Mini: ô đất lẻ đang có nhà → số lượt của chủ đất còn lại trước
-     * khi nhà bị ngân hàng mua lại. Căn đầu đặt `life`, mỗi căn sau cộng `ext`:
+     * Chung Cư Mini: ô đất lẻ đang có nhà → số lần chủ đất còn phải qua ô Bắt
+     * Đầu trước khi nhà bị ngân hàng mua lại. Căn đầu đặt `life`, mỗi căn sau cộng `ext`:
      * muốn giữ lâu thì phải đổ thêm tiền xây, mà mỗi ô lẻ chỉ có `cap` căn nên
      * không kéo dài mãi được. Xoá khi ô hết nhà hoặc chủ đất gom đủ bộ.
      * @type {Map<number, number>}
      */
     this.miniLeft = new Map();
+    /**
+     * Chung Cư Mini: ô → `turnNo` của lần xây gần nhất. Lần qua ô Bắt Đầu ngay
+     * trong lượt vừa xây không trừ hạn, không thì xây trước khi lắc rồi đi
+     * ngang ô Bắt Đầu là nhà level 1 (hạn 1 lần qua) bị mua lại ngay lượt ấy.
+     * @type {Map<number, number>}
+     */
+    this.miniAt = new Map();
     /**
      * Đếm lượt từ đầu ván, tăng ở `nextTurn`. Kỹ năng "mỗi lượt 1 lần" đánh dấu
      * bằng con số này thay vì một cờ bật/tắt: `beginTurn` chạy lại nhiều lần
@@ -633,6 +644,7 @@ export class GameState {
       const { life, ext } = param(p, 'acS1');
       const left = this.miniLeft.get(tileId);
       this.miniLeft.set(tileId, left === undefined ? life : left + ext);
+      this.miniAt.set(tileId, this.turnNo);
     }
     if (check.isHotel) {
       this.houses.set(tileId, 5);
@@ -743,7 +755,8 @@ export class GameState {
   }
 
   /**
-   * Hết một lượt của `seat`: trừ hạn nhà Chung Cư Mini trên đất lẻ của họ.
+   * `seat` vừa qua ô Bắt Đầu: trừ hạn nhà Chung Cư Mini trên đất lẻ của họ.
+   * Ô vừa xây trong lượt này giữ nguyên hạn (xem `miniAt`).
    * Ô hết hạn thì bán từng căn lại cho ngân hàng theo đúng luật bán nhà (giá
    * bán lại, Sổ Hồng, Thầu Vật Liệu đều tính như bấm bán tay).
    *
@@ -758,6 +771,7 @@ export class GameState {
       if (owner === undefined || this.housesOn(id) === 0) { this.miniLeft.delete(id); continue; }
       if (owner !== seat) continue;
       if (this.hasFullGroup(seat, BOARD[id].color_group)) { this.miniLeft.delete(id); continue; }
+      if (this.miniAt.get(id) === this.turnNo) continue;
       if (left > 1) { this.miniLeft.set(id, left - 1); continue; }
       this.miniLeft.delete(id);
       let sold = 0, refund = 0;

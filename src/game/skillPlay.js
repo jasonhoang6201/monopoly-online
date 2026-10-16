@@ -12,12 +12,12 @@ import {
   skillById, has, param, roll, rolled, ready, usesLeft, spend, onLap, levyRate, levyEach, levelOf,
   freeHouseTarget, credit, rentGains, lateFee, lottoPrize, tollStops, forecloseOffers,
   tourPassed, leftoverOffers, isOff, setSkillOn, learnSkill, switchable, canSeize,
-  teleportTargets, tally, recordLearn,
+  teleportTargets, tally, recordLearn, waitText,
 } from '../core/skills.js';
 import { cardType, isKeepable, moveDest, repairBill } from '../core/cards.js';
 import { cardName, cardEffect, CARD_KINDS, DECK_META } from '../data/cards.js';
 import { RANKS, rankOf, shortLabel } from '../ui/caseOpen.js';
-import { SKILLS, BRANCHES } from '../data/skills.js';
+import { SKILLS, BRANCHES, POINT_PRICE } from '../data/skills.js';
 import { openModal } from '../ui/modal.js';
 import { openSkillTree, refreshSkillTree } from '../ui/skillTree.js';
 import { skillIcon } from '../ui/skillIcons.js';
@@ -125,7 +125,7 @@ export class SkillPlay {
     const st = this.st;
     const out = [];
     const jail = p.inJail;
-    const wait = (id) => `Chờ ${p.cooldowns[id]} lần qua ô Bắt Đầu`;
+    const wait = (id) => waitText(p, id);
     const beforeRoll = rolled ? 'Chỉ dùng trước khi lắc' : jail ? 'Không dùng khi đang ở tù' : '';
     const cell = (id, o) => { if (has(p, id)) out.push({ id, switch: switchable(skillById(id)), ok: true, ...o }); };
     // Bật / tắt: kỹ năng có lượt dùng đang chờ hồi thì không bật được
@@ -605,6 +605,7 @@ export class SkillPlay {
     if (this.treeOpen) { this.g.restoreActions(); return; }
     const before = Object.fromEntries(SKILLS.map((s) => [s.id, levelOf(p, s.id)]));
     const wasOn = new Set(p.skills.filter((id) => has(p, id)));
+    const bought0 = p.boughtPoints ?? 0;
     this.treeOpen = true;
     try {
       await openSkillTree(p, {
@@ -627,6 +628,8 @@ export class SkillPlay {
         return `<b>${s.name}</b>${lv > 1 ? ` lên level ${lv}` : ''}`;
       });
     const lines = [];
+    const bought = (p.boughtPoints ?? 0) - bought0;
+    if (bought > 0) lines.push(`${named(p)} mua <b>${bought} điểm kỹ năng</b>, trả <span class="down">${money(bought * POINT_PRICE)}</span>.`);
     if (wiped) {
       lines.push(`${named(p)} tẩy toàn bộ kỹ năng để học lại từ đầu${
         gained.length ? `, rồi học ${gained.join(', ')}` : ''}.`);

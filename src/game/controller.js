@@ -23,7 +23,7 @@ import { EventRunner } from './eventRunner.js';
 import { GhostCouncil } from './ghostCouncil.js';
 import { SkillPlay } from './skillPlay.js';
 import { Bot } from './bot.js';
-import { has, offSpent, grantLapPoint, deedHolds } from '../core/skills.js';
+import { has, offSpent, tickTurns, grantLapPoint, deedHolds } from '../core/skills.js';
 import { snapshot, fromSnapshot, applySnapshot } from '../core/serialize.js';
 import { telemetry, track } from '../core/telemetry.js';
 import { Analytics } from '../net/analytics.js';
@@ -1411,7 +1411,7 @@ export class Game {
        thẻ Thời Cuộc sinh ra để phá, nên nó đẩy thanh áp lực nhanh hơn cả. */
     if (st.dryTurn) addPressure(st, PRESSURE.dryTurn);
     offSpent(st.current);
-    await this.expireMini(st.current);
+    tickTurns(st.current);
 
     const fired = eventDue(st);
     if (fired) {
@@ -1432,9 +1432,9 @@ export class Game {
   }
 
   /**
-   * Chung Cư Mini: hết lượt thì nhà trên đất lẻ của người vừa đi già thêm một
-   * lượt; ô hết hạn bị ngân hàng mua lại. Báo cho cả bàn vì giá thuê ô ấy tụt
-   * về đất trống ngay lượt sau.
+   * Chung Cư Mini: qua ô Bắt Đầu thì nhà trên đất lẻ của người vừa đi già thêm
+   * một nấc; ô hết hạn bị ngân hàng mua lại. Báo cho cả bàn vì giá thuê ô ấy
+   * tụt về đất trống ngay lượt sau.
    */
   async expireMini(p) {
     const st = this.state;
@@ -1573,6 +1573,7 @@ export class Game {
       this.skills.paid(p, parts);
       await this.skills.lapEnd(p);
       if (st.over || p.bankrupt) return;
+      await this.expireMini(p);
     }
 
     // Trạm Thu Phí BOT: tính sau lương, để người vừa lãnh lương có tiền nộp phí

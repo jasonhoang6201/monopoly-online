@@ -149,8 +149,11 @@ const usable = await D3.evaluate(async (id) => {
     for (const k of Object.keys(s.ghostVote.votes)) s.ghostVote.votes[k] = 'hoi-cho';
   }
   s.pressure = 999;
+  /* Chép phiếu trước khi gọi endTurn: thẻ nổ ngay trong nhịp đồng bộ đầu tiên
+     của endTurn và mở chu kỳ mới (`ghostVote = null`). */
+  const votes = { ...s.ghostVote.votes };
   c.guard(() => c.endTurn());
-  return s.ghostVote.votes;
+  return votes;
 }, picked);
 const want = Object.values(usable)[0];
 for (const p of pages) {

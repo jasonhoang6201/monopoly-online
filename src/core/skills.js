@@ -7,7 +7,7 @@
  */
 import {
   SKILLS, BRANCHES, TIER_COST, LEVEL_COST, MAX_LEVEL, RESPEC_FEE, ULT_MIX, ULT_SPECIAL,
-  WAYS, GROW_BY,
+  WAYS, GROW_BY, POINT_PRICE,
 } from '../data/skills.js';
 import { BOARD, GROUP_TILES, money, tileLabel, GO_SALARY } from '../data/board.js';
 import { track } from './telemetry.js';
@@ -130,7 +130,7 @@ const sunk = (p, s) => {
 export function skillState(player, id) {
   const s = skillById(id);
   if (player.skills.includes(id)) return 'learned';
-  if (!prereqMet(player, s) || rivalUlt(player, s)) return 'locked';
+  if (!prereqMet(player, s) || rivalUlt(player, s) || excludedBy(player, s)) return 'locked';
   return player.skillPoints >= skillCost(s) ? 'ready' : 'poor';
 }
 
@@ -163,6 +163,17 @@ export function rivalUlt(player, s) {
 }
 
 /**
+ * Ô đã học đang loại trừ ô `s` (`excludes`, khai ở một trong hai phía), nếu
+ * có. Nhặt Hàng Thừa và Siết Nợ cùng vét đất rẻ của người khác, giữ cả hai
+ * thì một người ăn cả ô trống lẫn ô con nợ. Muốn đổi thì tẩy điểm.
+ * @returns {?object}
+ */
+export function excludedBy(player, s) {
+  return SKILLS.find((x) => x.id !== s.id && player.skills.includes(x.id)
+    && (s.excludes?.includes(x.id) || x.excludes?.includes(s.id))) ?? null;
+}
+
+/**
  * Học ô mới hoặc lên level cho ô đã học.
  * @returns {{ok:boolean, reason?:string, cost:number, level:number}}
  *   `level` là level sẽ đạt được nếu bấm.
@@ -181,6 +192,10 @@ export function canLearn(player, id, st) {
   const rival = !lv && rivalUlt(player, s);
   if (rival) {
     return { ok: false, reason: `Đã chọn tối thượng "${rival.name}". Mỗi nhánh chỉ một tối thượng; tẩy điểm để đổi.`, cost, level };
+  }
+  const ex = !lv && excludedBy(player, s);
+  if (ex) {
+    return { ok: false, reason: `Đã học "${ex.name}", không học chung được với ô này; tẩy điểm để đổi.`, cost, level };
   }
   const need = lv ? growNeed(player, s, level, st) : null;
   if (need) {
@@ -244,7 +259,8 @@ export function recordLearn(player, id, level, o = {}) {
 
 /**
  * Nhận điểm kỹ năng. `src` là nguồn: 'lap' (qua ô Bắt Đầu — `onLap` đã ghi sự
- * kiện riêng nên không ghi thêm) hay 'card' (thẻ cộng điểm).
+ * kiện riêng nên không ghi thêm), 'card' (thẻ cộng điểm) hay 'buy' (mua bằng
+ * tiền mặt, xem `buyPoint`).
  */
 export function grantLapPoint(player, n = 1, src = 'lap') {
   player.skillPoints += n;
@@ -299,6 +315,31 @@ export function effectLine(s, lv) {
   return fillText(t, lvParams(s, lv));
 }
 
+/* ------------------------------------------------------------ mua điểm */
+
+/** @returns {{ok:boolean, reason?:string, price:number}} */
+export function canBuyPoint(player) {
+  if (player.money < POINT_PRICE) {
+    return { ok: false, reason: `Thiếu ${money(POINT_PRICE - player.money)} tiền mặt.`, price: POINT_PRICE };
+  }
+  return { ok: true, price: POINT_PRICE };
+}
+
+/**
+ * Đổi `POINT_PRICE` tiền mặt lấy 1 điểm. Chỉ gọi trong lượt của chính người
+ * đó (cây kỹ năng mở ở chế độ `manage`): tiền mặt đổi ngay giữa lượt người
+ * khác thì lệch với khoản họ đang đòi. Điểm mua cũng hoàn khi tẩy như điểm
+ * thường, nên `boughtPoints` chỉ để ghi số liệu.
+ */
+export function buyPoint(player) {
+  const check = canBuyPoint(player);
+  if (!check.ok) return check;
+  player.money -= check.price;
+  player.boughtPoints = (player.boughtPoints ?? 0) + 1;
+  grantLapPoint(player, 1, 'buy');
+  return check;
+}
+
 /* ------------------------------------------------------------ tẩy điểm */
 
 /** Tổng điểm đã tiêu trên cả cây, tính cả level — đây là số điểm được hoàn khi tẩy. */
@@ -317,7 +358,7 @@ export function canRespec(player) {
 /**
  * Tẩy cả cây: hoàn đủ số điểm đã tiêu (cả level), trừ phí bằng tiền mặt.
  *
- * Bộ đếm hồi (`cooldowns`) và số lần đã dùng trong vòng (`lapUses`) nằm
+ * Bộ đếm hồi (`cooldowns`, `cdTurns`) và số lần đã dùng trong vòng (`lapUses`) nằm
  * **ngoài** `skills` và cố ý không bị xoá ở đây — không thì dùng xong tối
  * thượng, tẩy rồi học lại là bấm được ngay lần nữa.
  *
@@ -426,14 +467,21 @@ export const rolled = (p, id) => Object.fromEntries(
 
 /**
  * Kỹ năng bấm để dùng còn dùng được không: đã học và không đang chờ hồi.
- * `cooldowns[id]` đếm số lần qua ô Bắt Đầu còn phải chờ.
+ * `cooldowns[id]` đếm số lần qua ô Bắt Đầu còn phải chờ, `cdTurns[id]` số
+ * lượt của mình còn phải chờ (kỹ năng có `turns`).
  */
-export const ready = (p, id) => has(p, id) && !(p.cooldowns?.[id] > 0);
+export const ready = (p, id) => has(p, id) && !(p.cooldowns?.[id] > 0) && !(p.cdTurns?.[id] > 0);
+
+/** Chữ "đang chờ" cho nút và thẻ kỹ năng. */
+export function waitText(p, id) {
+  if (p.cdTurns?.[id] > 0) return `Chờ ${p.cdTurns[id]} lượt`;
+  return `Chờ ${p.cooldowns?.[id] ?? 0} lần qua ô Bắt Đầu`;
+}
 
 /** Còn dùng được mấy lần trước khi phải chờ — để ghi lên nút và hộp hỏi. */
 export function usesLeft(p, id) {
   if (!ready(p, id)) return 0;
-  return (param(p, id).charges ?? 1) - (p.lapUses?.[id] ?? 0);
+  return Math.max(0, (param(p, id).charges ?? 1) - (p.lapUses?.[id] ?? 0));
 }
 
 /**
@@ -441,13 +489,25 @@ export function usesLeft(p, id) {
  * bắt chờ khi đã dùng hết số lần của level đang có; còn lại thì chờ ngay.
  */
 export function spend(p, id) {
-  const { charges = 1, cooldown } = param(p, id);
+  const { charges = 1, cooldown, turns } = param(p, id);
   const used = (p.lapUses?.[id] ?? 0) + 1;
   if (used < charges) { p.lapUses = { ...p.lapUses, [id]: used }; return; }
   const rest = { ...p.lapUses };
   delete rest[id];
   p.lapUses = rest;
   if (cooldown) p.cooldowns = { ...p.cooldowns, [id]: cooldown };
+  if (turns) p.cdTurns = { ...p.cdTurns, [id]: turns };
+}
+
+/**
+ * Hết một lượt của `p`: kỹ năng hồi theo lượt nhích một nấc. Tính cả lượt vừa
+ * dùng, nên `turns: 3` dùng ở lượt T thì lượt T+3 dùng lại được. Chạy ở
+ * `endTurn` trên máy cầm lái, không ở `beginTurn` (chạy lại sau mỗi ảnh chụp).
+ */
+export function tickTurns(p) {
+  const next = {};
+  for (const [id, n] of Object.entries(p.cdTurns ?? {})) if (n > 1) next[id] = n - 1;
+  p.cdTurns = next;
 }
 
 /**
@@ -769,7 +829,9 @@ export function teleportTargets(st, p) {
 export function canSeize(st, p, tileId) {
   const owner = st.ownerOf(tileId);
   const t = BOARD[tileId];
-  if (!owner || owner.id === p.id || !ready(p, 'dc3') || !t.ownable) return false;
+  /* Hỏi số lần còn lại chứ không chỉ `ready`: dùng 1 trong 2 lần của level 3,
+     tẩy rồi học lại level 1 (1 lần) thì `lapUses` đã ghi đủ, không dùng tiếp. */
+  if (!owner || owner.id === p.id || usesLeft(p, 'dc3') <= 0 || !t.ownable) return false;
   // Bến/ga, công ty không có bộ màu: ép mua được như đất lẻ
   return !st.groupHasHouses(tileId);
 }
@@ -875,8 +937,7 @@ const mid = (v) => (Array.isArray(v) ? (v[0] + v[1]) / 2 : v);
 const cash = (v) => (Array.isArray(v) ? fillText('{$v}', { v }) : money(Math.round(v)));
 const pctOf = (v) => `${Math.round(v * 100)}%`;
 const others = (st, p) => st.alive().filter((q) => q.id !== p.id);
-const waitRow = (p, id) => (p.cooldowns?.[id] > 0
-  ? ['Trạng thái', `Chờ ${p.cooldowns[id]} lần qua ô Bắt Đầu`] : ['Trạng thái', 'Dùng được']);
+const waitRow = (p, id) => ['Trạng thái', p.cooldowns?.[id] > 0 || p.cdTurns?.[id] > 0 ? waitText(p, id) : 'Dùng được'];
 
 /**
  * Những con số người chơi cần để biết kỹ năng này lúc này đáng bao nhiêu:
@@ -1055,7 +1116,7 @@ export function skillNow(st, p, s) {
         const left = [...(st.miniLeft ?? [])]
           .filter(([id]) => st.ownerOf(id)?.id === p.id && st.housesOn(id) > 0)
           .sort((a, b) => a[1] - b[1]);
-        for (const [id, n] of left) row(tileLabel(id), `còn ${n} lượt`);
+        for (const [id, n] of left) row(tileLabel(id), `còn ${n} lần qua ô Bắt Đầu`);
       }
       break;
     }

@@ -486,7 +486,7 @@
 .sd-body p b { color: var(--paper); }
 
 /* ---------------------------------------------------- tẩy điểm */
-.st-respec { flex: none; }
+.st-respec, .st-buy { flex: none; }
 .st-respec[hidden] { display: none; }
 .rs-chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .rs-chip {
@@ -525,6 +525,12 @@
   .sd-body p.sd-effect { font-size: 14px; }
   .sd-lvs li { font-size: 12.5px; padding: 2px 8px; }
   .sd-foot { padding: 8px 14px 10px; }
+}
+/* Màn hẹp nhất (568px): thanh điểm thêm nút Mua điểm thì nút ✕ lòi khỏi khung.
+   Bỏ dòng "Đã học x/y", số ô đã học vẫn đếm được trên cây. */
+@media (max-height: 520px) and (max-width: 640px) {
+  .st-count { display: none; }
+  .st-buy { margin-left: auto; }
 }
 
 /* ---------------------------------------------------- trong ván */

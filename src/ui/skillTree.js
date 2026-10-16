@@ -26,12 +26,12 @@
 import './skillTree.css';
 import { openModal, isTyping } from './modal.js';
 import { skillIcon } from './skillIcons.js';
-import { BRANCHES, SKILLS, KINDS, RESPEC_FEE, MAX_LEVEL } from '../data/skills.js';
+import { BRANCHES, SKILLS, KINDS, RESPEC_FEE, MAX_LEVEL, POINT_PRICE } from '../data/skills.js';
 import {
   skillById, branchByKey, skillCost, skillState, canLearn, learnSkill, levelOf,
   canLevelUp, nextCost, lvParams, levelLine, effectLine, spentIn, branchMax, fillText,
-  canRespec, respec, growNeed, growText, growProgress, rivalUlt,
-  isOff, switchable, skillNow,
+  canRespec, respec, growNeed, growText, growProgress, rivalUlt, excludedBy,
+  canBuyPoint, buyPoint, isOff, switchable, skillNow,
 } from '../core/skills.js';
 import { audio } from '../audio/audio.js';
 import { money } from '../data/board.js';
@@ -145,6 +145,8 @@ function buildTree(player, readOnly, manage) {
         : manage ? '+1 điểm mỗi lần đi qua ô Bắt Đầu · kỹ năng bấm để dùng bật trong kho Dùng kỹ năng'
           : 'Chưa tới lượt bạn: học và lên level được, tẩy điểm thì chờ tới lượt'}</span>
       <span class="st-count"></span>
+      ${readOnly || !manage ? '' : `<button type="button" class="btn btn-sm btn-ghost st-buy" data-act="buy-open"
+              title="Đổi tiền mặt lấy điểm kỹ năng">Mua điểm · ${money(POINT_PRICE)}</button>`}
       ${readOnly || !manage ? '' : `<button type="button" class="btn btn-sm btn-ghost st-respec" data-act="respec-open"
               title="Hoàn lại toàn bộ điểm đã tiêu để học lại từ đầu">Tẩy điểm</button>`}
       <button type="button" class="st-close" data-act="close" title="Đóng (Esc)" aria-label="Đóng cây kỹ năng">✕</button>
@@ -188,6 +190,10 @@ function detailHtml(player, s, readOnly, manage, st) {
   if (s.tier === 4 && !lv) {
     const other = SKILLS.find((x) => x.tier === 4 && x.branch === s.branch && x.id !== s.id);
     conds.push({ ok: !rivalUlt(player, s), text: `Chưa học tối thượng kia: <b>${esc(other.name)}</b>` });
+  }
+  const exIds = SKILLS.filter((x) => x.id !== s.id && (s.excludes?.includes(x.id) || x.excludes?.includes(s.id)));
+  if (exIds.length && !lv) {
+    conds.push({ ok: !excludedBy(player, s), text: `Chưa học <b>${exIds.map((x) => esc(x.name)).join('</b>, <b>')}</b> (không học chung được)` });
   }
   if (lv && !maxed) {
     conds.push({ ok: !growNeed(player, s, lv + 1, st), text: `Lên level ${lv + 1}: ${esc(growLine(player, s, lv + 1, st))}` });
@@ -332,6 +338,36 @@ function respecHtml(player) {
     </div>`;
 }
 
+/* ------------------------------------------------------------ thẻ mua điểm */
+
+function buyHtml(player) {
+  const c = canBuyPoint(player);
+  return `
+    <div class="sd-card rs-card" style="--c:var(--gold)" role="dialog" aria-label="Mua điểm kỹ năng">
+      <div class="sd-top">
+        <span class="sd-icon">${skillIcon('pickup')}</span>
+        <div class="sd-title">
+          <span class="sd-eyebrow">Đổi tiền lấy điểm</span>
+          <h3>Mua điểm kỹ năng</h3>
+        </div>
+      </div>
+      <div class="sd-body">
+        <p>Trả <b>${money(POINT_PRICE)}</b> tiền mặt cho ngân hàng, nhận <b>1</b> điểm kỹ năng. Mua được nhiều lần trong lượt của bạn.</p>
+        <ul class="rs-sum">
+          <li><span>Điểm kỹ năng</span><b>${player.skillPoints} → ${player.skillPoints + 1}</b></li>
+          <li><span>Tiền mặt</span><b>${money(player.money)} → ${money(player.money - POINT_PRICE)}</b></li>
+        </ul>
+        ${c.ok ? '' : `<p class="sd-why">${esc(c.reason)}</p>`}
+      </div>
+      <div class="sd-foot">
+        <button type="button" class="btn btn-ghost" data-act="cancel">Huỷ<kbd class="btn-key">Esc</kbd></button>
+        <button type="button" class="btn btn-gold" data-act="buy" data-primary ${c.ok ? '' : 'disabled'}>
+          Mua 1 điểm · −${money(POINT_PRICE)}${c.ok ? '<kbd class="btn-key">⏎</kbd>' : ''}
+        </button>
+      </div>
+    </div>`;
+}
+
 /* ------------------------------------------------------------ dựng + gắn sự kiện */
 
 /**
@@ -363,7 +399,7 @@ export function mountSkillTree(player, o = {}) {
   const tip = $('.st-tip');
   const detail = $('.st-detail');
   const pnum = $('.st-pnum');
-  /** Thẻ đang mở trên cây: id kỹ năng, `'respec'` là thẻ tẩy điểm. */
+  /** Thẻ đang mở trên cây: id kỹ năng, `'respec'` là thẻ tẩy điểm, `'buy'` thẻ mua điểm. */
   let openId = null;
 
   function refresh() {
@@ -484,7 +520,7 @@ export function mountSkillTree(player, o = {}) {
   function openDetail(id) {
     openId = id;
     hideTip();
-    detail.innerHTML = id === 'respec' ? respecHtml(player) : detailHtml(player, skillById(id), readOnly, manage, board());
+    detail.innerHTML = id === 'respec' ? respecHtml(player) : id === 'buy' ? buyHtml(player) : detailHtml(player, skillById(id), readOnly, manage, board());
     detail.hidden = false;
     requestAnimationFrame(() => detail.classList.add('show'));
     tree.querySelector(`.st-node[data-id="${id}"]`)?.classList.add('focus');
@@ -526,6 +562,19 @@ export function mountSkillTree(player, o = {}) {
     refresh();
     floatPoints(`+${res.refund}`);
     audio.sfx('card');
+    o.onChange?.();
+  }
+
+  /* Mua xong giữ thẻ mở, vẽ lại số mới: mua mấy điểm liền thì chỉ cần Enter tiếp. */
+  function doBuy() {
+    if (readOnly || !manage) return;
+    if (!buyPoint(player).ok) return;
+    refresh();
+    detail.innerHTML = buyHtml(player);
+    (detail.querySelector('[data-primary]:not(:disabled)') ?? detail.querySelector('[data-act="cancel"]'))
+      ?.focus({ preventScroll: true });
+    floatPoints('+1');
+    audio.sfx('buy');
     o.onChange?.();
   }
 
@@ -592,6 +641,8 @@ export function mountSkillTree(player, o = {}) {
     else if (act === 'learn') doLearn();
     else if (act === 'respec-open') openDetail('respec');
     else if (act === 'respec') doRespec();
+    else if (act === 'buy-open') openDetail('buy');
+    else if (act === 'buy') doBuy();
     // Bấm ra vùng tối quanh thẻ = huỷ
     else if (e.target === detail) closeDetail();
   });
@@ -610,7 +661,8 @@ export function mountSkillTree(player, o = {}) {
   /** Ảnh chụp mới ghi đè lên `player`: vẽ lại cây, cả thẻ chi tiết đang mở. */
   function resync() {
     refresh();
-    if (openId && openId !== 'respec') detail.innerHTML = detailHtml(player, skillById(openId), readOnly, manage, board());
+    if (openId === 'buy') detail.innerHTML = buyHtml(player);
+    else if (openId && openId !== 'respec') detail.innerHTML = detailHtml(player, skillById(openId), readOnly, manage, board());
   }
 
   return { el: tree, onKey, refresh: resync };
