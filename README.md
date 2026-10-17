@@ -391,13 +391,15 @@ Riêng bộ kiểm thử phòng online chạy ở **cổng 5179** và cần máy
 ```bash
 npm run server:test &                 # wrangler dev, cổng 8787
 npx vite --port 5179 --strictPort &
-npm run test:online                   # tests/server.mjs rồi tests/online.mjs
+npm run test:online                   # server, online, online-flows, online-net
 ```
 
 | Tệp | Kiểm tra |
 |---|---|
 | `tests/server.mjs` | Giao thức máy chủ không qua trình duyệt: sổ ghế, khoá giữ ghế, chỉ chủ phòng mời ra / khai cuộc, 120 câu hỏi hai máy cùng một ảnh chụp, máy này không nói thay ghế khác, hết giờ thì server đi hộ, rớt mạng rồi vào lại, quá hạn thì bị gạch tên |
 | `tests/online.mjs` | Ba máy (ba browser context) qua máy chủ thật: đường mời giữ `?server=`, mời ra, Khai cuộc khoá tới khi cả phòng sẵn sàng, lắc giành quyền và 6 lượt bằng thanh nút với ván khớp nhau, chat mang tên theo ghế, đấu giá hỏi ba máy cùng lúc, F5 giữa ván về đúng ghế, ngồi im hết giờ, đóng tab quá hạn thì phá sản |
+| `tests/online-flows.mjs` | Ba máy qua máy chủ: giao dịch (hộp duyệt và câu hỏi chuộc ở đúng máy người nhận, tiền chuộc trừ đúng túi), học kỹ năng lúc chưa tới lượt không làm khựng lượt đang chạy, Hội Đồng Hồn Ma bầu từ máy người đã phá sản |
+| `tests/online-net.mjs` | Hai máy, mạng chập chờn: đứt 6 giây lúc ngồi xem, đứt 2 giây lúc đang đi (giữ lượt), đứt quá `skipMs` (mất lượt), socket chết lặng (server và máy khách tự phát hiện bằng nhịp ping), `setOffline` cả máy |
 | `tests/play-through.mjs` | Chơi tự động 22 lượt với 4 người, bắt lỗi JS |
 | `tests/features.mjs` | Xây nhà đều tay, giới hạn 32 căn, lên khách sạn trả lại 4 nhà, thế chấp/chuộc lãi 10%, giao dịch hai chiều kèm đất thế chấp |
 | `tests/endgame.mjs` | Đổ đôi 3 lần vào tù, các cách ra tù, phá sản trả tài sản về ngân hàng, thắng cuộc |

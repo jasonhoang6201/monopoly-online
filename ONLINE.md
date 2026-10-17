@@ -56,11 +56,26 @@ Một `alarm` duy nhất cho mỗi phòng, đặt vào mốc sớm nhất trong 
 | Người tới lượt đang rớt mạng (`skipMs`) | 12 s | rút hạn câu hỏi còn chừng ấy |
 | Vắng mặt giữa ván (`AWAY_MS`) | 120 s | `evict`: ghế ấy phá sản, tài sản về ngân hàng |
 | Ghế bỏ trống ở phòng chờ | 8 s | bỏ ghế |
+| Socket im lặng (`SILENT_MS`) | 30 s | server đóng socket, tính như rớt mạng |
 
 Bấm nút hay gõ phím gửi `seen` (tối đa 5 giây một lần) để engine xoá chuỗi
 "để hết giờ" của ghế mình.
 
 ## Đứt rồi nối lại
+
+**Socket chết lặng.** Điện thoại đổi wifi sang 4G hay tắt màn hình thì socket có
+thể chết mà không bên nào nhận được `close`. Hai phía cùng soát bằng nhịp ping:
+- Máy khách gửi chuỗi `ping` mỗi 10 giây. Server trả `pong` qua
+  `setWebSocketAutoResponse`, không đánh thức object. Không nghe thấy gì quá
+  25 giây thì máy khách bỏ socket ấy, nối cái mới. Có sự kiện `online` hay tab
+  vừa hiện lên thì dò ngay: `pong` không về trong 3 giây là bỏ.
+- Server đọc `getWebSocketAutoResponseTimestamp` cùng mốc tin gần nhất của
+  từng socket; im quá `SILENT_MS` thì đóng và tính người ấy là vắng. Còn socket
+  mở thì `alarm` thức mỗi `SILENT_MS / 2` để soát.
+
+**Bắt tay đóng.** Máy khách gửi khung đóng thì `webSocketClose` phải tự gọi
+`ws.close()`. Thiếu bước này thì socket bên máy khách kẹt ở CLOSING, trình duyệt
+không báo `close`, máy ấy không biết mình đã mất kết nối.
 
 `net/gameServer.js` nối lại sau 0,3 / 0,8 / 1,5 / 3 / 5 giây, rồi giữ 5 giây.
 Mã đóng 4000–4099 (sai khoá, phòng đầy, bị mời ra) thì không nối lại. Mỗi lần nối
@@ -150,11 +165,16 @@ npm run test:online
 - `tests/server.mjs`: nói chuyện thẳng với server qua WebSocket, không mở trình duyệt.
 - `tests/online.mjs`: ba browser context (mỗi context một cửa sổ, tab nào cũng được
   cấp khung hình). Dùng cổng `test` của server để dựng phiên đấu giá và hạ hạn chờ.
+- `tests/online-flows.mjs`: giao dịch hai máy (kể cả chuộc đất thế chấp ở máy
+  người nhận), học kỹ năng lúc chưa tới lượt, Hội Đồng Hồn Ma.
+- `tests/online-net.mjs`: mạng chập chờn, giả lập trong trình duyệt — đứt hẳn
+  (thay `window.WebSocket` bằng bản luôn hỏng), socket chết lặng (còn mở mà không
+  tin nào qua lại), `context.setOffline`. Nhịp ping hạ qua `window.__netTiming`
+  và `silentMs`.
+- `tests/onlinekit.mjs`: đồ nghề chung (mở bàn, so ván, đi một lượt, sửa ván qua
+  cổng `test`).
 
 ## Còn thiếu
 
-- Chưa có bài kiểm thử online cho giao dịch giữa hai máy, Hội Đồng Hồn Ma và cây
-  kỹ năng mở ngoài lượt. Ba việc này đi cùng đường `ask` / `learn` / `ghost-vote`
-  với phần đã kiểm, luật của chúng có bài kiểm thử ở bản một máy.
 - Bản online chưa có ghế bot.
 - Chat không lưu lại: F5 là mất lịch sử.

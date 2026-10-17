@@ -11,144 +11,16 @@
  *   npx vite --port 5179 --strictPort   # bàn cờ
  *   node tests/online.mjs
  */
-import { launchChrome } from './launch.mjs';
-import { playRollOff, orderOf } from './rolloff.mjs';
-
-const SERVER = process.env.GAME_SERVER ?? 'ws://localhost:8787';
-const BASE = `http://localhost:5179/?server=${encodeURIComponent(SERVER)}`;
-
-const errors = [];
-const fails = [];
-const ok = (cond, label, extra = '') => {
-  console.log(`  ${cond ? '✓' : '✗'} ${label}${extra ? ` — ${extra}` : ''}`);
-  if (!cond) fails.push(label);
-};
-
-async function until(fn, ms = 12000, step = 200) {
-  const t0 = Date.now();
-  for (;;) {
-    if (await fn().catch(() => false)) return true;
-    if (Date.now() - t0 > ms) return false;
-    await new Promise((r) => setTimeout(r, step));
-  }
-}
-
-const browser = await launchChrome();
-/* Mỗi người một context: mỗi context là một cửa sổ riêng nên tab nào cũng được
-   cấp khung hình (tab nền thì Phaser đứng), và mỗi người có kho lưu trữ riêng
-   như ba máy thật. */
-const newPage = async () => (await browser.newContext({ viewport: { width: 1280, height: 860 } })).newPage();
-
-function watch(page, tag) {
-  page.on('console', (m) => {
-    // Đóng tab / F5 làm socket đứt giữa chừng: trình duyệt ghi lỗi WebSocket, không phải lỗi mã
-    if (m.type() === 'error' && !/WebSocket/.test(m.text())) errors.push(`[${tag}] ${m.text()}`);
-  });
-  page.on('pageerror', (e) => errors.push(`[${tag}] ${e.message}`));
-  return page;
-}
-
-async function bootToLobby(page, ms = 90000) {
-  await page.bringToFront();
-  const mode = page.locator('.scrim.show button.btn', { hasText: 'Mở phòng online' });
-  await until(async () => (await mode.count()) > 0 || (await page.locator('#lobby-link').count()) > 0, ms);
-  if (await mode.count()) await mode.click();
-  await page.locator('#lobby-link').waitFor({ timeout: 30000 });
-}
-
-async function enter(url, name, tag, { ready = true } = {}) {
-  const page = watch(await newPage(), tag);
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await bootToLobby(page);
-  await page.locator('.lobby-seat.is-me input.lobby-name').fill(name);
-  if (ready) await page.locator('.lobby-seat.is-me .lobby-ready').click();
-  return page;
-}
-
-const seatCount = (page) => page.locator('.lobby-seat').count();
-const title = (page) => page.locator('.scrim.show .modal-title').first().textContent().catch(() => '');
-
-/** Đọc controller của một tab. */
-const c = (page, fn, arg) => page.evaluate(
-  ([src, a]) => (0, eval)(src)(window.__monopoly.controller, a), [fn.toString(), arg],
-);
-
-/** Phần ván mà mọi máy phải thấy giống nhau. */
-const view = (page) => c(page, (g) => g.state && JSON.stringify({
-  turn: g.state.turn,
-  money: g.state.players.map((p) => p.money),
-  pos: g.state.players.map((p) => p.pos),
-  owner: [...g.state.owner.entries()].sort((a, b) => a[0] - b[0]),
-}));
-
-/** Chờ mọi tab diễn xong hàng sự kiện rồi so ván. */
-async function sameBoard(pages, ms = 20000) {
-  let last = [];
-  const same = await until(async () => {
-    const busy = await Promise.all(pages.map((p) => c(p, (g) => g.busy)));
-    if (busy.some(Boolean)) return false;
-    last = await Promise.all(pages.map(view));
-    return last.every((v) => v && v === last[0]);
-  }, ms, 300);
-  return { same, last };
-}
-
-/** Bấm các hộp thoại của lượt cho tới khi thanh nút hiện lại. */
-async function settle(page, ms = 40000) {
-  const t0 = Date.now();
-  const order = ['Bỏ qua', 'Đành chịu', 'Nhận tiền', 'Tiếp tục', 'Không cược', 'Xong', 'Đóng', 'Để sau', 'Thôi', 'Chưa đạp', 'Mua '];
-  while (Date.now() - t0 < ms) {
-    if (await page.locator('#modal-root .scrim.show').count()) {
-      let clicked = false;
-      for (const label of order) {
-        const b = page.locator('.scrim.show button.btn', { hasText: label }).first();
-        if (await b.count() && !(await b.isDisabled())) { await b.click().catch(() => {}); clicked = true; break; }
-      }
-      if (!clicked) {
-        const any = page.locator('.scrim.show button.btn:not([disabled])').first();
-        if (await any.count()) await any.click().catch(() => {});
-      }
-      await page.waitForTimeout(300);
-      continue;
-    }
-    if (await page.locator('#actions button:not([disabled])').count()) return true;
-    await page.waitForTimeout(250);
-  }
-  return false;
-}
-
-/** Tab đang giữ ghế tới lượt. */
-async function driver(pages) {
-  for (const p of pages) {
-    if (await c(p, (g) => g.state && g.net.mySeat === g.state.turn)) return p;
-  }
-  return null;
-}
-
-/** Đi trọn một lượt bằng thanh nút của tab đang tới lượt: lắc (kể cả cầu đôi) rồi kết thúc. */
-async function playTurn(pages) {
-  const p = await driver(pages);
-  if (!p) return false;
-  const turn0 = await c(p, (g) => g.state.turnNo);
-  for (let i = 0; i < 12; i++) {
-    await settle(p);
-    if (await c(p, (g, t) => g.state.turnNo !== t, turn0)) return true;
-    const roll = p.locator('#actions button', { hasText: 'Lắc xí ngầu' }).first();
-    const end = p.locator('#actions button', { hasText: 'Kết thúc lượt' }).first();
-    const fine = p.locator('#actions button', { hasText: 'ra tù' }).first();
-    if (await end.count()) await end.click().catch(() => {});
-    else if (await roll.count()) await roll.click().catch(() => {});
-    else if (await fine.count()) await fine.click().catch(() => {});
-    await until(() => c(p, (g, t) => g.state.turnNo !== t || !g.busy, turn0), 20000, 250);
-    if (await c(p, (g, t) => g.state.turnNo !== t, turn0)) return true;
-  }
-  return false;
-}
+import { orderOf, playRollOff } from './rolloff.mjs';
+import {
+  SERVER, BASE, ok, until, newPage, enter, bootToLobby, seatCount, title, c, sameBoard, settle,
+  playTurn, finish,
+} from './onlinekit.mjs';
 
 /* ================================================================ 1 · phòng chờ */
 
 console.log('\n▸ 1. Phòng chờ trên server');
-const A = watch(await newPage(), 'A');
+const A = await newPage('A');
 await A.goto(BASE, { waitUntil: 'domcontentloaded' });
 await bootToLobby(A);
 const link = await A.locator('#lobby-link').inputValue();
@@ -289,7 +161,4 @@ ok(await until(() => c(B, (g) => g.state.players[2].bankrupt), 10000), 'máy B c
 
 /* ================================================================ */
 
-ok(errors.length === 0, 'không có lỗi console', errors.slice(0, 5).join(' | '));
-await browser.close();
-console.log(fails.length ? `\nFAIL ${fails.length}: ${fails.join('; ')}` : '\n✓ bản online ổn');
-process.exit(fails.length ? 1 : 0);
+await finish();

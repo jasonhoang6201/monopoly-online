@@ -28,6 +28,13 @@ const CODE = /^[A-HJ-NP-Z2-9]{4}$/;
 const AWAY_MS = 120000;
 /** Phòng chờ: rời bao lâu thì bỏ ghế. Đủ cho một lần bấm F5. */
 const LOBBY_GRACE_MS = 8000;
+/**
+ * Socket không gửi gì (kể cả `ping`) quá bấy lâu thì coi là chết: máy khách
+ * ping mỗi 10 giây, điện thoại đổi mạng hay tắt màn hình thì socket chết lặng,
+ * không có `close` nào về. Không tự soát thì ghế ấy "có mặt" mãi — không bị
+ * rút hạn lượt, không bao giờ bị gạch tên.
+ */
+const SILENT_MS = 30000;
 /** Một tin nhắn chat dài nhất. */
 const CHAT_MAX = 240;
 
@@ -117,7 +124,7 @@ export class GameRoom extends DurableObject {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ id: null });
+    server.serializeAttachment({ id: null, at: Date.now() });
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -126,6 +133,8 @@ export class GameRoom extends DurableObject {
     try { m = JSON.parse(typeof raw === 'string' ? raw : new TextDecoder().decode(raw)); } catch { return; }
     if (!m || typeof m !== 'object') return;
     const who = ws.deserializeAttachment() ?? {};
+    // Mốc nghe thấy gần nhất cho việc soát socket im lặng; `ping` thì server tự trả, không tới đây
+    ws.serializeAttachment({ ...who, at: Date.now() });
     if (m.t === 'hello') { await this.hello(ws, m); return; }
     if (!who.id) return;
     const seat = this.meta.seats.findIndex((s) => s.id === who.id);
@@ -147,7 +156,15 @@ export class GameRoom extends DurableObject {
     await this.arm();
   }
 
-  async webSocketClose(ws) { await this.dropped(ws); }
+  /**
+   * Máy khách gửi khung đóng. Với Hibernation API, server phải tự đóng lại để
+   * xong bắt tay; không thì socket bên kia kẹt ở CLOSING, trình duyệt chưa báo
+   * `close`, máy ấy không biết mình đã mất kết nối để nối lại.
+   */
+  async webSocketClose(ws, code, reason) {
+    try { ws.close(code === 1005 || code === 1006 ? 1000 : code, reason); } catch { /* đã đóng */ }
+    await this.dropped(ws);
+  }
   async webSocketError(ws) { await this.dropped(ws); }
 
   /** Socket đóng: nếu người ấy không còn socket nào khác thì tính là vắng. */
@@ -158,8 +175,11 @@ export class GameRoom extends DurableObject {
     const seat = this.meta.seats.findIndex((s) => s.id === id);
     if (seat < 0) return;
     const now = Date.now();
-    if (this.meta.phase === 'lobby') this.meta.reap[id] = now + LOBBY_GRACE_MS;
+    /* Một socket có thể báo rớt hai lần: server tự đóng vì im lặng, rồi
+       `webSocketClose` về muộn. Lần sau không được dời mốc vắng mặt về sau. */
+    if (this.meta.phase === 'lobby') this.meta.reap[id] ??= now + LOBBY_GRACE_MS;
     else {
+      if (this.meta.away[id] != null) return;
       this.meta.away[id] = now;
       this.act({ type: 'presence', seat, value: false });
     }
@@ -196,7 +216,7 @@ export class GameRoom extends DurableObject {
       seat = meta.seats.length - 1;
       meta.hostId ??= id;
     }
-    ws.serializeAttachment({ id });
+    ws.serializeAttachment({ id, at: Date.now() });
     delete meta.reap[id];
     if (meta.phase === 'playing' && meta.away[id] != null) {
       delete meta.away[id];
@@ -404,16 +424,34 @@ export class GameRoom extends DurableObject {
     if (dl && !this.engine.st.over) times.push(dl);
     for (const t of Object.values(meta.away)) times.push(t + this.awayMs());
     for (const t of Object.values(meta.reap)) times.push(t);
+    // Còn socket mở thì hẹn lần soát socket im lặng kế tiếp
+    if (this.ctx.getWebSockets().some((w) => w.readyState === 1)) times.push(Date.now() + this.silentMs() / 2);
     if (!times.length) { await this.ctx.storage.deleteAlarm(); return; }
     await this.ctx.storage.setAlarm(Math.max(Date.now() + 50, Math.min(...times)));
   }
 
   awayMs() { return this.meta.options.timing?.awayMs ?? AWAY_MS; }
 
+  silentMs() { return this.meta.options.timing?.silentMs ?? SILENT_MS; }
+
+  /** Đóng các socket im lặng quá hạn rồi tính người ấy như vừa rớt mạng. */
+  async reapSilent(now) {
+    for (const ws of this.ctx.getWebSockets()) {
+      if (ws.readyState !== 1) continue;
+      const pinged = this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0;
+      const at = ws.deserializeAttachment()?.at ?? 0;
+      if (now - Math.max(pinged, at) <= this.silentMs()) continue;
+      try { ws.close(1001, 'im lặng quá lâu'); } catch { /* đã đóng */ }
+      // Máy bên kia đã chết thì không có bắt tay đóng nào về để gọi webSocketClose
+      await this.dropped(ws);
+    }
+  }
+
   async alarm() {
     const meta = this.meta;
     if (!meta) return;
     const now = Date.now();
+    await this.reapSilent(now);
     for (const [id, t] of Object.entries(meta.reap)) {
       if (t > now) continue;
       delete meta.reap[id];

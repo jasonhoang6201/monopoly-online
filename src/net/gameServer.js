@@ -57,6 +57,15 @@ export function serverUrl() {
 /** Nối lại sau bấy nhiêu ms, tăng dần tới trần. */
 const RETRY = [300, 800, 1500, 3000, 5000];
 
+/**
+ * Nhịp ping. Điện thoại đổi mạng hay tắt màn hình thì socket có thể chết mà
+ * trình duyệt không báo `close` — máy này tưởng vẫn nối, bấm gì cũng mất. Gửi
+ * `ping` mỗi `pingMs` (server trả `pong` mà không phải thức dậy); không nghe
+ * thấy gì quá `deadMs` thì bỏ socket ấy, nối cái mới. Bộ kiểm thử hạ hai số
+ * này qua `window.__netTiming`.
+ */
+const beat = () => ({ pingMs: 10000, deadMs: 25000, probeMs: 3000, ...globalThis.__netTiming });
+
 export class GameRoom {
   /**
    * @param {string} code
@@ -117,28 +126,90 @@ export class GameRoom {
   }
 
   connect() {
-    if (this.left) return;
-    const ws = new WebSocket(`${serverUrl()}/room/${this.code}`);
+    clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    if (this.left || this.ws) return;
+    this.watchNet();
+    let ws;
+    try {
+      ws = new WebSocket(`${serverUrl()}/room/${this.code}`);
+    } catch (err) {
+      // Địa chỉ server hỏng thì ném ngay ở đây; không bắt thì chuỗi nối lại đứt luôn
+      console.error('không mở được WebSocket', err);
+      this.lost(null, 1006);
+      return;
+    }
     this.ws = ws;
+    this.heard = Date.now();
     ws.onopen = () => {
       this.tries = 0;
+      this.heard = Date.now();
       ws.send(JSON.stringify({ t: 'hello', id: this.me.id, secret: this.secret }));
     };
     ws.onmessage = (e) => {
+      if (this.ws !== ws) return;
+      this.heard = Date.now();
+      if (e.data === 'pong') return;
       let m;
       try { m = JSON.parse(e.data); } catch { return; }
       this.receive(m);
     };
-    ws.onclose = (e) => {
-      if (this.ws !== ws) return;
-      this.ws = null;
-      if (this.left) return;
-      // Bị mời ra, phòng đầy, sai khoá: đừng nối lại
-      if (e.code >= 4000 && e.code < 4100) return;
-      this.setLink('lost');
-      const ms = RETRY[Math.min(this.tries++, RETRY.length - 1)];
-      setTimeout(() => this.connect(), ms);
+    ws.onclose = (e) => this.lost(ws, e.code);
+  }
+
+  /**
+   * Socket `ws` đã đóng hoặc bị bỏ vì im lặng: báo mất kết nối, hẹn nối lại.
+   * `ws` không còn là socket hiện tại thì thôi — socket mới đã thay chỗ nó.
+   */
+  lost(ws, code) {
+    if (ws && this.ws !== ws) return;
+    this.ws = null;
+    if (ws) { ws.onclose = null; ws.onmessage = null; }
+    if (this.left) return;
+    // Bị mời ra, phòng đầy, sai khoá: đừng nối lại
+    if (code >= 4000 && code < 4100) return;
+    this.setLink('lost');
+    if (this.retryTimer) return;
+    const ms = RETRY[Math.min(this.tries++, RETRY.length - 1)];
+    this.retryTimer = setTimeout(() => this.connect(), ms);
+  }
+
+  /** Bỏ socket đang im lặng: đóng nó (không chờ bắt tay đóng) rồi nối cái mới. */
+  dropSilent(ws) {
+    if (this.ws !== ws) return;
+    try { ws.close(); } catch { /* đã đóng */ }
+    this.lost(ws, 1006);
+  }
+
+  /**
+   * Nhịp ping, cài một lần cho cả phòng. Mạng vừa có lại hay tab vừa hiện lên
+   * thì dò ngay: socket còn sống thì `pong` về trong `probeMs`, không thì bỏ
+   * nó luôn thay vì chờ hết `deadMs`. Đang chờ nối lại thì nối ngay.
+   */
+  watchNet() {
+    if (this.beat) return;
+    const tick = () => {
+      const ws = this.ws;
+      if (!ws || this.left) return;
+      // Kể cả socket kẹt ở bước bắt tay (readyState 0): im quá hạn là bỏ
+      if (Date.now() - this.heard > beat().deadMs) { this.dropSilent(ws); return; }
+      if (ws.readyState !== 1) return;
+      try { ws.send('ping'); } catch { /* socket vừa đóng, onclose lo */ }
     };
+    const probe = () => {
+      if (this.left) return;
+      const ws = this.ws;
+      if (!ws) { if (this.retryTimer) this.connect(); return; }
+      if (ws.readyState !== 1) return;
+      const at = Date.now();
+      try { ws.send('ping'); } catch { /* onclose lo */ }
+      setTimeout(() => { if (this.ws === ws && this.heard < at) this.dropSilent(ws); }, beat().probeMs);
+    };
+    this.beat = setInterval(tick, beat().pingMs);
+    this.onNet = probe;
+    this.onVis = () => { if (document.visibilityState === 'visible') probe(); };
+    globalThis.addEventListener?.('online', this.onNet);
+    globalThis.document?.addEventListener('visibilitychange', this.onVis);
   }
 
   setLink(status) {
@@ -248,6 +319,10 @@ export class GameRoom {
     if (this.left) return;
     if (this.phase === 'lobby') this.post({ t: 'leave' });
     this.left = true;
+    clearInterval(this.beat);
+    clearTimeout(this.retryTimer);
+    globalThis.removeEventListener?.('online', this.onNet);
+    globalThis.document?.removeEventListener('visibilitychange', this.onVis);
     try { this.ws?.close(1000, 'rời phòng'); } catch { /* đã đóng */ }
     this.ws = null;
   }
