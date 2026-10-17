@@ -44,7 +44,9 @@ console.log('\n=== 1. Chrome của Playwright: tắt ===');
   check(await page.evaluate(() => navigator.webdriver === true), 'navigator.webdriver = true');
   await startSolo(page);
   check(await ctl(page, 'return c.analytics.enabled === false;'), 'analytics.enabled = false');
-  check(await ctl(page, 'return T.enabled === true && T.track("x", {}) === null && T.size === 0;'), 'telemetry đã bật cho ván nhưng cổng chặn: track trả null');
+  /* Số liệu giờ ghi trong engine (src/engine/engine.js tráo bộ đệm vào lúc chạy
+     luật); bộ đệm của trang không ghi gì, bật hay tắt cũng vậy. */
+  check(await ctl(page, 'return T.track("x", {}) === null && T.size === 0;'), 'bộ đệm của trang không ghi: track trả null');
   check(await ctl(page, 'return typeof s.gameId === "string" && s.gameId.length === 36;'), 'ván vẫn có gameId');
   await ctl(page, 's.current.skillPoints = 2; c.hud.refresh(); c.restoreActions();');
   await page.locator('#actions button[data-key="k"]').click();

@@ -1,0 +1,22 @@
+# Máy chủ ván cờ: một Worker trước cửa, mỗi phòng một Durable Object.
+# Chạy thử trên máy: `npm run server` (wrangler dev, cổng 8787) — không cần tài
+# khoản Cloudflare. Deploy thật: `npx wrangler deploy` sau khi `wrangler login`.
+name = "monopoly-rooms"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "GameRoom"
+
+# Gói free chỉ dùng được Durable Object kiểu SQLite
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameRoom"]
+
+[vars]
+# Số liệu cân bằng kỹ năng vẫn ghi về Supabase bằng anon key (khoá công khai).
+SUPABASE_URL = "https://mwonsnmfbnnvrfinxyre.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13b25zbm1mYm5udnJmaW54eXJlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYzNjk0ODcsImV4cCI6MjEwMTk0NTQ4N30.nvo6KABavYc_s0VHRneH6fmeziNLt4EvCEsvF31SrEM"
+# "1" thì phòng nhận `options.timing` để bộ kiểm thử hạ các hạn chờ xuống vài giây.
+TEST_TIMING = "0"

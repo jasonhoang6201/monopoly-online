@@ -94,16 +94,32 @@ export function snapshot(st) {
     /* Sổ tiền cho biểu đồ cuối ván (`core/history.js`): toàn số và mảng,
        chép qua JSON là sạch. */
     hist: JSON.parse(JSON.stringify(st.hist)),
+    /* Phần của engine (engine/engine.js): hạt giống ngẫu nhiên, trạng thái
+       giữa các câu hỏi, ghế nào là máy. Thiếu ba thứ này thì chạy lại log từ
+       ảnh chụp ra một ván khác. */
+    rng: st.rng ?? 0,
+    flow: st.flow ? JSON.parse(JSON.stringify(st.flow)) : null,
+    bots: st.bots ? [...st.bots] : null,
   };
 }
 
 /** Dựng một `GameState` mới từ ảnh chụp. */
 export function fromSnapshot(snap) {
-  const st = new GameState(
-    snap.players.map((p) => p.name),
-    snap.players.map((p) => Math.max(0, TOKENS.findIndex((t) => t.key === p.token))),
-    snap.settings ?? null,
-  );
+  /* Dựng `GameState` thì xáo hai bộ bài và sinh mã ván — phí công, ảnh chụp
+     ghi đè cả hai ngay dưới. Cho bước dựng ấy một nguồn số tạm để nó không ăn
+     mất số của `Math.random`: engine đang chạy lại ván cần dãy số của nó
+     nguyên vẹn, bộ kiểm thử gài sẵn xí ngầu vào đó. */
+  const real = Math.random;
+  let k = 0;
+  Math.random = () => ((k = (k * 9301 + 49297) % 233280) / 233280);
+  let st;
+  try {
+    st = new GameState(
+      snap.players.map((p) => p.name),
+      snap.players.map((p) => Math.max(0, TOKENS.findIndex((t) => t.key === p.token))),
+      snap.settings ?? null,
+    );
+  } finally { Math.random = real; }
   applySnapshot(st, snap);
   return st;
 }
@@ -192,6 +208,9 @@ export function applySnapshot(st, snap) {
   if (snap.hist) st.hist = JSON.parse(JSON.stringify(snap.hist));
   if (snap.eventTally) st.eventTally = { ...snap.eventTally };
   if ('ghostVote' in snap) st.ghostVote = snap.ghostVote ? JSON.parse(JSON.stringify(snap.ghostVote)) : null;
+  if ('rng' in snap) st.rng = snap.rng;
+  if ('flow' in snap) st.flow = snap.flow ? JSON.parse(JSON.stringify(snap.flow)) : null;
+  if ('bots' in snap) st.bots = snap.bots ? [...snap.bots] : null;
   if (snap.eventPile) st.eventPile = [...snap.eventPile];
   else if (snap.eventPiles) st.eventPile = [...(snap.eventPiles[1] ?? []), ...(snap.eventPiles[2] ?? [])];
   return st;

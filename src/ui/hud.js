@@ -646,17 +646,41 @@ export class Broadcast {
     const div = document.createElement('div');
     div.className = `bcast${o.kind ? ` kind-${o.kind}` : ''}`;
     div.innerHTML = `<div class="bcast-title">${title}</div><div class="bcast-text">${html}</div>`;
+    div.dataset.born = String(Date.now());
     this.el.appendChild(div);
-
-    // Giữ tối đa 3 thông báo cùng lúc
-    while (this.el.children.length > 3) this.el.firstElementChild.remove();
+    this.trim();
 
     const ms = o.ms ?? 3400;
     setTimeout(() => {
       div.classList.add('out');
       setTimeout(() => div.remove(), 340);
     }, ms);
-    return new Promise((r) => setTimeout(r, Math.min(ms, 900)));
+    /* Trả về ngay: dòng thông báo đứng đó cho người đọc, nhưng không giữ nhịp
+       ván. Trước đây mỗi dòng giữ mạch 900ms, một lượt có chục dòng là chục
+       giây cả bàn ngồi chờ chữ chạy. Mấy chỗ `await` cũ vẫn để nguyên, giờ là
+       chờ một lời hứa đã xong. */
+    return Promise.resolve();
+  }
+
+  /**
+   * Giữ tối đa `MAX` dòng. Ván không còn chờ chữ chạy, nên một chuỗi việc (bỏ
+   * ván → phá sản → trao lượt) bắn mấy dòng trong cùng một nhịp; đẩy dòng cũ
+   * ra ngay thì dòng đầu chuỗi chưa kịp hiện đã mất. Dòng nào chưa đứng đủ
+   * `MIN_MS` thì hẹn đẩy sau.
+   */
+  trim() {
+    const MAX = 5;
+    const MIN_MS = 1500;
+    clearTimeout(this.trimTimer);
+    while (this.el.children.length > MAX) {
+      const old = this.el.firstElementChild;
+      const age = Date.now() - Number(old.dataset.born ?? 0);
+      if (age < MIN_MS) {
+        this.trimTimer = setTimeout(() => this.trim(), MIN_MS - age);
+        return;
+      }
+      old.remove();
+    }
   }
 
   clear() { this.el.innerHTML = ''; }

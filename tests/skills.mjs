@@ -1290,10 +1290,11 @@ const allInLost = await run(`
 `);
 check(allInLost.lost > 0 && allInLost.left === null, `Tất Tay chốt ngay ở cú lắc đầu (lẻ) → thua (${JSON.stringify(allInLost)})`);
 const order = await run(`
-  const src = c.takeRoll.toString();
+  // Mạch lắc nằm trong engine (src/engine/game.js), không ở controller
+  const src = c.host.engine.rules.takeRoll.toString();
   return src.indexOf('settleBets(p, first)') > 0 && src.indexOf('settleBets(p, first)') < src.indexOf('afterRoll(p, first)');
 `);
-check(order, 'Game.takeRoll chốt cược trước hộp hỏi Xí Ngầu Gian / Quay Đầu');
+check(order, 'Rules.takeRoll chốt cược trước hộp hỏi Xí Ngầu Gian / Quay Đầu');
 await reset();
 
 log('\nLỗi console:', errors.length ? errors : 'không có');

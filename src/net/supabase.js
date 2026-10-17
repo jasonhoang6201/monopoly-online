@@ -8,8 +8,9 @@
  */
 import { createClient } from '@supabase/supabase-js';
 
-const URL = import.meta.env.VITE_SUPABASE_URL;
-const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// `import.meta.env` chỉ có khi Vite build; server Worker cũng import file này qua analytics.js.
+const URL = import.meta.env?.VITE_SUPABASE_URL;
+const ANON_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY;
 /** Cho net/analytics.js gọi REST thẳng (cần `keepalive`, supabase-js không có). */
 export const SUPABASE_URL = URL ?? '';
 export const SUPABASE_ANON_KEY = ANON_KEY ?? '';

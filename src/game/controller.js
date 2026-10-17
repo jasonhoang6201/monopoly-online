@@ -1,76 +1,62 @@
 /**
- * Điều phối ván đấu: vòng lượt, xử lý ô đáp xuống, tiền nong, tù tội,
- * giao dịch và kết thúc — nối luật chơi (core/state) với bàn cờ (Phaser)
- * và giao diện (HTML).
+ * Lớp diễn của ván: nhận sự kiện từ chủ ván rồi diễn lên bàn cờ (Phaser) và
+ * giao diện (HTML), bày thanh nút và hộp thoại cho câu hỏi của ghế mình, gửi
+ * câu trả lời đi.
+ *
+ * Luật không chạy ở đây. Chủ ván là engine (`engine/engine.js`): ở bản một
+ * máy nó nằm ngay trong trình duyệt (`game/localHost.js`), ở bản online nó
+ * nằm trên Durable Object. Hai bên nói chuyện cùng một kiểu:
+ *   - controller gửi action: `host.send({type:'answer', id, seat, value})`;
+ *   - chủ ván trả về một dãy sự kiện: `dice`, `move`, `say`, `sync`, `ask`…
+ *
+ * Sự kiện xếp hàng và diễn lần lượt (`pump`). `sync` mang ảnh chụp của ván
+ * ngay lúc ấy, áp vào bàn đúng lúc diễn tới — nên tiền, đất, quân trên bàn
+ * luôn khớp với hoạt cảnh vừa chạy, dù engine đã đi trước vài bước.
  */
-import {
-  BOARD, GROUPS, money, tileLabel, GO_LANDING_MULT, JAIL_FINE, JAIL_TILE, GOTO_JAIL_TILE,
-  START_MONEY,
-  MAX_JAIL_TURNS,
-} from '../data/board.js';
-import { GameState, rollDice, orderFromRolls, WIN_WORTH, WIN_SETS, WIN_HOTEL_SETS } from '../core/state.js';
-import {
-  addPressure, eventDue, eventsOn, pressureRatio, threshold, autoRaise, PRESSURE,
-} from '../core/events.js';
-import {
-  cardType, isKeepable, demolishLevels, usableCard, useReason, cardTargets, moveDest,
-  demolishGroups, demolishPicks,
-  othersOf, collectEach, repairBill, seizePrice, resumePrice, giftShares,
-} from '../core/cards.js';
-import { cardOf, CARD_KINDS, cardName, cardEffect, DECKS } from '../data/cards.js';
-import { inventoryModal } from '../ui/inventory.js';
-import { EventRunner } from './eventRunner.js';
-import { GhostCouncil } from './ghostCouncil.js';
-import { SkillPlay } from './skillPlay.js';
-import { Bot } from './bot.js';
-import { has, offSpent, tickTurns, grantLapPoint, deedHolds } from '../core/skills.js';
+import { BOARD, money, JAIL_FINE, JAIL_TILE, START_MONEY } from '../data/board.js';
+import { WIN_WORTH, WIN_SETS, WIN_HOTEL_SETS } from '../core/state.js';
+import { cardType } from '../core/cards.js';
+import { cardOf, DECKS } from '../data/cards.js';
+import { has } from '../core/skills.js';
 import { snapshot, fromSnapshot, applySnapshot } from '../core/serialize.js';
-import { telemetry, track } from '../core/telemetry.js';
 import { Analytics } from '../net/analytics.js';
 import { Hud, Broadcast } from '../ui/hud.js';
 import { QuickView } from '../ui/quickview.js';
 import {
   diceSvg, tradeSvg, estateSvg, bankruptSvg, doneSvg, coinSvg, cardSvg,
 } from '../ui/actionIcons.js';
-import { openModal, handoff, dismissTopModal } from '../ui/modal.js';
+import { inventoryModal } from '../ui/inventory.js';
+import { openModal, handoff, setHandoffSkip, dismissTopModal } from '../ui/modal.js';
 import {
-  setupModal, buyModal, manageModal, tradePickModal,
-  tradeBuildModal, tradeReviewModal, redeemPromptModal, bankruptModal,
-  winnerModal, describe, playerModal, tileModal, rollOffModal, attachTimer, debtPanelHtml,
+  setupModal, buyModal, manageModal, tradePickModal, tradeBuildModal, tradeReviewModal,
+  redeemPromptModal, bankruptModal, winnerModal, playerModal, tileModal, rollOffModal,
+  attachTimer, debtPanelHtml,
 } from '../ui/modals.js';
 import { raisePlan } from '../core/raisePlan.js';
 import {
-  bracePromptModal, firePromptModal, snowPromptModal, zombiePromptModal, auctionBidModal, auctionResultModal, closeBidModal,
+  bracePromptModal, firePromptModal, snowPromptModal, zombiePromptModal, auctionBidModal,
+  auctionResultModal, closeBidModal,
 } from '../ui/eventModals.js';
 import { pickTileOnBoard, litTiles } from '../ui/tilePicker.js';
 import { pickGroupOnBoard } from '../ui/groupPicker.js';
+import { ghostVotePanel } from '../ui/ghostVote.js';
 import { EVENT_BY_ID } from '../data/events.js';
 import { audio } from '../audio/audio.js';
 import { MemeDeck } from '../ui/memes.js';
 import { skillIcon } from '../ui/skillIcons.js';
-import { fateCase, eventCase, newSeed } from '../ui/caseOpen.js';
+import { fateCase, eventCase } from '../ui/caseOpen.js';
 import { setTheme } from '../theme/theme.js';
-import { noteRent, sampleMoney } from '../core/history.js';
+import { SkillUi } from './skillUi.js';
+import { levelOfKey } from '../core/botPolicy.js';
+import { LocalHost } from './localHost.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/**
- * Mọi ô đất có mặt trong một đề nghị giao dịch, gộp cả hai vế.
- *
- * Dùng để bật sáng chúng dưới bàn trong lúc bên nhận xét duyệt: đề nghị do bên
- * kia dựng nên người bấm đồng ý chưa từng thấy mấy lô ấy nằm đâu trên bàn.
- */
+/** Mọi ô đất có mặt trong một đề nghị giao dịch, gộp cả hai vế. */
 const offerTiles = (offer) => [...(offer?.give ?? []), ...(offer?.get ?? [])];
 
-/**
- * Bao nhiêu thẻ di chuyển được nối nhau trong một nước đi.
- *
- * Thẻ di chuyển thả quân xuống ô mới, ô mới có thể lại là ô Cơ Hội / Khí Vận.
- * Hai nấc là đủ cho mấy chuỗi đáng nhớ ("đi tới nhà ga" rồi "lố ba căn phố"), còn
- * quá đó thì cắt: lượt kéo dài vô tận không còn vui, và về lý thuyết bộ bài đủ
- * thẻ di chuyển để chạy vòng vòng không dứt.
- */
-const MAX_CARD_CHAIN = 2;
+/** Hộp thẻ của ghế máy đứng bấy lâu rồi tự đóng, cho người ngồi xem kịp đọc. */
+const BOT_READ_MS = 2600;
 
 /** Chủ đề của ván áp lên hình (bàn cờ, quân, CSS) và tiếng (nhạc, hiệu ứng). */
 function applyTheme(theme) {
@@ -83,192 +69,116 @@ export class Game {
     this.scene = scene;
     this.bc = new Broadcast();
     this.quick = new QuickView(null);
-    // Rê chuột trên bàn cờ → bảng xem nhanh bên cột trái
     this.scene.onTileHover = (id) => this.quick.show(id);
-    this.busy = false;
-    /**
-     * Những chốt chờ đang treo của hộp thẻ Cơ Hội / Khí Vận trên **máy ngồi
-     * xem**: hộp bên ấy không có nút, nó tắt khi người đang đi bấm — xem
-     * `fateWatch`.
-     */
-    this.fateWaiters = new Set();
-    /** Đang ở nấc thứ mấy của một dây thẻ di chuyển — xem `MAX_CARD_CHAIN`. */
-    this.cardChain = 0;
-    /** Người thi hành thẻ Thời Cuộc — xem `game/eventRunner.js`. */
-    this.events = new EventRunner(this);
-    this.ghosts = new GhostCouncil(this);
-    /** Kỹ năng trong lượt chơi — xem `game/skillPlay.js`. */
-    this.skills = new SkillPlay(this);
-    /** Ghế giao cho máy chơi (bản một máy) — xem `game/bot.js`. */
-    this.bot = new Bot(this);
-    /** Số liệu cân bằng kỹ năng — xem `net/analytics.js`. */
+    /** Đang mở một hộp thoại của chính máy này (quản lý tài sản, dựng giao dịch…). */
+    this.localBusy = false;
+    this.skills = new SkillUi(this);
     this.analytics = new Analytics(this);
+    /** Chủ ván: `LocalHost` (một máy) hoặc phòng online. */
+    this.host = null;
     /** Phòng online, hoặc null khi cả bàn ngồi chung một máy. */
     this.net = null;
-    /**
-     * Mất kết nối bao lâu thì tài sản trả về ngân hàng.
-     *
-     * Rộng rãi để sụt wifi hay bấm F5 không làm mất cả cơ nghiệp — quay lại kịp
-     * trong hạn này là về đúng ghế cũ, đất nhà nguyên vẹn. Hai phút vì đường về
-     * gồm cả những đoạn không do người chơi quyết: trang nạp lại, Supabase bắt
-     * tay lại (nhịp lùi tăng dần tới 10 giây một lần), rồi mới tới lượt `hello`
-     * được trả lời. Bốn mươi lăm giây thì rớt mạng một cái là mất ván.
-     * (Bộ kiểm thử hạ xuống vài giây cho đỡ phải ngồi chờ.)
-     */
-    this.awayGraceMs = 120000;
-    /**
-     * Hạn cho một nước đi. Hết giờ mà chưa nhúc nhích thì máy của chính người
-     * ấy lắc hộ (xem `checkClock`) — cả bàn khỏi ngồi chờ, mà họ cũng không
-     * mất gì ngoài quyền chọn nước đi lượt ấy.
-     */
-    this.turnMs = 60000;
-    /**
-     * Trọng tài vắng bấy lâu thì ghế kế tiếp mới nhận màn lắc giành quyền.
-     *
-     * Presence của Supabase hay chập chờn một hai nhịp lúc cả bàn vừa vào ván.
-     * Nhận ngay thì máy kia mở thêm một vòng lắc song song với vòng của trọng
-     * tài thật: người chơi bị hỏi lắc lại, rồi thứ tự của vòng về sau ghi đè
-     * lên ván đã bắt đầu.
-     */
-    this.rollOffTakeoverMs = 10000;
-    /**
-     * Người tới lượt vắng mặt bấy lâu thì trọng tài mới nhận cầm lái để bỏ qua
-     * lượt của họ.
-     *
-     * Giữa ván, ghế bị đánh dấu "mất kết nối" ngay khi presence của họ hụt một
-     * nhịp (supabase-js nối lại âm thầm, wifi chập chờn), không có hạn ân nào.
-     * Trước đây trọng tài bỏ lượt ngay lúc ấy: người kia vẫn đang ngồi chọn
-     * viên xí ngầu lắc lại, máy họ vẫn cầm lái, còn trọng tài đã trao lượt cho
-     * người kế và phát ảnh chụp, hai lượt chạy chồng lên nhau. Chờ quá hạn này
-     * thì nhịp chập chờn đã qua; người rớt thật thì bàn chỉ chờ thêm chừng ấy.
-     */
-    this.skipGraceMs = 12000;
-    /** Hạn để trả lời một đề nghị giao dịch. */
-    this.tradeMs = 45000;
-    /**
-     * Hạn để một con nợ **ngồi máy khác** xoay đủ tiền.
-     *
-     * Rộng hơn hạn giao dịch vì việc nặng tay hơn: phải đọc bảng tài sản, chọn
-     * ô nào bán nhà, ô nào cầm cố, có khi vài ô liền. Quá hạn thì ngân hàng cấn
-     * nợ hộ (`autoCover`) chứ không treo bàn chờ họ.
-     */
-    this.raiseMs = 60000;
-    /**
-     * Hạn nới cho người đang mở dở một hộp thoại. Rộng hơn hạn lượt vì họ đang
-     * thao tác thật (chọn đất để đổi, tính xây nhà), nhưng vẫn phải có đáy: mở
-     * hộp thoại rồi bỏ đi cũng treo bàn hệt như ngồi im, nên quá hạn thì hộp tự
-     * đóng ở lựa chọn "thôi".
-     */
-    this.busyMs = 120000;
-    /**
-     * Nới thêm bấy nhiêu sau mỗi lần hết giờ tự đóng hộp thoại hộ. Đủ để hộp
-     * kế tiếp hiện ra và người vừa quay lại bàn kịp bấm, mà không đủ để một
-     * chuỗi hộp thoại kéo ván đứng thêm mấy phút.
-     */
-    this.stallGraceMs = 15000;
-    /**
-     * Bao nhiêu **lượt** để đồng hồ cạn liên tiếp thì coi như đã bỏ ván.
-     *
-     * Đi hộ mãi cũng không xong: người bỏ đi giữa chừng vẫn giữ đất, cả bàn
-     * chơi với một cái ghế trống không bao giờ bán, không bao giờ đổi. Ba lần
-     * là đủ rộng cho người bận tay — mà chỉ cần họ bấm **một nút bất kỳ** là
-     * chuỗi này về 0, xem `watchActivity`.
-     */
-    this.maxStalls = 3;
-    /** Đã cạn đồng hồ liên tiếp mấy **lượt** mà chưa thấy người ấy đụng vào bàn. */
-    this.stallStreak = 0;
-    /** Lượt này đã bị tính vào chuỗi trên chưa — một lượt chỉ tính một lần. */
-    this.stalledThisTurn = false;
-    /** Ghế của lượt đang đếm, để biết lúc nào sang lượt mới mà mở sổ lại. */
-    this.stallSeat = -1;
-    /**
-     * Đồng hồ đang chạy cho ai, tới lúc nào.
-     * @type {?{seat:number,until:number,total:number,label:string}}
-     */
+    /** Hàng sự kiện chờ diễn. */
+    this.queue = [];
+    this.pumping = false;
+    /** Câu hỏi đang treo, theo sự kiện `ask` gần nhất đã diễn tới. */
+    this.pending = null;
+    /** Những câu hỏi (id:ghế) đang mở hộp thoại ở máy này — chặn mở hai lần. */
+    this.showing = new Set();
+    /** Đã gửi câu trả lời cho câu hỏi id này, chờ câu hỏi kế tiếp. */
+    this.sent = new Set();
+    /** Thao tác ở thanh nút chờ câu hỏi `turn` kế tiếp mới gửi được. */
+    this.menuQueue = [];
+    /** Id các câu hỏi `fate` (hộp thẻ Cơ Hội / Khí Vận) đã nhận mà chưa xong. */
+    this.fateAsks = new Set();
+    /** Số hộp thẻ đã được trả lời ở máy kia mà máy này chưa diễn tới. */
+    this.fateDone = 0;
+    /** Chốt chờ của hộp thẻ đang mở trên máy ngồi xem. */
+    this.fateWaiter = null;
+    /** Hộp thẻ Cơ Hội / Khí Vận đang mở cho ghế của máy này: `{seat, done}`. */
+    this.fateOpen = null;
+    /** Người đang cầm máy (bản một máy, nhiều người thật) — chuyền máy khi đổi. */
+    this.holder = null;
+    /** Đồng hồ đang chạy cho ai, tới lúc nào. */
     this.clock = null;
-    /**
-     * Số thứ tự tin đồng hồ máy này đã phát — cùng lý do với `state.rev`.
-     *
-     * Gieo bằng đồng hồ máy chứ không bằng 0: người bấm F5 rồi vào lại vẫn ngồi
-     * đúng ghế ấy, mà đếm lại từ 0 thì mọi tin sau đó đều bị bên kia coi là tin
-     * cũ và bỏ hết.
-     */
-    this.clockN = Date.now();
-    /** Ghế phát → số thứ tự tin đồng hồ mới nhất đã nhận của họ. */
-    this.clockSeen = new Map();
-    /**
-     * Meme thả lên bàn cờ. Không đi qua `state` và cũng không sinh ảnh chụp:
-     * đây là chuyện của lúc này, người vào lại giữa ván không cần thấy lại.
-     */
+    /** Hộp bầu của Hội Đồng Hồn Ma đang mở. */
+    this.ghostPanel = null;
+    /** Lời gọi luật thẳng của bộ kiểm thử đang chờ xong — xem `debug`. */
+    this.debugWaiters = [];
+    const game = this;
+    /** Hội Đồng Hồn Ma: bộ kiểm thử hạ thời gian hộp bầu qua `c.ghosts.ms`. */
+    this.ghosts = {
+      get ms() { return game.state?.settings.timing?.ghostMs; },
+      set ms(v) {
+        const st = game.state;
+        if (!st) return;
+        st.settings.timing = { ...st.settings.timing, ghostMs: v };
+        game.sync();
+      },
+      /** Ghế hồn ma bầu được: đã phá sản, có người thật ngồi. */
+      presentGhosts: () => (this.state?.players ?? []).filter((p) => p.bankrupt && !this.isBot(p.id)).map((p) => p.id),
+      localGhosts: () => this.localGhosts(this.ghosts.presentGhosts()),
+    };
+    /** Ghế máy của ván (bản một máy) — bộ kiểm thử hỏi qua `c.bot`. */
+    this.bot = {
+      is: (seat) => this.isBot(seat),
+      lv: (seat) => levelOfKey(this.state?.bots?.[seat]),
+      get active() { return game.botSeats().length > 0; },
+    };
+    /** Hai mạch thẻ Thời Cuộc mà bộ kiểm thử gọi thẳng. */
+    this.events = {
+      run: () => this.debug('events.run'),
+      auction: (...a) => this.debug('events.auction', ...a),
+    };
     this.memes = new MemeDeck(this.scene, {
       seatOf: () => this.memeSeat(),
-      send: (id) => this.netEmit('meme', { seat: this.memeSeat(), id }),
+      send: (id) => this.net?.emit('meme', { seat: this.memeSeat(), id }),
     });
     this.watchActivity();
-    /* Nút cây kỹ năng ở hàng tiện ích — chỉ bản online mới cần: chơi một máy
-       thì người ngồi trước màn hình luôn là người đang tới lượt, nút trên thanh
-       hành động là đủ. */
     this.skillBtn = document.getElementById('skill-btn');
     if (this.skillBtn) {
       this.skillBtn.innerHTML = `${skillIcon('root')}<span class="skill-btn-n" hidden></span>`;
-      this.skillBtn.addEventListener('click', () => this.skills.openAnyTime());
+      this.skillBtn.addEventListener('click', () => this.openSkillsAnyTime());
     }
-    /** Máy cầm lái nhận tin học ngoài lượt lúc đang bận — phát ảnh chụp khi rảnh. */
-    this.syncOwed = false;
   }
 
   // ---------------------------------------------------------------- khởi đầu
 
+  /** Bản một máy: hỏi cách bày bàn, dựng chủ ván ngay trong trình duyệt. */
   async start() {
-    // Nhạc nền chỉ sống ở màn hình chờ; khai cuộc xong là nhường chỗ
-    // cho tiếng xí ngầu và tiếng quân cờ.
     audio.startMusic();
     const { names, tokens, bots, settings } = await setupModal();
     audio.stopMusic();
-    this.state = new GameState(names, tokens ?? null, settings);
-    this.bot.reset(bots);
-    /* Có bot thì người ngồi trước màn hình học kỹ năng được cả lúc máy đang
-       đi, y như bản online — nút cây kỹ năng ở hàng tiện ích mở cho ghế ấy. */
-    if (this.skillBtn) this.skillBtn.hidden = !this.bot.active;
-    /* Ván có bot không ghi số liệu cân bằng: bot học kỹ năng theo lối cố định
-       của cấp nó, đếm vào là kéo lệch tỉ lệ thắng của từng kỹ năng — cùng lý
-       do analytics đã tắt cho ván bot của bộ kiểm thử. */
-    if (!this.bot.active) this.analytics.gameStart(this.state, 'offline');
-    this.armTelemetry();
-    /* Hộp bày bàn đã áp chủ đề lúc người chơi chọn; gọi lại theo `settings`
-       đã chốt cho chắc, trước khi dựng quân cờ (quân đội mũ theo chủ đề). */
+    const host = new LocalHost({ names, tokens: tokens ?? null, settings, bots: bots ?? null }, {
+      onTelemetry: (ev) => this.analytics.push(ev),
+    });
+    this.host = host;
+    host.onEvents = (evs) => this.receive(evs);
+    const snap = host.start();
+    this.mount(snap);
+    if (!this.botSeats().length) this.analytics.gameStart(this.state, 'offline');
+    this.setupHandoff();
+    this.bc.show('KHAI CUỘC',
+      `Ván cờ bắt đầu, mỗi người ${money(START_MONEY)} vốn liếng. Thắng khi còn trụ lại một mình,
+       giữ ${WIN_SETS} bộ màu với ${WIN_HOTEL_SETS} bộ phủ kín khách sạn, hoặc gom đủ ${money(WIN_WORTH)} tổng tài sản.`,
+      { ms: 4200 });
+  }
+
+  /** Dựng bàn cờ và giao diện từ ảnh chụp đầu tiên. */
+  mount(snap) {
+    this.state = fromSnapshot(snap);
     applyTheme(this.state.settings.theme);
     this.quick.setState(this.state);
     this.hud = new Hud(this.state, (id) => this.showPlayer(id), this.quick);
     this.hookPeek();
-    /* Đáy ngăn xếp người nhận cú bấm ô: hết phiên chọn thì bấm ô là mở bảng
-       xem ô. `BoardScene.popTileClick` quay về đây khi ngăn xếp rỗng. */
     this.scene.setBaseTileClick((id) => this.showTile(id));
     this.scene.setPlayers(this.state.players);
     this.scene.refresh(this.state);
     this.memes.setState(this.state);
     this.bc.clear();
-
-    await this.bc.show('KHAI CUỘC',
-      `Ván cờ bắt đầu, mỗi người ${money(START_MONEY)} vốn liếng. Thắng khi còn trụ lại một mình,
-       giữ ${WIN_SETS} bộ màu với ${WIN_HOTEL_SETS} bộ phủ kín khách sạn, hoặc gom đủ ${money(WIN_WORTH)} tổng tài sản.`,
-      { ms: 4200 });
-    await this.rollOff();
-  }
-
-  /**
-   * Bật bộ đệm số liệu cân bằng cho ván vừa dựng. Cổng kiểm **lúc phát**:
-   * chỉ máy cầm lái mới ghi — bản online quyền ấy đổi tay mỗi lượt, và máy
-   * ngồi xem vẫn chạy `learnSkill` trên bản sao khi học ngoài lượt.
-   */
-  armTelemetry() {
-    const st = this.state;
-    telemetry.start({
-      startedAt: st.startedAt,
-      gate: () => this.analytics.enabled && this.isDriver() && !this.bot.active,
-      ctx: () => ({ game_id: st.gameId, turn_no: st.turnNo, round: st.round, turn: st.turn }),
-      onPush: (ev) => this.analytics.push(ev),
-    });
+    if (this.skillBtn) this.skillBtn.hidden = !this.net && !this.botSeats().length;
+    this.refreshSkillBtn();
+    this.hud.refresh();
   }
 
   /** Rê chuột lên một người ở thanh bên: soi đất của họ trên bàn cờ. */
@@ -280,1106 +190,722 @@ export class Game {
     };
   }
 
-  // ---------------------------------------------------------------- online
-
   /**
-   * Khai cuộc bản online. Ván đã được phòng dựng sẵn nên mọi máy bắt đầu từ
-   * đúng một ảnh chụp — kể cả thứ tự hai bộ thẻ đã xáo.
-   *
-   * @param {import('../net/room.js').Room} room
-   * @param {object} snap ảnh chụp ván đầu
+   * Chuyền máy chỉ có nghĩa giữa hai người thật cùng ngồi quanh máy: sang ghế
+   * máy thì không ai cầm, còn bàn một người thật thì chẳng có ai để chuyền.
    */
-  startOnline(room, snap) {
-    audio.stopMusic();
-    this.net = room;
-    this.state = fromSnapshot(snap);
-    this.armTelemetry();
-    // Vào lại giữa ván cũng đi qua đây: chủ đề lấy từ ảnh chụp, không từ phòng chờ
-    applyTheme(this.state.settings.theme);
-    this.quick.setState(this.state);
-    this.hud = new Hud(this.state, (id) => this.showPlayer(id), this.quick);
-    this.hookPeek();
-    /* Đáy ngăn xếp người nhận cú bấm ô: hết phiên chọn thì bấm ô là mở bảng
-       xem ô. `BoardScene.popTileClick` quay về đây khi ngăn xếp rỗng. */
-    this.scene.setBaseTileClick((id) => this.showTile(id));
-    this.scene.setPlayers(this.state.players);
-    this.scene.refresh(this.state);
-    this.memes.setState(this.state);
-    this.bc.clear();
-
-    /* Mọi dòng thông báo của người đang cầm lái được phát cho cả bàn cùng đọc,
-       nhờ vậy ai cũng theo được diễn biến chứ không chỉ người đang đi. Cờ
-       `replaying` chặn việc phát lại thông báo vừa nhận từ người khác. */
-    this.bc.onShow = (title, html, o) => {
-      if (this.replaying) return;
-      if (this.isDriver() || this.announcing) this.net.say(title, html, o);
-    };
-
-    room.on.sync = (m) => this.onSync(m.snapshot);
-    room.on.ev = (m) => this.onEvent(m.name, m.data);
-    room.on.bc = (m) => {
-      this.replaying = true;
-      this.bc.show(m.title, m.html, m.o);
-      this.replaying = false;
-    };
-    room.on.ask = (name, data) => this.onAsk(name, data);
-    room.on.room = () => this.onRoomChange();
-    room.on.link = (st) => this.onLink(st);
-    /* Có người vào lại giữa ván → gửi ván hiện tại cho họ dựng lại bàn cờ.
-       Người nhận `hello` là trọng tài, mà trọng tài thường không phải máy cầm
-       lái: bản sao của nó chỉ mới tới ảnh chụp gần nhất, còn máy cầm lái có
-       thể đang giữa một nước (đã xét đủ tiền, chưa kịp trừ). Trước đây trọng
-       tài phát luôn bản sao ấy với `rev` cao hơn một nấc, máy cầm lái nhận và
-       ghi đè số dư giữa chừng, rồi trừ tiền trên số dư cũ, ra tiền âm. Supabase
-       nối lại âm thầm mỗi lần mạng chập chờn, nên chơi lâu là gặp.
-       Giờ trọng tài chỉ nhắn máy cầm lái phát. Ngoại lệ: người vừa vào lại
-       chính là người đang tới lượt, tức máy cầm lái vừa mất ván (tải lại
-       trang), thì bản sao của trọng tài là bản tốt nhất còn lại. */
-    room.onNeedSync = (seat) => {
-      if (this.isDriver() || seat === this.state?.turn) this.sync();
-      else this.netEmit('needsync', {});
-    };
-    if (this.skillBtn) this.skillBtn.hidden = false;
-    this.refreshSkillBtn();
-
-    /* Nhịp canh người vắng mặt. Phải là hẹn giờ chứ không thể chờ tin báo: lúc
-       rớt mạng chỉ có đúng một tin, mà hạn ân thì tính bằng chục giây sau đó. */
-    clearInterval(this.absentTimer);
-    this.absentTimer = setInterval(() => {
-      this.checkAbsent();
-      this.checkAbandonedTurn();
-      this.checkClock();
-      this.skills.reconcileLearn();
-    }, 2000);
-
-    this.onRoomChange();
-    this.bc.show('KHAI CUỘC',
-      `Ván bắt đầu với <b>${this.state.players.length} người</b>, mỗi người có ${money(START_MONEY)}.
-       Chúc may mắn!`, { ms: 2600 });
-    this.beginTurn();
-  }
-
-  // ------------------------------------------------- lắc giành quyền đi trước
-
-  /**
-   * Ai đi trước: mỗi người lắc một lần, cao nhất đi đầu, hoà thì bốc thăm
-   * giữa đúng những người hoà.
-   *
-   * Màn này chạy ở **một máy duy nhất** — bản online là trọng tài (ghế sống
-   * nhỏ nhất, lúc khai cuộc chính là chủ phòng) — rồi phát thứ tự chốt được
-   * cho cả bàn qua ảnh chụp. Nút "Lắc" thì hiện ở máy của từng người: bấm là
-   * việc của họ, còn con xí ngầu vẫn do máy cầm lái gieo, y như mọi nước đi
-   * khác, để cả bàn chỉ có một nguồn ngẫu nhiên.
-   */
-  async rollOff() {
+  setupHandoff() {
     const st = this.state;
-    this.announcing = true;
-    try {
-      await this.bc.show('GIÀNH QUYỀN ĐI TRƯỚC',
-        'Mỗi người lắc một lần. Ai cao nhất đi đầu, hoà thì bốc thăm.',
-        { ms: 2800 });
-
-      /* Chỉ người còn trong ván mới lắc. Lúc khai cuộc thì ai cũng còn, nhưng
-         trọng tài rớt giữa chừng là màn này chạy lại từ đầu ở máy khác — tới
-         lúc ấy có thể đã có người bị gạch tên. */
-      const seats = st.players.filter((p) => !p.bankrupt);
-
-      /** @type {Array<{seat:number,sum:number}>} */
-      const rolls = [];
-      for (const p of seats) {
-        await this.askRollOff(p.id, rolls);
-        if (this.rollOffStale()) return;
-        const d = rollDice();
-        this.netEmit('dice', d);
-        await this.scene.rollDiceAnim(d.a, d.b);
-        rolls.push({ seat: p.id, sum: d.sum });
-        await this.bc.show('LẮC GIÀNH QUYỀN',
-          `<b>${p.name}</b> ra <b>${d.a} + ${d.b} = ${d.sum}</b>.`, { ms: 1900 });
-      }
-
-      // Người đã rời bàn xếp cuối, để `order` vẫn là hoán vị đủ mọi ghế
-      const order = [
-        ...orderFromRolls(rolls),
-        ...st.players.filter((p) => p.bankrupt).map((p) => p.id),
-      ];
-      if (this.rollOffStale()) return;
-      const sums = new Map(rolls.map((r) => [r.seat, r.sum]));
-      const tied = rolls.length > 1 && sums.get(order[0]) === sums.get(order[1]);
-
-      st.setOrder(order);
-      this.scene.hideDice();
-      this.netEmit('hideDice', {});
-      this.hud.refresh();
-      this.sync();
-
-      await this.bc.show('THỨ TỰ ĐI',
-        `${order.filter((seat) => sums.has(seat)).map((seat, i) => `
-           <b style="color:${st.players[seat].token.css}">${i + 1}. ${st.players[seat].name}</b>
-           (${sums.get(seat)})`).join(' · ')}
-         <br>${tied ? '<i>Hoà điểm đầu bảng, thứ tự người hoà do bốc thăm.</i>'
-          : `<b>${st.players[order[0]].name}</b> đi trước.`}`,
-        { ms: 4600 });
-    } finally {
-      this.announcing = false;
-      /* Kể cả lúc bỏ ngang: ảnh chụp mang thứ tự đã chốt có thể tới giữa lúc
-         `busy`, khi ấy `onSync` không bày lượt — phải bày ở đây. */
-      this.beginTurn();
-    }
+    const bots = new Set(this.botSeats());
+    const botNames = new Set(st.players.filter((p) => bots.has(p.id)).map((p) => p.name));
+    const humanNames = new Set(st.players.filter((p) => !bots.has(p.id)).map((p) => p.name));
+    const humans = st.players.length - bots.size;
+    setHandoffSkip(bots.size ? (name) => humans <= 1 || (botNames.has(name) && !humanNames.has(name)) : null);
   }
 
   /**
-   * Vòng lắc đang chạy ở máy này có còn là vòng được tính không.
-   *
-   * Hết là trọng tài (ghế nhỏ hơn đã quay lại), hoặc thứ tự đã chốt ở máy khác
-   * và về qua ảnh chụp: dừng ngay, kẻo hỏi người chơi lắc thêm một lượt rồi phát
-   * một thứ tự thứ hai ghi đè lên ván đã bắt đầu.
+   * Ván đang bận: còn sự kiện chờ diễn, đang chạy một mạch luật gọi thẳng,
+   * hoặc đang mở hộp thoại của mình. Bộ kiểm thử chờ cờ này tắt rồi mới đọc ván.
    */
-  rollOffStale() {
-    if (!this.net) return false;
-    if (!this.state.order && this.net.isArbiter) return false;
-    this.scene.hideDice();
-    return true;
+  get busy() {
+    return this.localBusy || this.pumping || this.queue.length > 0 || this.debugWaiters.length > 0;
   }
 
-  /**
-   * Còn phải chờ bao lâu mới được nhận màn lắc thay ghế trọng tài nhỏ hơn.
-   * 0 là nhận ngay được: hoặc mình là trọng tài từ đầu, hoặc ghế trước đã vắng
-   * quá `rollOffTakeoverMs`.
-   */
-  rollOffTakeoverWait() {
-    let wait = 0;
-    for (let i = 0; i < this.net.mySeat; i++) {
-      if (this.state.players[i]?.bankrupt || this.net.seats[i]?.kicked) continue;
-      wait = Math.max(wait, this.rollOffTakeoverMs - this.net.awayFor(i));
-    }
-    return wait;
-  }
-
-  /**
-   * Mời người ở ghế `seat` bấm lắc.
-   *
-   * Bản online thì hộp thoại phải hiện ở máy của chính họ. Không trả lời (rớt
-   * mạng, bỏ đi lúc khai cuộc) thì quá hạn bàn lắc hộ — thà bốc thăm giúp còn
-   * hơn treo cả bàn từ trước khi ván kịp bắt đầu.
-   */
-  async askRollOff(seat, rolls) {
-    const st = this.state;
-    if (this.bot.is(seat)) { await wait(500); return; }
-    if (!this.net || seat === this.net.mySeat) {
-      if (this.net) audio.sfx('turn');
-      await rollOffModal(st, seat, rolls, this.net ? this.tradeMs : 0);
-      return;
-    }
-    await this.bc.show('CHỜ LẮC',
-      `Đang chờ <b>${st.players[seat].name}</b> lắc xí ngầu…`, { ms: 2000 });
-    await this.net.ask(seat, 'rolloff', { seat, rolls },
-      { fallback: true, timeout: this.tradeMs + 8000 });
-  }
-
-  /** Thanh nút của người đang ngồi chờ cả bàn bốc thăm quyền đi trước. */
-  showRollOffWaiting() {
-    this.hud.setActions([{
-      label: 'Đang giành quyền đi trước',
-      cls: 'btn-ghost',
-      disabled: true,
-      hint: 'chờ mọi người lắc xí ngầu',
-    }]);
-  }
-
-  /**
-   * Vào màn bốc thăm quyền đi trước.
-   *
-   * Đúng một máy chạy màn này. Trọng tài rớt giữa chừng thì ghế kế tiếp lên
-   * thay và bốc lại từ đầu — thà lắc lại một vòng còn hơn ván đứng im mãi ở
-   * cửa khai cuộc.
-   */
-  beginRollOff() {
-    this.hud.refresh();
-    this.showRollOffWaiting();
-    if (!this.net.isArbiter) return;
-    const wait = this.rollOffTakeoverWait();
-    if (wait > 0) {
-      /* Sổ ghế không đổi thì không có tin nào gọi lại `beginTurn`, nên tự hẹn
-         giờ xét lại. Trọng tài cũ quay về trước hạn thì lúc ấy `isArbiter` đã
-         là false và lần xét lại không làm gì. */
-      clearTimeout(this.rollOffRetry);
-      this.rollOffRetry = setTimeout(() => {
-        if (!this.busy && !this.state.order) this.beginTurn();
-      }, wait + 50);
-      return;
-    }
-    this.guard(() => this.rollOff());
-  }
-
-  /**
-   * Máy này có đang cầm lái ván không.
-   *
-   * Bình thường người cầm lái là người tới lượt — luật chạy ở đúng một chỗ nên
-   * không có chuyện hai máy ra hai kết quả. Nếu người tới lượt đã rời bàn thì
-   * không ai gỡ được lượt ấy, ván đứng im; lúc đó **trọng tài cầm thay** để bỏ
-   * qua lượt. Trọng tài là ghế sống nhỏ nhất — một luật, không phải một chức vụ,
-   * nên mọi máy tự tính ra cùng một người mà không cần bầu bán.
-   */
-  isDriver() {
-    if (!this.net) return true;          // một máy: lúc nào cũng là mình
-    if (!this.state) return false;
-    const seat = this.state.turn;
-    if (seat === this.net.mySeat) return true;
-    /* Vắng chưa quá `skipGraceMs` thì chưa ai nhận cầm lái: máy người ấy có
-       thể vẫn đang chạy lượt, chỉ là presence hụt một nhịp.
-
-       Phá sản **không** phải lý do để trọng tài nhận lái. `doBankrupt` phát ảnh
-       chụp ngay lúc `turn` còn trỏ vào người vừa vỡ nợ, trong khi máy họ còn
-       diễn pháo hoa, gom nợ rồi mới tự `endTurn`. Trọng tài mà nhận lái ở nhịp
-       ấy là hai máy cùng trao lượt: ảnh chụp hai bên đè nhau, có máy còn đang
-       giữa một hộp thoại thì xong việc bày ra thanh nút của người khác (bấm
-       được luôn, hỏi cả cược Chẵn Lẻ của người ta). Máy người phá sản tắt hẳn
-       thì vẫn rơi vào nhánh vắng mặt dưới đây. */
-    const abandoned = !this.net.isSeatLive(seat) && this.net.awayFor(seat) >= this.skipGraceMs;
-    return abandoned && this.net.isArbiter;
-  }
-
-  /**
-   * Nhịp canh: người tới lượt vừa vắng đủ `skipGraceMs` thì bày lại lượt để
-   * trọng tài nhận cầm lái và bỏ qua. Không có tin nào báo lúc hạn ân hết, nên
-   * phải xét bằng hẹn giờ, cùng lý do với `checkAbsent`.
-   */
-  checkAbandonedTurn() {
-    const st = this.state;
-    if (!this.net || !st || st.over || !st.order || this.busy) return;
-    if (this.net.linkLost || st.turn === this.net.mySeat) return;
-    // Người phá sản tắt máy giữa lượt cũng cần nhịp này để trọng tài trao lượt
-    if (this.isDriver()) this.beginTurn();
-  }
-
-  /** Ghế của mình trong ván (−1 khi chơi một máy). */
-  get mySeat() { return this.net ? this.net.mySeat : this.bot.homeSeat(); }
-
-  /**
-   * Meme thả ra thì bong bóng hiện trên đầu ai.
-   *
-   * Bản online là ghế của chính mình — thả được cả lúc đang ngồi xem người khác
-   * đi. Bản một máy thì cả bàn dùng chung một bàn phím, nên chỉ có một câu trả
-   * lời hợp lý: người đang tới lượt.
-   */
-  memeSeat() {
-    if (this.net) return this.net.mySeat;
-    // Bàn có bot: bàn phím là của người thật, kể cả lúc máy đang đi
-    if (this.bot.active) return this.bot.homeSeat();
-    return this.state?.turn ?? -1;
-  }
-
-  /**
-   * Phát ảnh chụp trạng thái cho cả phòng.
-   * Chỉ người đang cầm lái chạy tới được các chỗ gọi hàm này, nên không cần
-   * kiểm tra lại quyền ở đây.
-   *
-   * Mỗi lần phát nhích `state.rev` lên một nấc. Con số ấy đi kèm ảnh chụp và là
-   * cơ sở để người nhận bỏ ảnh về trễ — xem `onSync`.
-   */
-  sync() {
-    if (!this.net) return;
-    this.state.rev = (this.state.rev ?? 0) + 1;
-    this.net.publishSync(snapshot(this.state));
-  }
-
-  /** Báo một việc cần diễn hoạt cho các máy đang ngồi xem. */
-  netEmit(name, data) {
-    if (this.net) this.net.emit(name, data);
-  }
-
-  /**
-   * Hoạt cảnh động đất / hoả hoạn / bão tuyết trên các ô vừa mất nhà — trên mọi máy.
-   * Xây nhà, thế chấp, chuộc lại thì không cần gọi: bàn cờ tự nhận ra từ ảnh
-   * chụp (`BoardScene.diffTileFx`). Riêng nhà giảm thì ảnh chụp không nói vì
-   * sao, nên máy cầm lái phải báo.
-   * @param {'quake'|'fire'|'blizzard'} kind
-   * @param {number[]} ids
-   * @param {boolean} [lost] false = nhà được giữ lại, không diễn cảnh nhà văng
-   */
-  tileFx(kind, ids, lost = true) {
-    if (!ids.length) return Promise.resolve();
-    this.netEmit('tilefx', { kind, ids, lost });
-    return this.scene.tileFx(kind, ids, lost);
-  }
-
-  /**
-   * Cảnh bộ xương diễn giữa nghĩa địa (chủ đề Halloween) — trên mọi máy.
-   * Không chờ: cảnh chạy song song với lượt, không bắt ai đứng đợi. Chủ đề
-   * khác thì `playSkit` tự bỏ qua. Xây nhà không gọi ở đây: bàn cờ tự nhận ra
-   * từ ảnh chụp (`BoardScene.diffTileFx`).
-   * @param {string} kind khoá trong `render/skits.js`
-   * @param {number} seat người diễn chính
-   * @param {number} [owner] chủ đất, cho cảnh trả tiền thuê
-   */
+  /** Cảnh bộ xương của chủ đề Halloween (bộ kiểm thử gọi thẳng). */
   skit(kind, seat, owner) {
-    // Ván chủ đề khác không có nghĩa địa: khỏi tốn một tin trên đường truyền
     if (this.state?.settings.theme !== 'halloween') return;
-    this.netEmit('skit', { kind, seat, owner });
     this.scene.playSkit?.(kind, seat, owner);
   }
 
-  /**
-   * Nháy sáng ô mà nước vừa rồi đụng tới — trên **mọi máy**, không riêng máy
-   * cầm lái.
-   *
-   * Dòng thông báo có ghi tên ô, nhưng ai chưa thuộc mặt bàn thì đọc xong vẫn
-   * phải dò quanh 40 ô. Tối cả bàn đi vài giây, chừa đúng ô ấy, thì đọc tới
-   * đâu thấy tới đó. Chờ tắt hẳn rồi mới đi tiếp, để nước kế tiếp không đè lên
-   * vệt sáng còn đang sáng.
-   *
-   * @param {number[]} ids
-   * @param {number} [ms]
-   */
-  spot(ids, ms = 2000) {
-    const list = [...new Set(ids ?? [])].filter((id) => id != null);
-    if (list.length === 0) return Promise.resolve();
-    this.netEmit('spot', { ids: list, ms });
-    return this.scene.spotTiles(list, ms);
+  /** Hoạt cảnh nhà cửa trên các ô (bộ kiểm thử gọi thẳng). */
+  tileFx(kind, ids, lost = true) { return this.scene.tileFx(kind, ids, lost); }
+
+  // ---------------------------------------------------------------- ghế
+
+  botSeats() { return (this.state?.bots ?? []).map((b, i) => (b ? i : -1)).filter((i) => i >= 0); }
+  isBot(seat) { return !!this.state?.bots?.[seat]; }
+
+  /** Máy này trả lời được câu hỏi của ghế này không. */
+  mine(seat) {
+    if (this.net) return seat === this.net.mySeat;
+    return seat >= 0 && !this.isBot(seat);
   }
 
+  /** Ghế của mình trong ván (−1 khi chơi một máy không có bot). */
+  get mySeat() { return this.net ? this.net.mySeat : this.homeSeat(); }
+
   /**
-   * Nhận ảnh chụp từ người đang cầm lái — ảnh chụp **mới nhất** là lời cuối.
-   *
-   * "Mới nhất" phải xét theo `rev` chứ không theo lúc tin tới nơi: đường truyền
-   * không hứa giữ đúng thứ tự, mà một phiên đấu giá phát liên tiếp bảy tám ảnh,
-   * hai ảnh cuối (kết thúc sự kiện, rồi trao lượt) cách nhau chưa tới một mili
-   * giây. Nhận ngược thứ tự thì ảnh cũ ghi đè lượt vừa trao: máy ấy tưởng lượt
-   * vẫn của người trước, người tới lượt thật thì không còn nút nào để bấm, mà
-   * bàn cờ chỉ hiện người kia đang thao tác.
+   * Ghế của người ngồi trước màn hình ở bàn có bot: người tới lượt nếu là
+   * người, không thì người thật đi gần nhất.
    */
-  onSync(snap) {
-    if (!this.state) return;
-    if (snap.rev != null && this.state.rev != null && snap.rev <= this.state.rev) return;
-    const wasOver = this.state.over;
-    applySnapshot(this.state, snap);
-    /* Ván vừa hạ màn ở máy cầm lái: `checkGameOver` chỉ chạy ở đó, máy này
-       dựng lại cửa thắng từ ảnh chụp để hiện đúng bảng tổng kết. */
-    if (this.state.over && !wasOver) {
-      const win = this.state.winCheck();
-      if (win) {
-        this.hud.refresh();
-        this.scene.refresh(this.state);
-        this.hud.clearActions();
-        this.finish(win);
-        return;
+  homeSeat() {
+    const st = this.state;
+    if (!st || !this.botSeats().length) return -1;
+    if (!this.isBot(st.turn) && !st.current.bankrupt) this.home = st.turn;
+    if (this.home == null || this.isBot(this.home) || st.players[this.home]?.bankrupt) {
+      this.home = st.players.find((p) => !this.isBot(p.id) && !p.bankrupt)?.id ?? -1;
+    }
+    return this.home;
+  }
+
+  /** Meme thả ra thì bong bóng hiện trên đầu ai. */
+  memeSeat() {
+    if (this.net) return this.net.mySeat;
+    if (this.botSeats().length) return this.homeSeat();
+    return this.state?.turn ?? -1;
+  }
+
+  /** Ghế tới lượt có phải của máy này và máy này đang được bấm không. */
+  isDriver() {
+    if (!this.state) return false;
+    return this.mine(this.state.turn);
+  }
+
+  // ---------------------------------------------------------------- nhận sự kiện
+
+  /**
+   * Sự kiện mới từ chủ ván. `answered` của hộp thẻ được xét ngay lúc nhận,
+   * không chờ diễn tới: máy ngồi xem đang đứng chờ hộp ấy đóng, mà chính hàng
+   * sự kiện đang kẹt sau hộp ấy.
+   */
+  receive(events) {
+    for (const ev of events) {
+      if (ev.type === 'ask' && ev.list.some((q) => q.kind === 'fate')) this.fateAsks.add(ev.id);
+      if (ev.type === 'answered' && ev.all && this.fateAsks.delete(ev.id)) {
+        if (this.fateWaiter) { this.fateWaiter(); this.fateWaiter = null; } else this.fateDone += 1;
       }
     }
-    this.skills.reconcileLearn();
-    this.refreshSkillBtn();
+    this.queue.push(...events);
+    this.pump();
+  }
+
+  async pump() {
+    if (this.pumping) return;
+    this.pumping = true;
+    try {
+      while (this.queue.length) {
+        const ev = this.queue.shift();
+        try {
+          await this.play(ev);
+        } catch (err) {
+          console.error('diễn sự kiện hỏng', ev.type, err, err?.stack);
+        }
+      }
+    } finally {
+      this.pumping = false;
+    }
+  }
+
+  /** Diễn một sự kiện. Chỉ chờ những hoạt cảnh mà sự kiện sau phải đứng sau. */
+  async play(ev) {
+    const sc = this.scene;
+    const st = this.state;
+    switch (ev.type) {
+      case 'say':
+        this.bc.show(ev.title, ev.html, { kind: ev.kind, ms: ev.ms || undefined });
+        return;
+      case 'sync':
+        this.applySync(ev.snap);
+        return;
+      case 'sfx':
+        audio.sfx(ev.name);
+        return;
+      case 'dice':
+        await sc.rollDiceAnim(ev.a, ev.b, ev.only);
+        return;
+      case 'move':
+        sc.clearHighlight();
+        await sc.moveToken(ev.seat, ev.from, ev.steps);
+        return;
+      case 'jail':
+        sc.shake(0.007, 340);
+        await sc.jumpToken(ev.seat, JAIL_TILE);
+        sc.syncJail?.(st);
+        return;
+      case 'hideDice':
+        sc.hideDice();
+        sc.clearHighlight();
+        return;
+      case 'highlight': {
+        const p = st.players[ev.seat];
+        if (p) sc.highlightTile(ev.tile, p.token.color);
+        return;
+      }
+      case 'spin':
+        await sc.spinTiles(ev.ids, ev.tileId);
+        return;
+      case 'quake':
+        sc.shake(ev.strong ? 0.012 : 0.008, ev.strong ? 700 : 420);
+        return;
+      case 'spot':
+        sc.spotTiles(ev.ids, ev.ms);
+        return;
+      case 'tilefx':
+        sc.tileFx(ev.kind, ev.ids, ev.lost ?? true);
+        return;
+      case 'zombies':
+        sc.zombieMarch?.(ev.ids);
+        return;
+      case 'skit':
+        sc.playSkit?.(ev.kind, ev.seat, ev.owner);
+        return;
+      case 'witch':
+        await sc.witchFly?.(ev.a, ev.b);
+        return;
+      case 'fly':
+        this.flashFly(ev);
+        return;
+      case 'bankruptFx':
+        await sc.bankruptFx(ev.seat);
+        return;
+      case 'fireworks': {
+        const c = sc.boardCenter();
+        sc.fireworks(c.x, c.y, 0xB3322A, 2);
+        return;
+      }
+      case 'wait':
+        await wait(ev.ms);
+        return;
+      case 'eventcard':
+        await this.showEventCard(ev);
+        return;
+      case 'fatecard':
+        await this.showFateCard(ev);
+        return;
+      case 'auctionend':
+        closeBidModal();
+        auctionResultModal(st, ev.tileId, ev.rows,
+          { winner: ev.winner, sellerName: ev.sellerName, noSale: ev.noSale });
+        await wait(1200);
+        return;
+      case 'turn':
+        // Tới lượt mình thì reo một tiếng: chơi online người ta hay ngó sang cửa sổ khác
+        if (this.net && this.mine(ev.seat)) audio.sfx('turn');
+        // Bản một máy: hết một lượt thì gửi số liệu cân bằng (bản online do server gửi)
+        if (!this.net) this.analytics.flush();
+        return;
+      case 'ghostcall':
+        this.openGhostVote(ev);
+        return;
+      case 'ghostvote':
+        if (this.ghostPanel && this.ghostPanel.n === ev.n) this.ghostPanel.panel.setVote(ev.seat, ev.id);
+        return;
+      case 'gameover':
+        this.finish({ player: st.players[ev.seat], by: ev.by });
+        return;
+      case 'ask':
+        this.setAsk(ev);
+        return;
+      case 'answered':
+        if (ev.all && this.pending?.id === ev.id) {
+          this.pending = null;
+          this.clearClock();
+          this.hud.clearActions();
+        }
+        return;
+      case 'debug-done': {
+        const i = this.debugWaiters.findIndex((w) => w.path === ev.path);
+        if (i >= 0) this.debugWaiters.splice(i, 1)[0].resolve(ev.value);
+        return;
+      }
+      case 'rejected':
+        // Câu trả lời không còn hợp lệ (bàn vừa đổi): dựng lại giao diện theo câu hỏi đang treo
+        this.renderAsk();
+        return;
+      case 'error':
+        console.error('engine:', ev.message, ev.stack);
+        return;
+      default:
+    }
+  }
+
+  /** Áp ảnh chụp vào bàn — tại chỗ, để HUD và scene giữ nguyên tham chiếu. */
+  applySync(snap) {
+    if (!snap || !this.state) return;
+    applySnapshot(this.state, snap);
     this.hud.refresh();
     this.scene.refresh(this.state);
     this.scene.placeTokens();
-    // Đang giữa một hộp thoại của chính mình thì để yên, xong việc sẽ tự bày lại
-    if (!this.busy) this.beginTurn();
+    this.scene.syncJail?.(this.state);
+    this.refreshSkillBtn();
   }
 
-  /** Diễn lại hoạt cảnh của người đang đi, cho bàn bên này cũng thấy động. */
-  async onEvent(name, data) {
-    // Đồng hồ không phải hoạt cảnh — vào trước, khỏi xếp hàng sau tiếng xí ngầu
-    if (name === 'clock') { if (!this.staleClock(data)) this.applyClock(data); return; }
-    /* Meme cũng vậy, mà lý do khác: người gửi thả lúc nào là muốn thấy nó hiện
-       lúc ấy. Xếp sau một cú lăn xí ngầu ba giây thì bong bóng nổi lên lạc hẳn
-       khỏi chuyện đang xảy ra trên bàn. */
-    if (name === 'meme') { this.memes.receive(data.seat, data.id); return; }
-    // Học kỹ năng ngoài lượt: chỉ máy cầm lái xử lý, không phải hoạt cảnh
-    if (name === 'learn') { this.skills.onLearnMsg(data); return; }
-    /* Hội Đồng Hồn Ma: hộp bầu và lá phiếu không phải hoạt cảnh, vào ngay chứ
-       không xếp hàng sau xí ngầu — hộp chỉ đứng mười giây. */
-    if (name === 'ghostcall') { this.ghosts.onCall(data); return; }
-    if (name === 'ghostvote') { this.ghosts.onVote(data); return; }
-    // Trọng tài nhờ phát ván cho người vừa vào lại — xem `room.onNeedSync`
-    if (name === 'needsync') { if (this.isDriver()) this.sync(); return; }
-    const sc = this.scene;
-    if (name === 'dice') {
-      await sc.rollDiceAnim(data.a, data.b, data.only);
-    } else if (name === 'move') {
-      sc.clearHighlight();
-      await sc.moveToken(data.seat, data.from, data.steps);
-    } else if (name === 'jail') {
-      audio.sfx('jail');
-      sc.shake(0.007, 340);
-      await sc.jumpToken(data.seat, JAIL_TILE);
-    } else if (name === 'hideDice') {
-      sc.hideDice();
-      sc.clearHighlight();
-    } else if (name === 'spin') {
-      // Bốc thăm giải toả: máy nào cũng quay đúng vòng ấy, dừng đúng ô ấy
-      await sc.spinTiles(data.ids, data.tileId);
-    } else if (name === 'quake') {
-      audio.sfx('shake');
-      sc.shake(0.012, 700);
-    } else if (name === 'spot') {
-      await sc.spotTiles(data.ids, data.ms);
-    } else if (name === 'zombies') {
-      sc.zombieMarch?.(data.ids);
-    } else if (name === 'skit') {
-      sc.playSkit?.(data.kind, data.seat, data.owner);
-    } else if (name === 'witch') {
-      await sc.witchFly?.(data.a, data.b);
-    } else if (name === 'tilefx') {
-      // Không `await`: hoạt cảnh chạy song song với dòng thông báo theo sau
-      sc.tileFx(data.kind, data.ids, data.lost ?? true);
-    } else if (name === 'eventcard') {
-      /* Thẻ Thời Cuộc là chuyện của cả bàn, nên máy nào cũng phải thấy mặt thẻ.
-         Cùng `seed` thì dải xếp y hệt và dừng đúng ô ấy, cả bàn hồi hộp cùng
-         nhau. Khác thẻ Cơ Hội / Khí Vận ở chỗ nút đóng có ở **mọi** máy: thẻ
-         này đổi luật của cả bàn, ai cũng phải tự đọc rồi tự bấm — hộp không tự
-         tắt. Không `await`: mặt thẻ còn nằm đó thì hoạt cảnh kế tiếp vẫn phải
-         diễn, cùng nhịp với máy đang chạy sự kiện. */
-      const card = EVENT_BY_ID[data.id];
-      if (card) eventCase(card, { detail: data.detail, seed: data.seed });
-    } else if (name === 'fatecard') {
-      /* Cơ Hội / Khí Vận vốn là chuyện riêng của người vừa đáp xuống ô, trước
-         đây máy khác không thấy gì. Nay dải chạy nên cả bàn cùng xem, chỉ khác
-         là máy ngồi xem không bấm nút: nút "Đành chịu" và phím Enter là của
-         người đang đi, hộp bên này tắt theo cú bấm ấy (`fatedone`) chứ không
-         theo một cái hẹn giờ riêng — hai bên rời khỏi mặt thẻ cùng một nhịp. */
-      const card = DECKS[data.kind]?.[data.index];
-      if (card) {
-        await fateCase(data.kind, card, {
-          amount: data.amount ?? null, note: data.note ?? '',
-          seed: data.seed,
-          closeOn: this.fateWatch(),
-          waitNote: data.by ? `Chờ ${data.by} bấm…` : 'Chờ người đang đi…',
-        });
-      }
-    } else if (name === 'auctionend') {
-      /* Bảng giá chốt phiên: giá kín nên máy ngồi xem không tự dựng lại được,
-         phải nhận nguyên danh sách từ máy cầm lái. Không `await` — hộp đứng đó
-         tới lúc người ở máy này bấm, không giữ nhịp của ai.
-
-         Hộp ghi giá của máy này có thể còn mở: tab nằm nền bị bóp nhịp hẹn giờ
-         nên đồng hồ trong hộp chạy chậm, còn máy cầm lái đã hết hạn chờ và chốt
-         phiên với giá 0 cho mình. Đóng nó đi, kẻo bảng giá nằm đè lên một hộp
-         hỏi về phiên đã xong. */
-      closeBidModal();
-      auctionResultModal(this.state, data.tileId, data.rows,
-        { winner: data.winner, sellerName: data.sellerName, noSale: data.noSale });
-    } else if (name === 'fatedone') {
-      this.fateDone();
-    }
+  /** Tiền bay giữa hai chỗ, kèm nháy số dư. */
+  flashFly(ev) {
+    const el = (who) => (who === 'bank' ? this.hud.bankEl() : this.hud.cardEl(who));
+    if (ev.from !== 'bank') this.hud.flashMoney(ev.from, false);
+    if (ev.to !== 'bank') this.hud.flashMoney(ev.to, true);
+    this.scene.flyMoney(el(ev.from), el(ev.to), ev.amount, { text: ev.text, color: ev.color });
   }
 
   /**
-   * Có người hỏi và đang chờ mình trả lời. Hiện chỉ dùng cho giao dịch: bên
-   * kia dựng đề nghị trên máy họ, còn người bấm đồng ý phải là mình.
+   * Thẻ Thời Cuộc: máy nào cũng thấy mặt thẻ, ai cũng tự bấm đóng. Hàng sự
+   * kiện chờ mặt thẻ lật xong rồi thêm một nhịp đọc mới diễn tiếp.
    */
-  async onAsk(name, data) {
-    // Câu nào cũng là một lần "tới lượt mình" — gọi họ về màn hình cho kịp trả lời
-    if (name === 'trade-review') {
-      audio.sfx('turn');
-      /* Trả nguyên giá trị chứ không ép về true/false: `'timeout'` cho bên hỏi
-         biết đây là bỏ bàn, không phải một câu từ chối. */
-      return litTiles(this.scene, offerTiles(data.offer),
-        () => tradeReviewModal(this.state, data.offer, this.tradeMs));
-    }
-    if (name === 'rolloff') {
-      audio.sfx('turn');
-      return rollOffModal(this.state, this.net.mySeat, data.rolls ?? [], this.tradeMs);
-    }
-    /* Thiếu tiền trả một khoản do người khác gây ra (thẻ "mỗi người góp",
-       đấu giá, cưỡng chiếm): bán nhà hay cầm đất là tiêu vào cơ nghiệp của
-       mình, nên bảng quản lý mở ở đây chứ không ở máy người đang đi.
-       `data.seat` chỉ để đối chiếu — bảng luôn mở trên ghế của chính máy này,
-       nên tin gửi tới cũng không mở được tài sản của ai khác. */
-    if (name === 'raise') {
-      const seat = this.net.mySeat;
-      if (seat < 0 || data?.seat !== seat) return null;
-      audio.sfx('turn');
-      /* Khoá `busy` suốt lúc trả lời. Ván gốc nằm ở máy cầm lái, mà nhịp canh
-         người vắng mặt chạy nền ở đây cũng phát ảnh chụp được (`evictPlayer` →
-         `sync`) — ảnh ấy mang theo mấy ô vừa cầm cố trên bản sao, rồi máy cầm
-         lái làm lại lần nữa là tiền vào hai lần. `checkAbsent` nhường khi bận. */
-      this.busy = true;
-      try {
-        return await this.runRaise(seat, data.amount, { ms: data.ms, record: [] });
-      } finally { this.busy = false; }
-    }
-
-    /* Đất thế chấp vừa về tay mình: tiền chuộc lấy từ túi mình nên câu trả lời
-       cũng phải là của mình, dù giao dịch do người kia dựng. */
-    if (name === 'redeem') {
-      audio.sfx('turn');
-      return litTiles(this.scene, data.ids,
-        () => redeemPromptModal(this.state, this.net.mySeat, data.ids, this.tradeMs));
-    }
-
-    /* Bốn câu hỏi của thẻ Thời Cuộc. Hộp nào cũng đếm ngược và có sẵn câu trả
-       lời lúc hết giờ, vì sự kiện hỏi cả bàn cùng lúc — một người ngồi ngẩn ra
-       là bốn người kia phải chờ. */
-    const ms = this.events.askMs;
-    if (name === 'ev-brace') {
-      audio.sfx('turn');
-      return litTiles(this.scene, data.lots.map((l) => l.id),
-        () => bracePromptModal(this.state, this.net.mySeat, data.lots, ms));
-    }
-    if (name === 'ev-fire') {
-      audio.sfx('turn');
-      return litTiles(this.scene, data.lots.map((l) => l.id),
-        () => firePromptModal(this.state, this.net.mySeat, data.lots, ms));
-    }
-    if (name === 'ev-snow') {
-      audio.sfx('turn');
-      return litTiles(this.scene, data.lots.map((l) => l.id),
-        () => snowPromptModal(this.state, this.net.mySeat, data.lots, ms));
-    }
-    if (name === 'ev-zombie') {
-      audio.sfx('turn');
-      return litTiles(this.scene, data.lots.map((l) => l.id),
-        () => zombiePromptModal(this.state, this.net.mySeat, data.lots, ms, data.rounds));
-    }
-    if (name === 'ev-pick') {
-      audio.sfx('turn');
-      return this.pickTile(data.ids, data.text, ms);
-    }
-    if (name === 'ev-group') {
-      audio.sfx('turn');
-      return this.pickGroup(data, ms);
-    }
-    if (name === 'ev-bid') {
-      audio.sfx('turn');
-      /* Nhớ máy nào đang hỏi — cùng công thức với `isDriver`: người tới lượt,
-         hoặc trọng tài nếu người ấy đã vắng. Máy ấy rời bàn thì phiên chết
-         theo, xem `onRoomChange`. */
-      const t = this.state.turn;
-      this.bidAsker = this.net.isSeatLive(t) ? t : this.net.arbiterSeat;
-      return litTiles(this.scene, [data.tileId],
-        () => auctionBidModal(this.state, this.net.mySeat, data.tileId,
-          { reason: data.reason, ms, bidders: data.bidders, barred: data.barred }));
-    }
-    return null;
-  }
-
-  /**
-   * Đường truyền của **máy mình** đứt hoặc nối lại.
-   *
-   * Đứt thì cất thanh nút đi. Máy này vẫn chạy luật được, nhưng ảnh chụp phát
-   * ra không tới được ai; và lúc nối lại, bàn sẽ gửi về ảnh chụp của nó rồi đè
-   * lên — nước vừa đi coi như chưa từng có. Thà không cho bấm còn hơn cho bấm
-   * rồi nuốt mất.
-   *
-   * Nối lại thì `Room` đã gửi `hello` xin ván mới; trong lúc chờ ảnh chụp về,
-   * bày lại thanh nút theo trạng thái đang có — ván có thể chưa nhúc nhích
-   * chút nào trong lúc mình vắng, và như thế thì chẳng có ảnh chụp nào tới cả.
-   */
-  onLink(status) {
-    if (!this.net || !this.state) return;
-    const lost = status === 'lost';
-    this.hud.setLinkLost(lost);
-
-    /* Quên đồng hồ cũ đi — cả lúc đứt lẫn lúc nối lại.
-     *
-     * Nó vẫn chạy suốt quãng mình không nghe thấy gì, nên tới lúc thông trở lại
-     * thì kim đã cạn từ đời nào, trong khi bàn kia có thể đã gia hạn mấy lượt.
-     * Không quên đi thì máy vừa nối lại sẽ lập tức đòi gạch tên người đang đi —
-     * đứt mạng của mình mà người khác chịu phạt. Người cầm lái lên dây lại ngay
-     * ở `beginTurn` bên dưới. */
-    this.applyClock(null);
-
-    if (lost) { this.hud.clearActions(); return; }
-    if (!this.busy) this.beginTurn();
-  }
-
-  // ------------------------------------------------------------- đồng hồ lượt
-
-  /**
-   * Đặt đồng hồ cho một ghế rồi báo cho cả bàn.
-   *
-   * Gửi đi **khoảng còn lại**, không gửi mốc hết hạn: đồng hồ máy mỗi người
-   * lệch nhau vài giây là chuyện thường, mà chừng ấy đủ để một máy tưởng đã
-   * hết giờ trong khi máy kia còn thấy nửa phút.
-   *
-   * Chỉ người đang cầm lái mới gọi tới đây — cũng như `sync()`, ván chỉ có một
-   * nguồn phát để hai máy khỏi ra hai con số.
-   */
-  armClock(seat, ms, label) {
-    if (!this.net) return;
-    /* Vẫn đúng người ấy, vẫn đúng việc ấy thì để đồng hồ chạy tiếp. `beginTurn`
-       bị gọi lại mỗi lần sổ ghế nhúc nhích, mà lần nào cũng vặn lại kim thì
-       người ngồi im chỉ cần ai đó vào ra phòng là được tha. */
-    if (this.clock && this.clock.seat === seat && this.clock.label === label) return;
-    this.applyClock({ seat, ms, label });
-    this.netEmit('clock', { seat, ms, label, from: this.mySeat, n: ++this.clockN });
-  }
-
-  /**
-   * Lên dây lại đồng hồ cho lượt đang chạy, kể cả khi nhãn không đổi.
-   *
-   * `armClock` cố tình bỏ qua lời gọi trùng để người ngồi im không được tha mỗi
-   * lần sổ ghế nhúc nhích; ở đây thì ngược lại, ta *muốn* vặn lại kim.
-   */
-  extendClock(ms) {
-    if (!this.net || !this.state) return;
-    const seat = this.state.turn;
-    this.clock = null;
-    this.armClock(seat, ms, 'đang thao tác');
-  }
-
-  /** Cất đồng hồ đi trên mọi máy — hết ván, hoặc không còn ai phải chờ. */
-  clearClock() {
-    if (!this.net || !this.clock) return;
-    this.applyClock(null);
-    // `seat: -1` cũng là "cất đi" như `null`, nhưng còn chỗ mang số thứ tự
-    this.netEmit('clock', { seat: -1, from: this.mySeat, n: ++this.clockN });
-  }
-
-  /**
-   * Tin đồng hồ này có phải tin cũ về trễ không.
-   *
-   * Cùng một nỗi với ảnh chụp (xem `onSync`): người cầm lái bắn liền mấy tin
-   * đồng hồ trong một nhịp (vào việc → thời cuộc → trao lượt), nhận ngược thứ
-   * tự thì cả bàn đứng ở nhãn cũ, đếm ngược cho người đã đi xong.
-   */
-  staleClock(c) {
-    // Bản cũ không đánh số — thà nhận thừa còn hơn bỏ mất đồng hồ
-    if (!c || c.n == null || c.from == null) return false;
-    const last = this.clockSeen.get(c.from);
-    if (last != null && c.n <= last) return true;
-    this.clockSeen.set(c.from, c.n);
-    return false;
-  }
-
-  /** Nhận đồng hồ (tự đặt hoặc do người cầm lái gửi sang) rồi vẽ vòng cung. */
-  applyClock(c) {
-    if (!c || !(c.seat >= 0)) {
-      this.clock = null;
-      this.hud?.setClock(null);
-      return;
-    }
-    const p = this.state?.players[c.seat];
-    if (!p || p.bankrupt) { this.clock = null; this.hud?.setClock(null); return; }
-    this.clock = {
-      seat: c.seat, until: Date.now() + c.ms, total: c.ms, label: c.label ?? '',
-    };
-    this.hud?.setClock({ ...this.clock, name: p.name, css: p.token.css });
-  }
-
-  /**
-   * Hết giờ mà người ấy vẫn chưa quyết → **đi hộ nước mặc định**, không đuổi.
-   *
-   * Ngồi im một lượt là chuyện thường (nghe điện thoại, mất tập trung), mất cả
-   * cơ nghiệp vì thế thì quá nặng — nên hết giờ chỉ lắc hộ, còn hộp thoại đang
-   * mở thì đóng bằng lựa chọn "thôi". Ván vẫn trôi, tài sản vẫn nguyên. Chỉ khi
-   * chuỗi ấy dài tới `maxStalls` lần liền mới coi là bỏ ván — xem `stallBankrupt`.
-   *
-   * Ra tay là **máy của chính người hết giờ**, chứ không phải một trọng tài:
-   * luật chỉ chạy dưới tay người cầm lái, hai máy cùng lắc là hai kết quả xí
-   * ngầu khác nhau. Máy ấy tắt hẳn thì đây không cứu được, nhưng lúc đó ghế
-   * thành "vắng mặt" và `checkAbsent` cùng `skipAbandonedTurn` lo nốt.
-   */
-  checkClock() {
-    const c = this.clock;
-    if (!this.net || !this.state || this.state.over || !c) return;
-    /* Đường truyền mình đang đứt: đếm ngược ở đây đã chạy suốt lúc mất tin, mà
-       bàn kia có thể đã gia hạn từ đời nào. Cùng lý do với `checkAbsent`. */
-    if (this.net.linkLost) return;
-    /* Đồng hồ giao dịch không xử ở đây: bên nhận có hộp thoại tự đóng khi hết
-       giờ, và bên gửi đọc lời "hết giờ" ấy như một lời từ chối — xem `trade()`. */
-    if (c.seat !== this.state.turn) return;
-    if (c.seat !== this.net.mySeat) return;
-    if (Date.now() < c.until) return;
-
-    const p = this.state.players[c.seat];
-    if (!p || p.bankrupt) return;
-    /* Đang mở hộp thoại (mua đất, quản lý tài sản, dựng đề nghị): đóng nó bằng
-       lựa chọn "thôi" rồi để mạch đang chạy đi tiếp — chen một nước lắc vào
-       giữa `guard` là chạy hai nước cùng lúc. Hộp xếp chồng thì mỗi nhịp canh
-       đóng một cái, và nới thêm một nhịp để cái kế tiếp kịp hiện ra, người vừa
-       quay lại bàn cũng còn cửa bấm tay.
-
-       Không tính vào chuỗi bỏ ván: mấy hộp này thường nối nhau trong cùng một
-       lượt, đếm cả thì người mở nhầm bảng quản lý rồi đi pha ấm trà đã đủ ba
-       lần. Chuỗi chỉ đếm những lần đứng ngay ở thanh nút mà không đi. */
-    if (this.busy) {
-      if (dismissTopModal()) this.extendClock(this.stallGraceMs);
-      return;
-    }
-    /* Một lượt chỉ tính một lần, dù đồng hồ cạn mấy nhịp trong đó: đổ đôi được
-       lắc tiếp, lắc xong còn phải bấm kết thúc — ba nhịp ấy vẫn là một lượt
-       người ta không ngồi máy, không phải ba lần bỏ quyết định. */
-    if (!this.stalledThisTurn) {
-      this.stalledThisTurn = true;
-      this.stallStreak += 1;
-    }
-    /* Đủ ba lượt liên tiếp không quyết: giờ mới cho rời ván. Đi hộ tiếp thì cả
-       bàn kẹt với một ghế trống giữ đất mà không bao giờ bán hay đổi. */
-    if (this.stallStreak >= this.maxStalls) {
-      this.guard(() => this.stallBankrupt(p));
-      return;
-    }
-    this.guard(() => this.autoMove(p));
-  }
-
-  /**
-   * Bấm nút hay gõ phím là dấu hiệu người ấy còn ngồi đó — xoá chuỗi hết giờ.
-   *
-   * Bắt ở tầng `document` chứ không rắc vào từng nút: nút trong hộp thoại (mua
-   * đất, bán nhà, xét duyệt giao dịch) không đi qua `guard` nào cả, mà đó lại
-   * đúng là lúc người chơi dễ bị đồng hồ cạn oan nhất. Chỉ tính cú bấm rơi vào
-   * một cái nút thật, để rê chuột ngắm bàn cờ không thành cớ treo ván.
-   */
-  watchActivity() {
-    const seen = (e) => {
-      if (!this.stallStreak) return;
-      if (e.type === 'pointerdown'
-        && !(e.target instanceof Element && e.target.closest('button'))) return;
-      this.stallStreak = 0;
-    };
-    document.addEventListener('pointerdown', seen, true);
-    document.addEventListener('keydown', seen, true);
-  }
-
-  /** Ba lượt liên tiếp để đồng hồ cạn — coi như bỏ ván, tài sản về ngân hàng. */
-  async stallBankrupt(p) {
-    this.stallStreak = 0;
-    await this.bc.show('BỎ VÁN',
-      `<b>${p.name}</b> để hết giờ ${this.maxStalls} lượt liền mà không đi,
-       coi như bỏ cuộc. Tài sản trả về <b>ngân hàng</b>.`, { kind: 'bad', ms: 4200 });
-    await this.doBankrupt(p.id);
-    if (this.checkGameOver()) { this.sync(); return; }
-    if (this.state.turn === p.id) await this.endTurn();
-  }
-
-  /**
-   * Nước đi mặc định khi hết giờ: lắc, hoặc kết thúc lượt nếu đã lắc rồi.
-   *
-   * Trong tù thì cũng lắc cầu đôi chứ không nộp tiền hộ — tiêu tiền của người
-   * khác là quyết định của họ, còn lắc thì không mất gì.
-   */
-  async autoMove(p) {
-    await this.bc.show('HẾT GIỜ',
-      `<b>${p.name}</b> chưa đi, bàn lắc hộ một lượt.`, { ms: 2000 });
-    if (this.state.turn !== p.id || p.bankrupt) return;
-    if (p.inJail) return this.rollInJail();
-    if (this.state.rolled) return this.endTurn();
-    return this.takeRoll(true);
-  }
-
-  /** Sổ ghế đổi (ai đó rớt mạng hay vào lại) — cập nhật danh sách bên cột trái. */
-  onRoomChange() {
-    if (!this.net || !this.state) return;
-    /* Máy cầm lái đóng tab giữa phiên đấu giá: không còn ai nhận câu trả lời,
-       lượt của họ sắp bị bỏ qua. Hộp ghi giá ở đây mà để đếm nốt thì nó nằm đè
-       lên thanh nút của lượt kế tiếp suốt nửa phút, hỏi về một phiên đã chết. */
-    if (this.bidAsker != null && this.net.seats[this.bidAsker]?.online === false) {
-      this.bidAsker = null;
-      closeBidModal();
-    }
-    this.hud.setSeatStatus(this.net.seats.map((s, i) => (
-      this.state.players[i]?.bankrupt ? 'out' : (s.online ? 'live' : 'away')
-    )));
-    // Người tới lượt vừa rớt hay vừa quay lại thì quyền cầm lái đổi theo
-    if (!this.busy) this.beginTurn();
-  }
-
-  /**
-   * Ai vắng mặt quá lâu thì tài sản trả về ngân hàng.
-   *
-   * Không cần ai ra lệnh — đây là **luật**, máy nào cũng tính ra cùng kết quả.
-   * Nhưng chỉ để **trọng tài** ra tay rồi phát ảnh chụp, nếu không mấy máy cùng
-   * làm một việc sẽ báo trùng và đẩy lượt hai lần.
-   */
-  checkAbsent() {
-    if (!this.net || !this.state || this.state.over) return;
-    /* Người ra tay là máy **cầm lái**, không phải trọng tài: ván chỉ được có
-       một nguồn phát ảnh chụp. Trọng tài gạch tên giữa lúc người khác đang đi
-       là hai máy cùng phát một số `rev` — máy nhận bỏ ảnh tới sau, rồi ảnh kế
-       của máy cầm lái (chưa có việc gạch tên) đè lên, người vừa bị gạch sống
-       lại và bị gạch thêm lần nữa. Người tới lượt đã vắng thì trọng tài chính
-       là máy cầm lái (`isDriver`). Chưa bốc thăm xong thì chưa có lượt, trọng
-       tài lo như cũ. */
-    const judge = this.state.order ? this.isDriver() : this.net.isArbiter;
-    if (!judge || this.busy) return;
-    /* Đường truyền của mình đang đứt: danh sách người có mặt đóng băng ở lúc
-       trước khi đứt, nên "ai vắng mặt" tính ra từ đó là vô nghĩa. Và bàn kia đã
-       cử trọng tài khác rồi — hai người cùng tịch thu là tịch thu hai lần. */
-    if (this.net.linkLost) return;
-    const seat = this.net.seats.findIndex((s, i) => (
-      !s.kicked
-      && this.state.players[i] && !this.state.players[i].bankrupt
-      && this.net.awayFor(i) > this.awayGraceMs
-    ));
-    if (seat >= 0) this.guard(() => this.evictPlayer(seat));
-  }
-
-  /**
-   * Người rời bàn: tài sản trả hết về ngân hàng, ai cũng mua lại được.
-   *
-   * Chỉ còn đúng một đường dẫn tới đây: mất kết nối quá hạn ân. Ngồi im hết giờ
-   * thì không bị đuổi nữa — máy của chính họ lắc hộ, xem `checkClock`.
-   *
-   * @param {number} seat
-   */
-  async evictPlayer(seat) {
-    const st = this.state;
-    const p = st.players[seat];
-    if (!p || p.bankrupt) return;
-    const props = st.propertiesOf(seat).length;
-
-    audio.sfx('bankrupt');
-    st.bankrupt(seat);
-    this.clearClock();
-    this.hud.refresh();
-    this.scene.refresh(st);
-    this.scene.placeTokens();
-
-    // Người ra tay có thể đang không tới lượt, nhưng lời báo này cả bàn phải nghe.
-    this.announcing = true;
-    await this.bc.show('RỜI BÀN',
-      `<b>${p.name}</b> mất kết nối quá lâu. ${props} ô đất và toàn bộ nhà cửa
-       trả về <b>ngân hàng</b>, ai cũng mua lại được.`,
-      { kind: 'bad', ms: 5000 });
-    this.announcing = false;
-
-    this.sync();
-    await this.scene.bankruptFx(seat);
-    /* Người này có thể đang đứng giữa một khoản phải trả — chính lúc hộp thoại
-       vỡ nợ mở ra mà họ tắt máy. Chủ nợ không liên can gì tới việc mất kết nối
-       ấy nên vẫn nhận số người này gom được từ tiền mặt và nhà đất. */
-    await this.coverDebt(seat);
-
-    // Còn đúng một người trụ lại thì hạ màn ngay, đừng bắt họ đi thêm một lượt
-    // vô nghĩa rồi mới báo thắng.
-    if (this.checkGameOver()) { this.sync(); return; }
-    if (st.turn === seat) await this.endTurn();
-    else this.beginTurn();
-  }
-
-  /**
-   * Lượt của người đang mất kết nối — bỏ qua để ván khỏi đứng.
-   *
-   * Chỉ bỏ lượt chứ không chơi hộ: tài sản của họ vẫn nguyên, quay lại kịp
-   * trong hạn ân là đi tiếp bình thường.
-   */
-  async skipAbandonedTurn() {
-    const p = this.state.current;
-    this.hud.clearActions();
-    // Người này đã không ngồi máy thì đếm ngược cho họ chẳng để làm gì;
-    // quá hạn vắng mặt đã có `checkAbsent` lo.
-    this.clearClock();
-    await this.bc.show('BỎ QUA LƯỢT',
-      `<b>${p.name}</b> đang mất kết nối nên mất lượt này. Tài sản vẫn giữ nguyên.`,
-      { ms: 2600 });
+  async showEventCard(ev) {
+    const card = EVENT_BY_ID[ev.id];
+    if (!card) return;
+    let revealed;
+    const shown = new Promise((r) => { revealed = r; });
+    eventCase(card, { detail: ev.detail, seed: ev.seed, onReveal: revealed });
+    await Promise.race([shown, wait(12000)]);
     await wait(900);
-    if (this.isDriver() && this.state.turn === p.id) await this.endTurn();
-  }
-
-  // ------------------------------------------------------------------ lượt
-
-  beginTurn() {
-    const st = this.state;
-    if (st.over) return;
-    /* Mất kết nối thì không bày nút: mọi nước đi lúc này đều sẽ bị ảnh chụp của
-       bàn đè lên khi nối lại. `onLink` bày lại giúp khi đường truyền thông. */
-    if (this.net?.linkLost) { this.hud.clearActions(); return; }
-    /* Chưa bốc thăm xong thì chưa có lượt của ai. Cửa này chặn mọi đường vòng
-       tới `beginTurn` (sổ ghế đổi, nối lại mạng) trong lúc cả bàn còn đang lắc. */
-    if (this.net && !st.order) { this.beginRollOff(); return; }
-    const p = st.current;
-
-    /* Sang lượt khác thì mở sổ lại cho chuỗi "để hết giờ" — đếm ở đây chứ không
-       ở nhánh của người cầm lái, vì `beginTurn` chạy trên mọi máy và lượt của
-       người khác cũng là một lượt trôi qua. */
-    if (this.stallSeat !== st.turn) {
-      this.stallSeat = st.turn;
-      this.stalledThisTurn = false;
-    }
-
-    /* Tới lượt mình thì reo một tiếng chuông: chơi online người ta hay ngó sang
-       cửa sổ khác trong lúc chờ, phải có cái kéo họ về. `beginTurn` chạy lại
-       sau mỗi ảnh chụp nên nhớ ghế đã reo, kẻo reo mãi một lượt. */
-    if (this.net && st.turn !== this.bellSeat) {
-      this.bellSeat = st.turn;
-      if (st.turn === this.net.mySeat && !p.bankrupt) audio.sfx('turn');
-    }
-
-    // Bản online: ván chỉ nhúc nhích dưới tay người cầm lái; những máy còn lại
-    // vẽ theo ảnh chụp và ngồi xem.
-    if (this.net && !this.isDriver()) {
-      this.hud.refresh();
-      this.scene.highlightTile(p.pos, p.token.color);
-      this.showWaiting();
-      return;
-    }
-
-    /* Cầm lái lượt của người khác nghĩa là người ấy đã rớt mạng — bỏ qua lượt,
-       tuyệt đối không chơi hộ họ. */
-    if (this.net && !p.bankrupt && p.id !== this.net.mySeat) {
-      this.guard(() => this.skipAbandonedTurn());
-      return;
-    }
-
-    /* Bọc `guard`: nhịp canh `checkAbandonedTurn` gọi lại `beginTurn` mỗi lần
-       rảnh tay, mà `endTurn` còn chờ thẻ Thời Cuộc — không bọc thì lượt bị trao
-       hai lần. Đang trong `guard` rồi thì gọi thẳng. */
-    if (p.bankrupt) {
-      if (this.busy) this.endTurn();
-      else this.guard(() => this.endTurn());
-      return;
-    }
-
-    /* Vào lại giữa chừng mà còn khoản nợ treo (tắt máy đúng lúc hộp thoại vỡ nợ
-       đang mở): đòi cho xong rồi mới bày nút, kẻo nối lại máy là thoát được
-       tiền thuê. */
-    if (st.debt && st.debt.from === p.id) {
-      const d = st.debt;
-      this.guard(async () => {
-        await this.payPlayer(d.from, d.to, d.amount);
-        // Trả xong thì bày lại thanh nút; vỡ nợ thì sang lượt người kế
-        if (this.checkGameOver()) { this.sync(); return; }
-        if (p.bankrupt) { await this.endTurn(); return; }
-        this.restoreActions();
-      });
-      return;
-    }
-
-    this.hud.refresh();
-    this.scene.highlightTile(p.pos, p.token.color);
-    // Đã lắc rồi thì chỉ còn nút kết thúc lượt, dù `beginTurn` chạy lại mấy lần
-    this.setTurnActions(st.rolled);
   }
 
   /**
-   * Người đang ngồi xem không có thanh nút. Bảng "Tới lượt …" giữa bàn cờ che
-   * mất dòng thông báo của người đang đi, mà tới lượt ai thì thẻ lớn bên trái
-   * và quân đang sáng trên bàn đã nói rồi.
+   * Thẻ Cơ Hội / Khí Vận. Ghế của máy này: hộp có nút, câu hỏi `fate` theo
+   * sau sẽ chờ cú bấm ấy. Máy ngồi xem: hộp không nút, tắt khi câu hỏi được
+   * trả lời ở máy kia. Ghế máy: tắt sau một nhịp đọc.
    */
-  showWaiting() {
-    this.hud.clearActions();
+  async showFateCard(ev) {
+    const card = ev.card ?? DECKS[ev.kind]?.[ev.index];
+    if (!card) return;
+    const o = { amount: ev.amount ?? null, note: ev.note ?? '', seed: ev.seed, label: ev.label ?? undefined };
+    if (this.mine(ev.seat) && !this.isBot(ev.seat)) {
+      await this.handTo(ev.seat);
+      this.fateOpen = { seat: ev.seat, done: fateCase(ev.kind, card, o) };
+      return;
+    }
+    const closeOn = this.isBot(ev.seat) ? wait(BOT_READ_MS) : this.fateWatch();
+    await fateCase(ev.kind, card, {
+      ...o,
+      closeOn,
+      waitNote: ev.by ? `Chờ ${ev.by} bấm…` : 'Chờ người đang đi…',
+    });
   }
+
+  /**
+   * Chốt chờ cho hộp thẻ trên máy ngồi xem: tắt khi câu hỏi `fate` được trả
+   * lời ở máy kia, hoặc sau hạn chót (máy kia tắt ngang giữa chừng). Máy này
+   * diễn chậm hơn mà câu trả lời đã về từ trước thì vẫn để thẻ lật xong một nhịp.
+   */
+  fateWatch(ms = 20000) {
+    if (this.fateDone > 0) {
+      this.fateDone -= 1;
+      return wait(BOT_READ_MS);
+    }
+    return new Promise((done) => {
+      const t = setTimeout(() => { this.fateWaiter = null; done(); }, ms);
+      this.fateWaiter = () => { clearTimeout(t); done(); };
+    });
+  }
+
+  // ---------------------------------------------------------------- câu hỏi
+
+  /** Câu hỏi mới diễn tới: ghi lại, bày đồng hồ, mở giao diện nếu là của mình. */
+  setAsk(ev) {
+    this.pending = ev;
+    this.showClock(ev);
+    if (ev.list.some((q) => q.kind === 'turn')) this.flushMenu();
+    this.renderAsk();
+  }
+
+  /** Vòng cung đếm ngược cho ghế đang được chờ (chỉ bản online có hạn). */
+  showClock(ev) {
+    if (!ev.deadline || !ev.ms) { this.clearClock(); return; }
+    const q = ev.list[0];
+    const p = this.state.players[q.seat];
+    if (!p) return;
+    const label = { turn: this.state.rolled ? 'kết thúc lượt' : 'lượt đi', 'trade-review': 'trả lời giao dịch', raise: 'xoay tiền' }[q.kind]
+      ?? (ev.list.length > 1 ? 'thời cuộc' : 'đang thao tác');
+    this.clock = { seat: q.seat, until: Date.now() + ev.ms, total: ev.ms, label };
+    this.hud.setClock({ ...this.clock, name: p.name, css: p.token.css });
+  }
+
+  clearClock() {
+    this.clock = null;
+    this.hud?.setClock(null);
+  }
+
+  /**
+   * Bày giao diện cho câu hỏi đang treo: thanh nút, hoặc hộp thoại của từng
+   * ghế máy này trả lời được. Đang mở hộp thoại của mình thì để yên, đóng
+   * xong sẽ tự gọi lại.
+   */
+  renderAsk() {
+    const ev = this.pending;
+    if (!ev || this.state?.over) { this.hud?.clearActions(); return; }
+    if (this.localBusy) return;
+    const mineQs = ev.list.filter((q) => this.mine(q.seat) && !this.sent.has(`${ev.id}:${q.seat}`));
+    const turnQ = mineQs.find((q) => q.kind === 'turn');
+    if (turnQ) { this.setTurnActions(turnQ); return; }
+    this.hud.clearActions();
+    /* Bản một máy chỉ có một màn hình: hỏi lần lượt từng người, xong người này
+       (đã gửi câu trả lời) mới mở hộp cho người kế. Mở cùng lúc thì hộp chuyền
+       máy và bảng chọn ô của ba người chồng lên nhau. */
+    const queue = this.net ? mineQs : mineQs.slice(0, 1);
+    if (!this.net && this.showing.size) return;
+    for (const q of queue) {
+      const key = `${ev.id}:${q.seat}`;
+      if (this.showing.has(key)) continue;
+      this.showing.add(key);
+      this.answerUi(ev, q).then((value) => {
+        this.showing.delete(key);
+        this.reply(ev, q.seat, value);
+        // Hỏi nhiều người ở bản một máy: mở hộp cho người kế tiếp
+        if (!this.net && this.pending?.id === ev.id) this.renderAsk();
+      }, (err) => {
+        this.showing.delete(key);
+        console.error('hộp hỏi hỏng', q.kind, err);
+      });
+    }
+  }
+
+  /** Gửi câu trả lời. Câu hỏi đã có câu trả lời của máy này thì không gửi lại. */
+  reply(ev, seat, value, o = {}) {
+    const key = `${ev.id}:${seat}`;
+    if (this.sent.has(key)) return;
+    this.sent.add(key);
+    if (this.sent.size > 200) this.sent = new Set([...this.sent].slice(-50));
+    // `raw`: ván đang vẽ đã đổi trước theo chính thao tác này, đừng đẩy nó vào engine
+    const id = (o.raw ? null : this.testSync(ev)) ?? ev.id;
+    this.host.send({ type: 'answer', id, seat, value });
+  }
+
+  /**
+   * Chỉ khi chạy dưới Playwright, bản một máy: bài kiểm thử hay sửa tay ván
+   * đang vẽ (`c.state…`) mà không gọi `sync()`. Lúc ván đứng ở thanh nút và
+   * không còn sự kiện nào chờ diễn, ván đang vẽ phải trùng ván của engine —
+   * lệch là do bài kiểm thử sửa tay, nên đẩy ván ấy vào engine trước khi gửi
+   * nước đi. Trả về id câu hỏi mới sau khi đẩy, hoặc null.
+   */
+  testSync(ev) {
+    if (this.net || !globalThis.navigator?.webdriver || !this.host?.engine) return null;
+    if (this.pumping || this.queue.length || (ev && ev.list?.[0]?.kind !== 'turn')) return null;
+    const e = this.host.engine;
+    if (e.pending?.list[0]?.kind !== 'turn') return null;
+    // `flow` và `rng` là phần riêng của engine, đổi mà không phát `sync` — không tính
+    const board = (st) => JSON.stringify({ ...snapshot(st), flow: null, rng: 0 });
+    if (board(this.state) === board(e.st)) return null;
+    // Giữ phần riêng của engine: bản ở ván đang vẽ đã cũ
+    this.host.force({ ...snapshot(this.state), flow: snapshot(e.st).flow, rng: e.st.rng });
+    return e.pending?.id ?? null;
+  }
+
+  /**
+   * Một thao tác ở thanh nút. Câu hỏi `turn` hiện tại đã có câu trả lời mà
+   * câu kế tiếp chưa tới (bấm hai nút liền trong bảng quản lý tài sản) thì
+   * xếp hàng, gửi khi câu kế tiếp diễn tới.
+   */
+  act(value, o = {}) {
+    const ev = this.pending;
+    const q = ev?.list.find((x) => x.kind === 'turn' && this.mine(x.seat));
+    if (!q || this.sent.has(`${ev.id}:${q.seat}`)) { this.menuQueue.push({ value, o }); return; }
+    this.hud.clearActions();
+    this.reply(ev, q.seat, value, o);
+  }
+
+  flushMenu() {
+    if (!this.menuQueue.length) return;
+    const ev = this.pending;
+    const q = ev.list.find((x) => x.kind === 'turn' && this.mine(x.seat));
+    if (!q) { this.menuQueue = []; return; }
+    const next = this.menuQueue.shift();
+    this.reply(ev, q.seat, next.value, next.o);
+  }
+
+  /**
+   * Chạy một hộp thoại của chính máy này từ thanh nút. Trong lúc ấy không bày
+   * lại thanh nút; bản online xin nới hạn nước đi. `fn` trả về action cho
+   * thanh nút, hoặc null là bỏ ngang.
+   */
+  async local(fn) {
+    if (this.localBusy) return;
+    this.localBusy = true;
+    this.hud.clearActions();
+    const seat = this.state.turn;
+    if (this.net && this.mine(seat)) this.host.send({ type: 'hold', seat });
+    let v = null;
+    try { v = await fn(); } finally { this.localBusy = false; }
+    if (v) this.act(v);
+    else this.renderAsk();
+  }
+
+  /**
+   * Chuyền máy (bản một máy, nhiều người thật). Chỉ chuyền khi câu hỏi tới
+   * người **ngoài lượt** (duyệt giao dịch, xoay tiền, thiên tai), rồi chuyền
+   * lại cho người đang đi lúc xong. Sang lượt mới thì không chuyền: cả bàn
+   * ngồi quanh màn hình, tới lượt ai người ấy bấm.
+   */
+  async handTo(seat) {
+    if (this.net || seat == null || seat < 0) return;
+    const st = this.state;
+    const turn = seat === st.turn;
+    if (this.holder === seat) { this.holderTurn = turn; return; }
+    const quiet = this.holder == null || (this.holderTurn && turn);
+    if (!quiet) {
+      const p = st.players[seat];
+      await handoff(p.name, p.token.css, turn
+        ? `Xong. Chuyền máy lại cho ${p.name}.`
+        : `${p.name} cần quyết định. Chuyền máy cho họ.`);
+    }
+    this.holder = seat;
+    this.holderTurn = turn;
+  }
+
+  /** Hộp thoại cho một câu hỏi của engine. Trả về câu trả lời. */
+  async answerUi(ev, q) {
+    const st = this.state;
+    const d = q.data ?? {};
+    const ms = ev.ms || 0;
+    /* Hộp bốc thăm thứ tự đã ghi "Tới phiên X lắc" — khỏi chuyền máy thêm
+       một lớp; người lắc xong thì chưa ai cầm máy cả. */
+    if (q.kind === 'rolloff') this.holder = null;
+    // Bán sạch nhà, cầm hết đất vẫn không đủ: không có gì để quyết, khỏi chuyền máy
+    else if (q.kind === 'raise' && st.liquidValue(q.seat) < d.amount) { /* hộp vỡ nợ hiện thẳng */ }
+    else await this.handTo(q.seat);
+    if (this.net && q.kind !== 'fate') audio.sfx('turn');
+    switch (q.kind) {
+      case 'rolloff':
+        await rollOffModal(st, q.seat, d.rolls ?? [], ms);
+        return true;
+      case 'buy':
+        return buyModal(d.tileId, st.players[q.seat]);
+      case 'fate': {
+        const open = this.fateOpen;
+        this.fateOpen = null;
+        if (open && open.seat === q.seat) await open.done;
+        return true;
+      }
+      case 'bet':
+        return this.skills.askBet(st.players[q.seat], ms);
+      case 'after-roll':
+        return this.pickTile(d.ids, d.text, ms);
+      case 'seize':
+        return this.skills.askSeize(d);
+      case 'express':
+        return this.pickTile(d.ids, d.text, ms);
+      case 'card-pick':
+        return this.skills.chooseCard(st.players[q.seat], d.kind, d.hand);
+      case 'trade-review': {
+        const v = await litTiles(this.scene, offerTiles(d.offer), () => tradeReviewModal(st, d.offer, ms));
+        return v === true;
+      }
+      case 'redeem':
+        return litTiles(this.scene, d.ids, () => redeemPromptModal(st, q.seat, d.ids, ms));
+      case 'raise':
+        return this.runRaise(q.seat, d.amount, ms);
+      case 'ev-brace':
+        return litTiles(this.scene, d.lots.map((l) => l.id), () => bracePromptModal(st, q.seat, d.lots, ms));
+      case 'ev-fire':
+        return litTiles(this.scene, d.lots.map((l) => l.id), () => firePromptModal(st, q.seat, d.lots, ms));
+      case 'ev-snow':
+        return litTiles(this.scene, d.lots.map((l) => l.id), () => snowPromptModal(st, q.seat, d.lots, ms));
+      case 'ev-zombie':
+        return litTiles(this.scene, d.lots.map((l) => l.id), () => zombiePromptModal(st, q.seat, d.lots, ms, d.rounds));
+      case 'ev-pick':
+        return this.pickTile(d.ids, d.text, ms);
+      case 'ev-group':
+        return this.pickGroup(d, ms);
+      case 'ev-bid':
+        return litTiles(this.scene, [d.tileId],
+          () => auctionBidModal(st, q.seat, d.tileId, { reason: d.reason, ms, bidders: d.bidders, barred: d.barred }));
+      default:
+        return null;
+    }
+  }
+
+  pickTile(ids, text, ms = 0) { return pickTileOnBoard(this.scene, this.state, ids, text, ms); }
+  pickGroup(data, ms = 0) { return pickGroupOnBoard(this.scene, this.state, data, ms); }
+
+  // ---------------------------------------------------------------- thanh nút
 
   /** Thanh nút cho người đang tới lượt. */
-  setTurnActions(rolled = false) {
+  setTurnActions(q) {
     const st = this.state;
-    const p = st.current;
-    /* Một mạch chạy dở (hộp thoại, hoạt cảnh) xong thì gọi `restoreActions`,
-       nhưng trong lúc chờ ảnh chụp của máy khác có thể đã trao lượt đi. Bày nút
-       theo `st.current` lúc ấy là bày nút của người khác lên máy mình. */
-    if (this.net && !this.mayAct(p)) { this.showWaiting(); return; }
-    st.rolled = rolled;
+    q ??= this.pending?.list.find((x) => x.kind === 'turn') ?? { seat: st.turn, kind: 'turn' };
+    const p = st.players[q.seat];
+    const rolled = st.rolled;
     this.refreshSkillBtn();
-
-    // Ghế máy: không bày nút, bot tự chọn nước đi
-    if (this.bot.is(p.id)) {
-      this.hud.clearActions();
-      this.bot.schedule();
+    this.scene.highlightTile(p.pos, p.token.color);
+    if (!this.net && this.holder !== p.id) {
+      // Bản một máy: máy đang trong tay người vừa được hỏi ngoài lượt
+      this.localBusy = true;
+      this.handTo(p.id).finally(() => { this.localBusy = false; this.renderAsk(); });
       return;
     }
 
-    /* Thanh nút bày ra lại nghĩa là người này vừa làm xong một việc — cho họ
-       trọn hạn mới. Nhờ đặt ở đây mà lắc xong, đóng hộp thoại xong, đổi lượt…
-       đều được tính là còn sống, không phải rắc lời gọi khắp nơi. */
-    if (this.net) this.armClock(p.id, this.turnMs, rolled ? 'kết thúc lượt' : 'lượt đi');
-
-    // Hai nút phụ giống nhau ở mọi tình huống — giữ nguyên thứ tự cho quen tay
     const trade = {
       label: 'Giao dịch', key: 't', cls: 'btn-jade', icon: tradeSvg(),
       hint: 'đổi đất · tiền', title: 'Mời người khác đổi đất hoặc tiền',
-      onClick: () => this.guard(() => this.trade()),
+      onClick: () => this.local(() => this.trade(p)),
     };
     const manage = {
       label: 'Quản lý tài sản', key: 'q', cls: 'btn-ghost', icon: estateSvg(),
       hint: 'xây · thế chấp', title: 'Xây nhà, bán nhà, thế chấp hoặc chuộc đất',
-      onClick: () => this.guard(() => this.manage()),
+      onClick: () => this.local(() => this.manage(p)),
     };
     const bankrupt = {
       label: 'Phá sản', key: 'p', cls: 'btn-danger', icon: bankruptSvg(),
       hint: 'bỏ cuộc, giao hết tài sản', title: 'Tuyên bố phá sản và rời ván',
-      onClick: () => this.guard(() => this.declareBankrupt()),
+      onClick: () => this.local(async () => ((await bankruptModal(st, p.id, false)) ? { do: 'bankrupt' } : null)),
     };
-
-    // Túi thẻ chỉ bày ra khi trong túi có gì — bàn cờ đã đủ nút rồi
     const bag = p.cards.length ? [{
       label: `Túi thẻ · ${p.cards.length}`, key: 'b', cls: 'btn-ghost', icon: cardSvg(),
       hint: 'thẻ giữ để dùng sau', title: 'Xem và dùng thẻ Cơ Hội / Khí Vận đang giữ',
-      onClick: () => this.guard(() => this.openBag()),
+      onClick: () => this.local(async () => {
+        const at = await inventoryModal(st, p.id);
+        return at == null ? null : { do: 'card', at };
+      }),
     }] : [];
+    const send = (v) => () => this.act(v);
 
     if (p.inJail) {
       const ticket = st.jailCardAt(p.id);
-      this.hud.setActions(this.ownActions(p, [
-        // Có vé thì bày trước tiên — ra tù miễn phí thì chẳng ai muốn nộp tiền
+      this.hud.setActions([
         ...(ticket >= 0 ? [{
           label: 'Dùng vé ra tù', key: 'v', cls: 'btn-jade', icon: coinSvg(), pulse: true,
           title: 'Dùng giấy bãi nại: ra tù ngay, miễn phí',
-          onClick: () => this.guard(() => this.useJailCard()),
+          onClick: send({ do: 'jail-card' }),
         }] : []),
-        // Khách Quen Nhà Đá ra tù không mất tiền — cùng nút, cùng phím, chỉ đổi chữ
         has(p, 'cnX2')
           ? { label: 'Ra tù miễn phí', key: 'n', cls: 'btn-gold', icon: coinSvg(),
-              title: 'Khách Quen Nhà Đá: ra tù không phải nộp phạt',
-              onClick: () => this.guard(() => this.payOutOfJail()) }
+              title: 'Khách Quen Nhà Đá: ra tù không phải nộp phạt', onClick: send({ do: 'jail-pay' }) }
           : { label: `Nộp ${money(JAIL_FINE)} ra tù`, key: 'n', cls: 'btn-gold', icon: coinSvg(),
-              disabled: p.money < JAIL_FINE, onClick: () => this.guard(() => this.payOutOfJail()) },
+              disabled: p.money < JAIL_FINE, onClick: send({ do: 'jail-pay' }) },
         { label: 'Lắc xí ngầu (cầu đôi)', key: 'r', cls: 'btn-primary', pulse: true,
-          icon: diceSvg(), title: 'Ra đôi thì được thả ngay',
-          onClick: () => this.guard(() => this.rollInJail()) },
+          icon: diceSvg(), title: 'Ra đôi thì được thả ngay', onClick: send({ do: 'jail-roll' }) },
         ...this.skills.buttons(p, rolled), ...bag, trade, manage, bankrupt,
-      ]));
+      ]);
       return;
     }
-
-    this.hud.setActions(this.ownActions(p, [
+    this.hud.setActions([
       rolled
-        ? { label: 'Kết thúc lượt', key: 'e', cls: 'btn-primary', pulse: true, icon: doneSvg(),
-            onClick: () => this.guard(() => this.endTurn()) }
-        : { label: 'Lắc xí ngầu', key: 'r', cls: 'btn-primary', pulse: true, icon: diceSvg(),
-            onClick: () => this.guard(() => this.takeRoll()) },
+        ? { label: 'Kết thúc lượt', key: 'e', cls: 'btn-primary', pulse: true, icon: doneSvg(), onClick: send({ do: 'end' }) }
+        : { label: 'Lắc xí ngầu', key: 'r', cls: 'btn-primary', pulse: true, icon: diceSvg(), onClick: send({ do: 'roll' }) },
       ...this.skills.buttons(p, rolled), ...bag, trade, manage, bankrupt,
-    ]));
+    ]);
   }
 
-  /**
-   * Máy này còn được thao tác thay `p` không: đúng lượt `p`, và bản online thì
-   * `p` phải là ghế của chính máy này, máy này đang cầm lái, đường truyền thông.
-   */
-  mayAct(p) {
+  /** Dựng đề nghị giao dịch: chọn người, chọn món. Engine soát và hỏi bên kia. */
+  async trade(p) {
     const st = this.state;
-    if (!st || st.over || !p || p.bankrupt || st.turn !== p.id) return false;
-    if (!this.net) return true;
-    return p.id === this.net.mySeat && !this.net.linkLost && this.isDriver();
+    const targetId = await tradePickModal(st, p.id);
+    if (targetId == null) return null;
+    const offer = await tradeBuildModal(st, p.id, targetId, this.scene);
+    return offer ? { do: 'trade', offer } : null;
   }
 
   /**
-   * Xét lại `mayAct` ngay lúc bấm. Thanh nút bày ra rồi mà lượt bị trao đi
-   * (ảnh chụp về trong lúc không có hộp nào mở) thì cú bấm chỉ dọn thanh nút,
-   * không chạy nước đi của người khác.
+   * Bảng quản lý tài sản. Mỗi cú bấm gửi ngay một thao tác lên engine, để máy
+   * khác thấy căn nhà mới trong lúc bảng còn mở. Bảng đọc ván tại chỗ, nên
+   * thao tác vừa bấm hiện ngay; ảnh chụp của engine về sau ghi đè bằng con số
+   * chính thức.
    */
-  ownActions(p, list) {
-    return list.map((a) => (a.onClick ? {
-      ...a,
-      onClick: () => (this.mayAct(p) ? a.onClick() : this.beginTurn()),
-    } : a));
+  async manage(p) {
+    /* Bảng chạy trên bản sao: ván đang vẽ chỉ đổi theo ảnh chụp engine gửi
+       về, không bao giờ đi trước engine một bước. */
+    const copy = fromSnapshot(snapshot(this.state));
+    await manageModal(copy, p.id, (act, id, res) => {
+      if (res?.ok) this.act({ do: 'manage', act, id });
+    });
+    return null;
   }
 
-  /** Chặn bấm nút chồng chéo khi đang chạy hiệu ứng. */
-  async guard(fn) {
-    if (this.busy) return;
-    this.busy = true;
-    this.hud.clearActions();
-    /* Hộp thoại của chính mình vừa mở: nới hạn ra `busyMs`. Chỉ xét lượt của
-       mình — trọng tài chạy `guard` để gạch tên người khác thì không việc gì
-       phải gia hạn cho người sắp bị gạch. */
-    if (this.net && !this.state.over && this.state.turn === this.net.mySeat) {
-      this.armClock(this.state.turn, this.busyMs, 'đang thao tác');
+  /**
+   * Xoay tiền — chạy ở máy của chính con nợ, trên **bản sao** của ván. Ghi lại
+   * từng thao tác (bán nhà, thế chấp) rồi gửi về một lượt; engine làm lại
+   * trên ván thật.
+   * @returns {Promise<{acts:Array, bankrupt:boolean, timeout?:boolean}>}
+   */
+  async runRaise(seat, amount, ms = 0) {
+    const st = fromSnapshot(snapshot(this.state));
+    const p = st.players[seat];
+    const acts = [];
+    const until = ms ? Date.now() + ms : 0;
+    const timeLeft = () => (until ? Math.max(1500, until - Date.now()) : 0);
+    const raisable = st.liquidValue(seat);
+    if (raisable < amount) {
+      await bankruptModal(st, seat, true, amount - p.money, raisable);
+      return { acts, bankrupt: true };
     }
-    try { await fn(); } finally {
-      this.busy = false;
-      /* Tin học ngoài lượt tới giữa lúc bận thì chưa phát, kẻo ảnh chụp chen
-         giữa một hoạt cảnh. Hết bận mà lượt đã trao đi thì ảnh chụp lúc trao
-         lượt đã mang theo rồi — phát thêm lúc không cầm lái là hai máy cùng
-         phát một số `rev`. */
-      if (this.syncOwed && this.isDriver()) this.sync();
-      this.syncOwed = false;
+    while (p.money < amount) {
+      const canRaise = st.propertiesOf(seat).some((id) => st.canSellHouse(seat, id).ok || st.canMortgage(seat, id).ok);
+      if (!canRaise) {
+        await bankruptModal(st, seat, true, amount - p.money);
+        return { acts, bankrupt: true };
+      }
+      if (until && Date.now() >= until) return { acts, bankrupt: false, timeout: true };
+      const choice = await this.shortfallModal(st, seat, amount, timeLeft());
+      // Hết giờ: báo về để engine cấn nợ hộ trên ván thật
+      if (choice === 'auto') return { acts, bankrupt: false, timeout: true };
+      if (choice === 'bankrupt') {
+        if (await bankruptModal(st, seat, false)) return { acts, bankrupt: true };
+        continue;
+      }
+      await manageModal(st, seat, (act, id, res) => {
+        if (!res?.ok) return;
+        acts.push({ act, id });
+        audio.sfx('coin');
+        this.hud.flashMoney(seat, act === 'sell' || act === 'mortgage');
+      }, amount);
     }
+    return { acts, bankrupt: false };
   }
 
-  /** Phát ảnh chụp ngay nếu đang rảnh, không thì hẹn tới lúc hết bận (`guard`). */
-  syncSoon() {
-    if (!this.net) return;
-    if (this.busy) this.syncOwed = true;
-    else this.sync();
+  /** Hộp "còn thiếu bao nhiêu" ở máy con nợ; có hạn thì tự đếm ngược. */
+  shortfallModal(st, seat, amount, ms = 0) {
+    const p = st.players[seat];
+    let ticker = 0;
+    const pr = openModal({
+      eyebrow: 'THIẾU TIỀN',
+      title: `Còn thiếu <span class="debt-hot">${money(amount - p.money)}</span>`,
+      sub: 'Xoay đủ tiền mặt để trả, hoặc tuyên bố phá sản.',
+      body: debtPanelHtml(p.money, amount, raisePlan(st, seat, amount)),
+      buttons: [
+        { label: 'Bán nhà / Thế chấp', value: 'manage', cls: 'btn-gold' },
+        { label: 'Tuyên bố phá sản', value: 'bankrupt', cls: 'btn-danger' },
+      ],
+      escValue: 'manage',
+      timeoutValue: 'auto',
+      onMount: (body, close) => {
+        if (ms) ticker = attachTimer(body, ms, close, 'auto', 'để xoay tiền. Hết giờ thì ngân hàng cấn nợ hộ.');
+      },
+    });
+    pr.finally(() => clearInterval(ticker));
+    return pr;
+  }
+
+  // ---------------------------------------------------------------- kỹ năng ngoài lượt
+
+  /**
+   * Nút cây kỹ năng ở hàng tiện ích. Tới lượt mình mà đang rảnh tay thì đi
+   * đúng đường nút trên thanh hành động (được tẩy điểm). Còn lại chỉ học và
+   * lên level, mỗi lần học gửi ngay một action `learn`.
+   */
+  async openSkillsAnyTime() {
+    const st = this.state;
+    if (!st || st.over || this.skills.treeOpen) return;
+    let seat = this.mySeat;
+    if (!this.net && this.isBot(st.turn)) seat = await this.pickHuman();
+    const p = st.players[seat];
+    if (!p || p.bankrupt) return;
+    const menu = this.pending?.list.find((q) => q.kind === 'turn' && q.seat === seat);
+    if (menu && !this.localBusy) {
+      this.local(() => this.skills.openTree(p));
+      return;
+    }
+    await this.skills.openTree(p, {
+      manage: false,
+      onLearn: (id) => this.host.send({ type: 'learn', seat, value: { id } }),
+    });
+  }
+
+  /** Bàn có bot, nhiều người thật: ai học kỹ năng khi bấm nút giữa lượt bot. */
+  async pickHuman() {
+    const list = this.state.players.filter((p) => !this.isBot(p.id) && !p.bankrupt);
+    if (list.length <= 1) return list[0]?.id ?? -1;
+    const v = await openModal({
+      manual: true,
+      eyebrow: 'CÂY KỸ NĂNG',
+      title: 'Ai học kỹ năng?',
+      buttons: [
+        ...list.map((p) => ({ label: p.name, value: p.id, cls: 'btn-gold' })),
+        { label: 'Thôi', value: -1, cls: 'btn-ghost' },
+      ],
+      escValue: -1,
+    });
+    return typeof v === 'number' ? v : -1;
   }
 
   /** Số trên nút cây kỹ năng ở hàng tiện ích: điểm chưa tiêu của mình. */
@@ -1392,1873 +918,193 @@ export class Game {
     this.skillBtn.classList.toggle('has-pts', n > 0);
   }
 
-  /**
-   * Kết thúc lượt — và đây cũng là chỗ **thẻ Thời Cuộc nổ**.
-   *
-   * Nổ ở cuối lượt chứ không giữa chừng, và nổ **trước** khi trao lượt cho
-   * người kế: lúc này máy mình vẫn là máy cầm lái hợp lệ, chạy xong mới phát
-   * ảnh chụp. Trao lượt trước rồi mới chạy sự kiện thì có hai máy cùng tưởng
-   * mình đang cầm lái.
-   */
-  async endTurn() {
-    const st = this.state;
-    this.scene.hideDice();
-    this.scene.clearHighlight();
-    this.netEmit('hideDice', {});
-    if (this.checkGameOver()) { this.sync(); return; }
+  // ---------------------------------------------------------------- Hội Đồng Hồn Ma
 
-    /* Lượt vừa qua không có đồng nào đổi chủ — đúng triệu chứng bàn bí mà bộ
-       thẻ Thời Cuộc sinh ra để phá, nên nó đẩy thanh áp lực nhanh hơn cả. */
-    if (st.dryTurn) addPressure(st, PRESSURE.dryTurn);
-    offSpent(st.current);
-    tickTurns(st.current);
-
-    const fired = eventDue(st);
-    if (fired) {
-      await this.events.run();
-      if (this.checkGameOver()) { this.sync(); return; }
-    }
-    // Hồn ma bầu thẻ cho lần nổ kế tiếp — không chờ, lượt sau vẫn bắt đầu ngay
-    this.ghosts.maybeOpen(fired);
-
-    // Một dòng mỗi lượt cho số liệu cân bằng: tiền mặt cả bàn lúc hết lượt
-    track('turn', { seat: st.turn, turn_no: st.turnNo, round: st.round, cash: st.players.map((p) => p.money) });
-    st.nextTurn();
-    // Phát trước khi tự bày lại bàn: từ giây này quyền cầm lái đã sang người
-    // khác, gọi `sync()` sau `beginTurn()` thì không còn ai để phát.
-    this.sync();
-    this.analytics.flush();
-    this.beginTurn();
+  /** Ghế hồn ma bầu được trên máy này. */
+  localGhosts(seats) {
+    return (seats ?? []).filter((s) => this.mine(s) && this.state.players[s]?.bankrupt);
   }
 
-  /**
-   * Chung Cư Mini: qua ô Bắt Đầu thì nhà trên đất lẻ của người vừa đi già thêm
-   * một nấc; ô hết hạn bị ngân hàng mua lại. Báo cho cả bàn vì giá thuê ô ấy
-   * tụt về đất trống ngay lượt sau.
-   */
-  async expireMini(p) {
-    const st = this.state;
-    const gone = st.ageMini(p.id);
-    if (!gone.length) return;
-    this.hud.refresh();
-    this.scene.refresh(st);
-    this.sync();
-    const sold = gone.reduce((n, g) => n + g.sold, 0);
-    const refund = gone.reduce((n, g) => n + g.refund, 0);
-    await this.bc.show('CHUNG CƯ MINI HẾT HẠN',
-      `Nhà trên đất lẻ của <b>${p.name}</b> ở ${gone.map((g) => `<b>${tileLabel(g.id)}</b>`).join(', ')}
-       hết hạn: ngân hàng mua lại ${sold} căn, trả <span class="up">${money(refund)}</span>.
-       Gom đủ bộ màu thì nhà không hết hạn.`, { kind: 'bad', ms: 4200 });
-    await this.spot(gone.map((g) => g.id));
-  }
-
-  // ------------------------------------------------------------- lắc xí ngầu
-
-  /** @param {boolean} [auto] bàn lắc hộ người để hết giờ — không hỏi cược */
-  async takeRoll(auto = false) {
-    const st = this.state;
-    const p = st.current;
-    // Có Cược Chẵn Lẻ thì hỏi cược trước khi lắc
-    await this.skills.beforeRoll(p, !auto);
-    if (st.over || p.bankrupt) { await this.endTurn(); return; }
-    // Xe Đạp: đi theo viên nhỏ hơn — nắn kết quả trước mọi hộp hỏi sau khi lắc
-    const first = this.skills.shape(p, rollDice());
-    this.netEmit('dice', first);
-    await this.scene.rollDiceAnim(first.a, first.b);
-
-    /* Cược và Tất Tay chốt theo cú lắc **đầu tiên**, trước Xí Ngầu Gian: chốt
-       sau thì đoán sai được lắc lại một viên, chẵn lẻ lật ngược nửa số lần,
-       đoán trúng thành 75% (tests/gamesim.mjs). Xí Ngầu Gian chỉ còn để đổi
-       đường đi. */
-    await this.skills.settleBets(p, first);
-    if (st.over || p.bankrupt) { await this.endTurn(); return; }
-    // Kỹ năng sau khi lắc: Xí Ngầu Gian đổi kết quả, Quay Đầu đổi chiều đi
-    const { d, back } = await this.skills.afterRoll(p, first);
-    if (st.over || p.bankrupt) { await this.endTurn(); return; }
-    if (d.isDouble) p.doubles += 1;
-    /* Chốt "đã lắc" ngay khi có kết quả, trước mọi chỗ phát ảnh chụp bên dưới:
-       máy cầm lái bấm F5 giữa nước đi thì vào lại vẫn không được lắc thêm. */
-    else st.rolled = true;
-    await this.skills.rollPerks(p, d);
-    if (st.over || p.bankrupt) { await this.endTurn(); return; }
-
-    // Đổ đôi lần thứ 3 → vào tù ngay (Đôi Hên: trúng thưởng thay vì vào tù)
-    if (d.isDouble) {
-      if (p.doubles >= 3) {
-        if (await this.skills.jackpot(p)) { await this.endTurn(); return; }
-        await this.bc.show('ĐỔ ĐÔI LẦN THỨ BA',
-          `<b>${p.name}</b> đổ đôi ba lần liên tiếp, phải vào <b>Khám Lớn</b>!`, { kind: 'bad' });
-        await this.goToJail(p);
-        await this.endTurn();
-        return;
-      }
-      await this.bc.show('ĐỔ ĐÔI',
-        `<b>${p.name}</b> ra đôi ${d.a}, được đi thêm một lượt.`, { ms: 2200 });
-    }
-
-    await this.advance(p, (back ? -d.sum : d.sum) + await this.iceSlide(p, back), d);
-
-    // Vào tù thì hết lượt ngay, kể cả khi vừa đổ đôi.
-    if (st.over || p.bankrupt || p.inJail) { await this.endTurn(); return; }
-
-    if (d.isDouble) {
-      this.hud.refresh();
-      this.setTurnActions(false);   // lắc tiếp
-    } else {
-      this.setTurnActions(true);    // chỉ còn kết thúc lượt
-    }
-  }
-
-  /**
-   * Thẻ Thời Cuộc "Đường Đóng Băng" đang chạy: nước đi bằng xí ngầu trượt
-   * thêm 1–2 ô. Máy cầm lái gieo số ô trượt rồi cộng thẳng vào số bước, nên
-   * máy ngồi xem nhận đúng một tin `move` với tổng số bước, không gieo lại.
-   * Thẻ dắt quân đi (Cơ Hội / Khí Vận) không trượt: đó là đi tới một ô định sẵn.
-   *
-   * @param {boolean} [back] nước đi lùi (kỹ năng) thì không trượt
-   * @returns {Promise<number>} số ô trượt thêm
-   */
-  async iceSlide(p, back = false) {
-    if (back || !this.state.hasMod('ice')) return 0;
-    const slide = Math.random() < 0.5 ? 1 : 2;
-    await this.bc.show('ĐƯỜNG ĐÓNG BĂNG',
-      `<b>${p.name}</b> trượt thêm <b>${slide} ô</b> trên mặt đường đóng băng.`, { ms: 1800 });
-    return slide;
-  }
-
-  /** Đi `steps` ô, cộng lương nếu đi ngang BẮT ĐẦU, rồi xử lý ô đáp xuống. */
-  async advance(p, steps, dice) {
-    const st = this.state;
-    const idx = p.id;
-    const from = p.pos;
-    let passedGo = false;
-
-    this.scene.clearHighlight();
-    this.netEmit('move', { seat: idx, from, steps });
-    await this.scene.moveToken(idx, from, steps, (pos) => {
-      // Thẻ "lùi mấy ô" đi ngược chiều: bước qua ô Bắt Đầu theo lối đó không lãnh lương
-      if (pos === 0 && steps > 0) passedGo = true;
+  openGhostVote({ n, cards, ms, seats }) {
+    const mineSeats = this.localGhosts(seats);
+    const list = (cards ?? []).map((id) => EVENT_BY_ID[id]).filter(Boolean);
+    if (!mineSeats.length || list.length < 2) return;
+    this.ghostPanel?.panel.close();
+    audio.sfx('turn');
+    const votes = this.state.ghostVote?.n === n ? this.state.ghostVote.votes : {};
+    const panel = ghostVotePanel({
+      state: this.state, cards: list, seats: mineSeats, votes, ms,
+      onVote: (seat, id) => this.host.send({ type: 'ghost-vote', seat, value: { n, id } }),
     });
-    p.pos = ((from + steps) % 40 + 40) % 40;
-    this.hud.refresh();
-    this.sync();
-    await this.skills.pickup(p);
-
-    if (passedGo) {
-      /* Lương có thể đang bị thẻ "mất mùa" cắt còn một nửa — hỏi luật chứ đừng
-         lấy thẳng hằng số. Và mỗi vòng qua đây là một nấc của thanh Thời Cuộc.
-         Điểm kỹ năng và bộ đếm lần qua cộng **trước** khi tính lương: Thâm Niên
-         tính cả lần qua này. */
-      const landed = p.pos === 0;      // dừng đúng ô 0, không chỉ đi ngang
-      // Bản Giáng Sinh có tiếng chuông riêng cho mốc này; bản gốc im, đã có tiếng xu bay
-      audio.sfx('go');
-      const points = this.skills.lapStart(p);
-      const { total, parts } = st.payslip(landed, p);
-      // Cò Quay Lương: quay gấp đôi hoặc một nửa — chỉ phần lương, tiền giữ nhà Sổ Hồng đứng ngoài
-      const deed = parts.ac3 ?? 0;
-      const spun = this.skills.spinPay(p, total - deed);
-      const pay = spun.pay + deed;
-      const spinNote = spun.note + (deed ? ` · <b>Sổ Hồng</b> +${money(deed)}` : '');
-      const cut = st.modMult('salary') !== 1;
-      st.laps += 1;
-      addPressure(st, PRESSURE.lap);
-      const note = landed
-        ? `, đạp trúng ô Bắt Đầu nên lương ×${GO_LANDING_MULT}${cut ? ', đã trừ mất mùa' : ''}`
-        : (cut ? ', mất mùa nên chỉ còn bấy nhiêu' : '');
-      await this.bc.show(landed ? 'ĐẠP Ô BẮT ĐẦU' : 'QUA Ô BẮT ĐẦU',
-        `<b>${p.name}</b> lãnh lương <span class="up">${money(pay)}</span>${note}${spinNote}
-         · <b>+${points} điểm kỹ năng</b>${points > 1 ? ' (có Lão Làng)' : ''} (đang có ${p.skillPoints}).`,
-        { ms: landed ? 2800 : 2400 });
-      await this.receiveFromBank(idx, pay);
-      this.skills.paid(p, parts);
-      await this.skills.lapEnd(p);
-      if (st.over || p.bankrupt) return;
-      await this.expireMini(p);
-    }
-
-    // Trạm Thu Phí BOT: tính sau lương, để người vừa lãnh lương có tiền nộp phí
-    await this.skills.tolls(p, from, steps);
-    if (st.over || p.bankrupt) return;
-    // Dẫn Tour: người bị vượt qua trả phí
-    await this.skills.tours(p, from, steps);
-    if (st.over || p.bankrupt) return;
-
-    // Dừng chung ô với người khác: Hai Ngón chạy trước khi xử lý ô
-    await this.skills.landed(p);
-    if (st.over || p.bankrupt) return;
-
-    this.scene.highlightTile(p.pos, p.token.color);
-    await this.resolveTile(p, dice);
+    this.ghostPanel = { n, panel };
+    panel.closed.then(() => { if (this.ghostPanel?.panel === panel) this.ghostPanel = null; });
   }
 
-  // ------------------------------------------------------ xử lý ô đáp xuống
-
-  async resolveTile(p, dice) {
-    const st = this.state;
-    const t = BOARD[p.pos];
-
-    // Dừng ở nhà ga, Thuỷ Cục (ô 12), Nhà Máy Điện (ô 28): diễn trước, mua / trả thuê xếp sau
-    if (t.type === 'station') this.skit('station', p.id);
-    else if (t.type === 'utility') this.skit(t.id === 28 ? 'power' : 'hydro', p.id);
-
-    switch (t.type) {
-      case 'property':
-      case 'station':
-      case 'utility':
-        await this.resolveOwnable(p, t, dice);
-        if (t.type === 'station') await this.skills.express(p, dice);
-        break;
-
-      case 'chance':
-      case 'chest':
-        await this.resolveCard(p, t.type, dice);
-        break;
-
-      case 'tax': {
-        const tax = this.skills.cut(p, t.tax_amount);
-        this.skit('tax', p.id);
-        await this.bc.show(t.name.split(' (')[0].toUpperCase(),
-          `<b>${p.name}</b> phải nộp <span class="down">${money(tax)}</span> cho ngân hàng${this.skills.cutNote(p)}.`,
-          { kind: 'bad' });
-        await this.payBank(p.id, tax);
-        break;
-      }
-
-      case 'corner':
-        if (t.id === GOTO_JAIL_TILE) {
-          await this.bc.show('VÀO TÙ',
-            `<b>${p.name}</b> bị giải về <b>Khám Lớn Sài Gòn</b>.`, { kind: 'bad' });
-          await this.goToJail(p);
-        } else if (t.id === JAIL_TILE) {
-          await this.bc.show('GHÉ THĂM', `<b>${p.name}</b> chỉ ghé thăm Khám Lớn, vô sự.`, { ms: 2000 });
-        } else if (t.id === 20) {
-          // Quỹ Công chỉ có khi bật thẻ Thời Cuộc; không thì đây vẫn là ô nghỉ chân
-          if (st.pot > 0) {
-            const won = st.pot;
-            st.pot = 0;
-            await this.bc.show('QUỸ CÔNG',
-              `<b>${p.name}</b> ghé Bến Đậu, ẵm trọn Quỹ Công
-               <span class="up">${money(won)}</span>.`, { ms: 3600 });
-            await this.receiveFromBank(p.id, won);
-          } else {
-            await this.bc.show('BẾN ĐẬU', `<b>${p.name}</b> nghỉ chân miễn phí.`, { ms: 2000 });
-          }
-          await this.skills.parking(p);
-        }
-        break;
-    }
-  }
-
-  /** Ô có thể sở hữu: mua, trả tiền thuê, hoặc không có gì xảy ra. */
-  async resolveOwnable(p, t, dice) {
-    const st = this.state;
-    const ownerId = st.owner.get(t.id);
-
-    // Chưa ai sở hữu → hỏi mua (không có luật đấu giá)
-    if (ownerId === undefined) {
-      if (p.money < t.price) {
-        await this.bc.show('KHÔNG ĐỦ TIỀN',
-          `<b>${p.name}</b> dừng ở <b>${tileLabel(t.id)}</b> nhưng chỉ có ${money(p.money)}.`, { ms: 2600 });
-        return;
-      }
-      const choice = this.bot.is(p.id) ? await this.bot.buyChoice(p, t.id) : await buyModal(t.id, p);
-      if (choice === 'buy') {
-        audio.sfx('buy');
-        st.buy(p.id, t.id);
-        this.skit('buy', p.id);
-        this.hud.refresh();
-        this.sync();
-        this.hud.flashMoney(p.id, false);
-        await this.scene.flyMoney(this.hud.cardEl(p.id), this.hud.bankEl(), t.price,
-          { text: `−${money(t.price)}`, color: '#FF8A7A' });
-        this.scene.refresh(st);
-        await this.bc.show('TẬU ĐẤT',
-          `<b>${p.name}</b> mua <b>${tileLabel(t.id)}</b> giá <span class="down">${money(t.price)}</span>.`);
-        await this.skills.brokerFees(p.id, t.id);
-        await this.skills.bought(p, t.id);
-      } else {
-        await this.bc.show('BỎ QUA', `<b>${p.name}</b> không mua <b>${tileLabel(t.id)}</b>.`, { ms: 2200 });
-      }
-      return;
-    }
-
-    // Đất của chính mình: không báo gì, chỉ Chủ Nhà (có tiền) mới hiện thông báo
-    if (ownerId === p.id) {
-      await this.skills.atHome(p);
-      return;
-    }
-
-    // Đất đang thế chấp → miễn tiền thuê
-    if (st.isMortgaged(t.id)) {
-      await this.bc.show('ĐANG THẾ CHẤP',
-        `<b>${tileLabel(t.id)}</b> đang thế chấp, miễn tiền thuê.`, { ms: 2600 });
-      return;
-    }
-
-    /* Ba luật chặn tiền thuê của chủ đề Halloween: báo đúng lý do, đừng in
-       một dòng "trả 0$" cho người đáp xuống đọc mà không hiểu. */
-    const block = st.rentBlock(t.id);
-    if (block) {
-      const ownerName = st.players[ownerId].name;
-      const why = {
-        zombie: ['XÁC SỐNG CHIẾM ĐẤT', `Xác sống đang ở <b>${tileLabel(t.id)}</b>, <b>${ownerName}</b> không thu được tiền thuê.`],
-        curse: ['BỊ NGUYỀN', `<b>${ownerName}</b> đang bị nguyền, <b>${p.name}</b> khỏi trả tiền thuê ở <b>${tileLabel(t.id)}</b>.`],
-        'blood-moon': ['ĐÊM TRĂNG MÁU', `<b>${tileLabel(t.id)}</b> là đất trống, đêm trăng máu không ai thu tiền thuê.`],
-      }[block];
-      await this.bc.show(why[0], why[1], { ms: 2600 });
-      return;
-    }
-
-    const owner = st.players[ownerId];
-    const bill = this.skills.rentBill(p, t.id, dice);
-    const rent = bill.total;
-    // Thâu Tóm: ép mua lô này thay vì trả thuê
-    if (await this.skills.trySeize(p, t.id, rent)) return;
-    this.skit('rent', p.id, ownerId);
-    await this.bc.show('TRẢ TIỀN THUÊ',
-      `<b>${p.name}</b> trả <span class="down">${money(rent)}</span> cho <b>${owner.name}</b>
-       tại <b>${tileLabel(t.id)}</b>${this.skills.rentNote(p, t.id, bill)}.`, { kind: 'bad' });
-    if (await this.payPlayer(p.id, ownerId, rent)) {
-      noteRent(st, p.id, ownerId, rent, t.id);
-      this.skills.rentPaid(owner, bill);
-      await this.skills.stakeShare(owner, rent);
-    }
-  }
+  // ---------------------------------------------------------------- tiện ích
 
   /**
-   * Rút thẻ Cơ Hội / Khí Vận.
-   *
-   * Hai ngả: thẻ **nổ ngay** (tiền nong, thuế nhà) xử luôn tại chỗ, thẻ **giữ
-   * được** thì cất vào túi chờ đúng lúc. Bộ bài bỏ qua những lá nổ ngay mà lúc
-   * này vô nghĩa (thuế nhà khi chưa cất căn nào) — xem `core/cards.js`.
+   * Bấm nút hay gõ phím là dấu hiệu người ấy còn ngồi đó. Bản online gửi một
+   * action nhẹ để engine xoá chuỗi "để hết giờ" của ghế mình.
    */
-  async resolveCard(p, kind, dice) {
-    const st = this.state;
-    /* Thẻ di chuyển có thể thả quân xuống đúng một ô Cơ Hội / Khí Vận khác, và
-       lá kế tiếp lại là một thẻ di chuyển nữa. Chặn ở nấc thứ hai: quá đó thì
-       coi như ghé ngang ô, không rút thêm — không thì một ván xấu số có thể
-       chạy vòng vòng mãi. */
-    if (this.cardChain >= MAX_CARD_CHAIN) return;
-    // Bài Tẩy rút nhiều lá cho người đang đi chọn; không có thì rút một lá như thường
-    const drawn = await this.skills.drawCard(p, kind, (c) => usableCard(st, c, p.id));
-    // Cả bộ không lá nào dùng được: coi như ghé qua, đừng bày một tấm thẻ rỗng
-    if (!drawn) return;
-    // Bảo Hộ Lao Động: thẻ xấu có lúc được bỏ qua
-    if (!isKeepable(drawn.card) && await this.skills.dodgeCard(p, drawn.card)) return;
-
-    /* Tiếng bóc thẻ nay do băng chuyền phát, đúng lúc mặt thẻ hiện ra — phát
-       ở đây nữa thì kêu hai lần. Seed sinh một lần rồi gửi kèm, để dải trên
-       máy ngồi xem xếp y hệt và dừng đúng ô ấy. */
-    const seed = newSeed();
-    const title = kind === 'chance' ? 'CƠ HỘI' : 'KHÍ VẬN';
-    if (isKeepable(drawn.card)) return this.keepCard(p, kind, drawn, title, seed);
-    switch (cardType(drawn.card)) {
-      case 'collect': return this.cardCollect(p, kind, drawn.card, title, seed);
-      case 'gift':    return this.cardGift(p, kind, drawn.card, title, seed);
-      case 'curse':   return this.cardCurse(p, kind, drawn.card, title, seed);
-      case 'repair':  return this.cardRepair(p, kind, drawn.card, title, seed);
-      case 'skill':   return this.cardSkill(p, kind, drawn.card, title, seed);
-      case 'move':    return this.cardMove(p, kind, drawn.card, title, seed, dice);
-      default:        return this.cardMoney(p, kind, drawn.card, title, seed);
-    }
-  }
-
-  /**
-   * Bày thẻ Cơ Hội / Khí Vận bằng băng chuyền, đồng thời cho các máy đang ngồi
-   * xem chạy đúng dải ấy.
-   *
-   * Gói tin chỉ có chỉ số thẻ, seed và mấy dòng in trên mặt thẻ — dải thì mỗi
-   * máy tự dựng lại từ seed, không việc gì phải gửi cả năm chục ô qua đường
-   * truyền.
-   */
-  async showFateCard(kind, card, o) {
-    const index = DECKS[kind].indexOf(card);
-    this.netEmit('fatecard', {
-      kind, index, seed: o.seed,
-      amount: o.amount ?? null, note: o.note ?? '',
-      by: this.state.players[this.state.turn]?.name ?? '',
-    });
-    const v = await fateCase(kind, card, o);
-    // Hộp bên máy ngồi xem không có nút — nó tắt theo đúng cú bấm vừa rồi
-    this.netEmit('fatedone', {});
-    return v;
-  }
-
-  /**
-   * Chốt chờ cho hộp thẻ đang mở trên máy ngồi xem.
-   *
-   * Hộp ấy không có nút nên đường đóng duy nhất tới từ ngoài: tin `fatedone`
-   * của người đang đi. Vẫn kèm một hạn chót, vì máy kia có thể tắt giữa chừng —
-   * không thì cả bàn ngồi trước một tấm thẻ không cách nào bỏ đi. Hạn tính từ
-   * lúc nhận tin, tức còn khoảng mười giây sau khi thẻ lật xong.
-   */
-  fateWatch(ms = 15000) {
-    return new Promise((done) => {
-      this.fateWaiters.add(done);
-      setTimeout(() => {
-        if (this.fateWaiters.delete(done)) done();
-      }, ms);
-    });
-  }
-
-  /** Người đang đi đã bấm xong: đóng hộp thẻ ở máy này. */
-  fateDone() {
-    for (const done of this.fateWaiters) done();
-    this.fateWaiters.clear();
-  }
-
-  /** Thẻ cộng điểm kỹ năng. Không đụng tiền nên không qua `receiveFromBank`. */
-  async cardSkill(p, kind, card, title, seed) {
-    await this.showFateCard(kind, card, {
-      seed, note: `Nhận <b>+${card.points} điểm kỹ năng</b>.`, label: 'Nhận điểm',
-    });
-    grantLapPoint(p, card.points, 'card');
-    this.hud.refresh();
-    this.sync();
-    audio.sfx('coin');
-    await this.bc.show(title,
-      `<b>${p.name}</b>: ${card.text} <b>+${card.points} điểm kỹ năng</b> (đang có ${p.skillPoints}).`);
-  }
-
-  /** Thẻ cũ: cộng hoặc trừ tiền với ngân hàng. */
-  async cardMoney(p, kind, card, title, seed) {
-    await this.showFateCard(kind, card, { amount: card.amount, seed });
-    if (card.amount > 0) {
-      // Bảo Hộ Lao Động: thẻ nhận tiền nhận thêm
-      const extra = this.skills.cardBonus(p, card.amount);
-      await this.bc.show(title,
-        `<b>${p.name}</b>: ${card.text} <span class="up">+${money(card.amount + extra)}</span>${
-          extra ? ` (gồm ${money(extra)} của <b>Bảo Hộ Lao Động</b>)` : ''}`);
-      await this.receiveFromBank(p.id, card.amount + extra);
-    } else {
-      const fine = this.skills.cut(p, -card.amount);
-      await this.bc.show(title,
-        `<b>${p.name}</b>: ${card.text} <span class="down">−${money(fine)}</span>${this.skills.cutNote(p)}`, { kind: 'bad' });
-      await this.payBank(p.id, fine);
-    }
-  }
-
-  /**
-   * Tiền mừng: **chia đều cho những người còn lại cùng góp**, chứ ngân hàng
-   * không bao. Ai không xoay đủ thì đi qua đúng cửa `payPlayer` như trả tiền
-   * thuê — bán nhà, thế chấp, cùng lắm là vỡ nợ.
-   */
-  async cardCollect(p, kind, card, title, seed) {
-    const st = this.state;
-    const each = collectEach(st, p.id, card);
-    await this.showFateCard(kind, card, {
-      amount: card.amount ?? each * othersOf(st, p.id).length,
-      note: `Mỗi người còn lại góp <b>${money(each)}</b>.`,
-      label: 'Nhận tiền mừng',
-      seed,
-    });
-    await this.bc.show(title,
-      `<b>${p.name}</b>: ${card.text} Mỗi người góp
-       <span class="up">${money(each)}</span>.`);
-    for (const seat of othersOf(st, p.id)) {
-      if (st.players[seat].bankrupt) continue;
-      await this.payPlayer(seat, p.id, each);
-    }
-  }
-
-  /**
-   * Quà Giáng Sinh: ngân hàng phát cho cả bàn, người ít tiền mặt nhất nhận
-   * gấp đôi. Chia theo `giftShares` tính một lần ở máy cầm lái, rồi phát từng
-   * phần qua `receiveFromBank` cho tiền bay tới đúng người.
-   */
-  async cardGift(p, kind, card, title, seed) {
-    const st = this.state;
-    const shares = giftShares(st, card);
-    const poor = shares.filter((s) => s.poorest).map((s) => st.players[s.seat].name);
-    // Cả bàn bằng tiền nhau thì ai cũng là "người ít tiền nhất" — nói thẳng ra
-    const allTie = poor.length === shares.length;
-    const note = allTie
-      ? `Cả bàn đang bằng tiền nhau nên ai cũng nhận gấp đôi: <b>${money(card.amount * 2)}</b>.`
-      : `Cả bàn mỗi người <b>${money(card.amount)}</b>, ${poor.join(', ')} ít tiền mặt nhất
-         nhận <b>${money(card.amount * 2)}</b>.`;
-    await this.showFateCard(kind, card, { amount: card.amount, note, label: 'Nhận quà', seed });
-    await this.bc.show(title, allTie
-      ? `Ông già Noel phát quà: cả bàn mỗi người <span class="up">${money(card.amount * 2)}</span>.`
-      : `Ông già Noel phát quà: mỗi người <span class="up">${money(card.amount)}</span>,
-         <b>${poor.join(', ')}</b> nhận gấp đôi <span class="up">${money(card.amount * 2)}</span>.`);
-    for (const s of shares) {
-      if (st.players[s.seat].bankrupt) continue;
-      await this.receiveFromBank(s.seat, s.amount);
-    }
-  }
-
-  /**
-   * Bị nguyền (chủ đề Halloween): một vòng không thu được tiền thuê của ai.
-   *
-   * "Một vòng" đếm bằng số lượt như mọi hiệu ứng khác (`tickMods` chạy mỗi
-   * lần chuyển lượt): đủ số người còn sống thì lượt về lại người rút, lời
-   * nguyền hết đúng lúc ấy. Người khác không phải bấm gì.
-   */
-  async cardCurse(p, kind, card, title, seed) {
-    const st = this.state;
-    const turns = Math.max(1, st.alive().length);
-    await this.showFateCard(kind, card, {
-      note: '<b>1 vòng</b> không thu được tiền thuê nhà, đất của ai.',
-      label: 'Đành chịu',
-      seed,
-    });
-    st.addMod({ id: `bi-nguyen:${p.id}`, type: 'curse', seat: p.id, name: p.name, turns });
-    this.hud.refresh();
-    this.scene.refresh(st);
-    this.sync();
-    await this.bc.show(title,
-      `<b>${p.name}</b> bị nguyền: tới lượt sau của mình, ai đáp vào đất của
-       <b>${p.name}</b> cũng khỏi trả tiền thuê.`, { kind: 'bad', ms: 3200 });
-  }
-
-  /** Thuế nhà cửa: tính đầu nhà, đầu khách sạn trên toàn bộ đất của mình. */
-  async cardRepair(p, kind, card, title, seed) {
-    const bill = repairBill(this.state, p.id, card);
-    const parts = [];
-    if (bill.houses) parts.push(`${bill.houses} nhà × ${money(card.perHouse)}`);
-    if (bill.hotels) parts.push(`${bill.hotels} khách sạn × ${money(card.perHotel)}`);
-    await this.showFateCard(kind, card, { amount: -bill.amount, note: parts.join(' · '), seed });
-    const due = this.skills.cut(p, bill.amount);
-    await this.bc.show(title,
-      `<b>${p.name}</b> nộp thuế nhà cửa <span class="down">${money(due)}</span>
-       (${parts.join(', ')})${this.skills.cutNote(p)}.`, { kind: 'bad' });
-    await this.payBank(p.id, due);
-  }
-
-  /**
-   * Thẻ di chuyển: dắt quân tới ô khác rồi **xử ô ấy như vừa lắc tới**.
-   *
-   * Quân đi bộ qua từng ô chứ không nhảy thẳng, nên ghé ngang ô Bắt Đầu là lãnh
-   * lương thật — trừ nước bị giải về Khám Lớn.
-   *
-   * Xí ngầu của nước lắc vừa rồi đi theo luôn: đáp xuống ô dịch vụ thì tiền
-   * thuê vẫn tính theo số vừa lắc, chứ không lắc lại một lần nữa.
-   */
-  async cardMove(p, kind, card, title, seed, dice) {
-    const dest = moveDest(card, p.pos, this.state);
-    await this.showFateCard(kind, card, {
-      note: `Đi tới <b>${tileLabel(dest.tile)}</b>.`,
-      label: 'Lên đường',
-      seed,
-    });
-    await this.bc.show(title, `<b>${p.name}</b>: ${card.text}`,
-      { kind: card.jail ? 'bad' : null, ms: 2600 });
-
-    if (card.jail) { await this.goToJail(p); return; }
-
-    this.cardChain = (this.cardChain ?? 0) + 1;
-    try {
-      await this.advance(p, dest.steps, dice);
-    } finally {
-      this.cardChain -= 1;
-    }
-  }
-
-  /* ================================================================
-     Túi thẻ — thẻ giữ lại dùng sau
-     ================================================================ */
-
-  /**
-   * Cất một lá vào túi. Lá ấy rời khỏi bộ bài cho tới khi có người xài, nên
-   * cả bàn không thể có hai tấm cùng một lá.
-   */
-  async keepCard(p, kind, drawn, title, seed) {
-    const st = this.state;
-    const meta = CARD_KINDS[cardType(drawn.card)];
-    const name = cardName(drawn.card);
-    await this.showFateCard(kind, drawn.card, {
-      note: `<b>${meta.sigil} ${name}</b>: ${cardEffect(drawn.card)}`,
-      label: 'Cất vào túi',
-      seed,
-    });
-    st.takeCard(p.id, kind, drawn.index);
-    this.hud.refresh();
-    this.sync();
-    await this.bc.show(title, `<b>${p.name}</b> cất được <b>${name}</b> vào túi.`);
-  }
-
-  /** Mở túi thẻ của người đang đi; chọn một tấm thì dùng luôn tấm ấy. */
-  async openBag() {
-    const at = await inventoryModal(this.state, this.state.turn);
-    if (at == null) { this.restoreActions(); return; }
-    /* Vé ra tù kéo theo cả nước đi (thả ra rồi lắc luôn), lúc ấy thanh nút đã
-       do `takeRoll` dựng lại — bày đè lên nữa là xoá mất nút "kết thúc lượt". */
-    const rolls = cardType(cardOf(this.state.current.cards[at])) === 'jail-free';
-    await this.useHeldCard(at);
-    if (!rolls) this.restoreActions();
-  }
-
-  /**
-   * Dùng một tấm trong túi.
-   *
-   * Ba thẻ nhắm vào nhà đất (dỡ nhà, cưỡng chế mua, giải toả chỉ định) **hỏi
-   * mục tiêu trước, rút thẻ khỏi túi sau**. Lôi thẻ ra, nhìn lại bàn cờ rồi
-   * thấy chưa đáng dùng là chuyện thường; rút trước thì thẻ mất trắng dù chưa
-   * đụng tới ai. Hỏi xong mới rút cũng không lệch luật cũ: lá bài vẫn **trả về
-   * bộ trước khi hiệu ứng chạy** — hiệu ứng có thể mở đấu giá, có thể làm ai đó
-   * vỡ nợ, mà giữa chừng ấy không được để lá bài kẹt lại ngoài bộ.
-   *
-   * Quyền dùng soát lại ở đây chứ không tin nút bấm suông — bàn cờ đổi liên
-   * tục, nút bày ra lúc nãy có thể đã hết đúng.
-   */
-  async useHeldCard(at) {
-    const st = this.state;
-    const p = st.current;
-    const ref = p.cards[at];
-    const card = cardOf(ref);
-    if (!card) return;
-
-    const check = useReason(st, card, p.id);
-    if (!check.ok) {
-      await this.bc.show('CHƯA DÙNG ĐƯỢC', check.reason, { kind: 'bad', ms: 3000 });
-      return;
-    }
-
-    const title = cardName(card);
-    const type = cardType(card);
-
-    // Hỏi mục tiêu trước; bỏ ngang thì thẻ còn nguyên trong túi, coi như chưa bấm
-    let target;
-    if (type === 'demolish' || type === 'seize' || type === 'resume') {
-      target = type === 'demolish'
-        ? await this.askDemolishGroup(p, card)
-        : await this.askStrikeTile(p, card, type);
-      if (target == null) return;
-    }
-
-    if (!this.spendCard(p, at, ref)) return;
-
-    switch (type) {
-      case 'jail-free':     return this.useJailCard(false);
-      case 'resume-random': return this.resumeRandom(p, card, title);
-      case 'demolish':      return this.demolishInGroup(p, card, title, target);
-      default:              return this.strikeWithPick(p, card, title, target);
-    }
-  }
-
-  /**
-   * Rút đúng tấm vừa chọn khỏi túi rồi loan tin.
-   *
-   * Bám theo chính tấm thẻ (`ref`) chứ không bám chỉ số trong túi: quãng hỏi
-   * mục tiêu kéo dài hàng chục giây, mà túi có thể đã xáo giữa chừng (vỡ nợ
-   * trả thẻ về bộ). Chỉ số cũ lúc ấy trỏ sang tấm khác.
-   *
-   * @returns {boolean} `false` nếu tấm ấy không còn trong túi — bên gọi bỏ nước
-   */
-  spendCard(p, at, ref) {
-    const i = p.cards[at] === ref ? at : p.cards.indexOf(ref);
-    if (i < 0) return false;
-    this.state.dropCard(p.id, i);
-    audio.sfx('card');
-    this.hud.refresh();
-    this.sync();
-    return true;
-  }
-
-  /**
-   * Chỉ một ô ngay trên bàn cờ rồi xác nhận — xem `ui/tilePicker.js`.
-   *
-   * Gom vào đây vì cả `answer()` (câu hỏi gửi từ máy khác) lẫn `EventRunner`
-   * đều cần đúng một cách hỏi, mà chỗ duy nhất giữ `scene` là controller.
-   */
-  pickTile(ids, text, ms = 0) {
-    return pickTileOnBoard(this.scene, this.state, ids, text, ms);
-  }
-
-  /**
-   * Hỏi mục tiêu cho hai thẻ bắt chọn **một ô**: cưỡng chế mua và giải toả chỉ
-   * định. (Thẻ dỡ nhà chọn tới mức khu — xem `askDemolishGroup`.)
-   *
-   * Người dùng thẻ tự chọn mục tiêu; đây mới là chỗ đắt giá, và cũng là chỗ ép
-   * đất đổi chủ mà không cần đối phương gật đầu. Hỏi qua `events.askOne` nên
-   * bản một máy chuyền tay, bản online hiện đúng ở máy người ấy, mà họ đã bỏ
-   * bàn thì có sẵn câu trả lời mặc định.
-   *
-   * Thẻ tự lôi ra khỏi túi thì lùi lại được: phiên chọn có nút bỏ ngang, và hết
-   * giờ cũng là bỏ ngang. Lúc gọi tới đây thẻ chưa rời túi, nên bỏ ngang không
-   * mất gì — khác hẳn mấy phiên chọn do sự kiện ép, ở đó bỏ trống là sự kiện
-   * đứng lại giữa chừng.
-   *
-   * @returns {Promise<?number>} ô đã chốt, `null` nếu bỏ ngang hoặc hết mục tiêu
-   */
-  async askStrikeTile(p, card, type) {
-    const st = this.state;
-    const ids = cardTargets(st, card, p.id);
-    if (ids.length === 0) return null;   // bàn vừa đổi thế giữa chừng
-
-    const text = {
-      seize: {
-        eyebrow: 'CƯỠNG CHẾ MUA ĐẤT',
-        title: 'Lấy lô đất nào?',
-        sub: 'Lô bạn chọn <b>sang tên cho bạn</b> ngay, chủ cũ nhận <b>giá gốc +25%</b>.',
-        note: 'Chỉ lô chưa thế chấp, nằm trong khu chưa có căn nhà nào, và bạn phải đủ tiền mặt trả tiền đền.',
-        confirm: 'Lấy lô này',
-      },
-      resume: {
-        eyebrow: 'GIẢI TOẢ',
-        title: 'Cắm mốc giải toả lô nào?',
-        sub: `Chủ lô nhận tiền đền <b>giá gốc +20%</b>, rồi lô ấy đem
-              <b>đấu giá kín</b>, ai trả cao nhất thì lấy.`,
-        note: 'Chọn được cả đất của mình: lãnh tiền đền rồi tranh mua lại cũng là một nước cờ.',
-        confirm: 'Cắm mốc lô này',
-      },
-    }[type];
-    text.owned = false;
-    text.cancel = 'Thôi, cất thẻ lại';
-
-    const picked = await this.events.askOne({
-      seat: p.id,
-      name: 'ev-pick',
-      data: { ids, text },
-      local: () => this.pickTile(ids, text, this.events.localMs),
-      fallback: null,
-      note: 'họ vừa lôi ra một thẻ nhắm vào nhà đất người khác',
-    });
-    return ids.includes(picked) ? picked : null;
-  }
-
-  /** Thi hành thẻ cưỡng chế mua / giải toả lên ô đã chốt ở `askStrikeTile`. */
-  async strikeWithPick(p, card, title, tileId) {
-    // Đất có thể vừa đổi chủ trong lúc hỏi (người kia phá sản) — soát lại
-    if (!cardTargets(this.state, card, p.id).includes(tileId)) return;
-
-    if (cardType(card) === 'resume') return this.resumeTile(p, tileId, card, title);
-    return this.seizeTile(p, tileId, title);
-  }
-
-  /**
-   * Hỏi mục tiêu cho thẻ dỡ nhà: người dùng chỉ chọn **khu màu**, bàn cờ bốc
-   * thăm ô.
-   *
-   * Chọn thẳng một ô thì tấm thẻ luôn rơi đúng lô đắt nhất của người dẫn đầu,
-   * lần nào cũng vậy. Chọn khu rồi bốc thăm thì vẫn nhắm được vào ai, nhưng
-   * nhắm vào chỗ nào là chuyện hên xui — và người bị dỡ có cớ để rải nhà ra
-   * nhiều ô thay vì dồn hết vào một lô.
-   *
-   * Cả bàn chỉ một khu có nhà thì khỏi hỏi: bảng chọn lúc ấy chỉ có đúng một
-   * lựa chọn, bấm "Dùng" trong túi thẻ đã là lời xác nhận. Khu ấy có một ô có
-   * nhà thì ô ấy lãnh luôn; có nhiều ô (kể cả nhà Chung Cư Mini của hai chủ
-   * khác nhau trong cùng khu) thì `demolishInGroup` quay bốc thăm như cũ.
-   *
-   * @returns {Promise<?string>} khoá khu, `null` nếu bỏ ngang hoặc hết mục tiêu
-   */
-  async askDemolishGroup(p, card) {
-    const st = this.state;
-    const groups = demolishGroups(st, card, p.id);
-    if (groups.length === 0) return null;
-    if (groups.length === 1) return groups[0];
-    const data = {
-      groups,
-      ids: cardTargets(st, card, p.id),
-      levels: demolishLevels(card),
-      // Thẻ chưa rời túi lúc này, nên bỏ ngang không mất gì — xem `askStrikeTile`
-      cancel: 'Thôi, cất thẻ lại',
+  watchActivity() {
+    const seen = (e) => {
+      if (!this.net || !this.state) return;
+      if (e.type === 'pointerdown' && !(e.target instanceof Element && e.target.closest('button'))) return;
+      const now = Date.now();
+      if (now - (this.lastSeen ?? 0) < 5000) return;
+      this.lastSeen = now;
+      this.host?.send({ type: 'seen', seat: this.net.mySeat });
     };
-
-    const group = await this.events.askOne({
-      seat: p.id,
-      name: 'ev-group',
-      data,
-      local: () => this.pickGroup(data, this.events.localMs),
-      fallback: null,
-      note: 'họ vừa lôi ra thẻ dỡ nhà',
-    });
-    return groups.includes(group) ? group : null;
+    document.addEventListener('pointerdown', seen, true);
+    document.addEventListener('keydown', seen, true);
   }
-
-  /**
-   * Chọn một khu ngay trên bàn cờ — xem `ui/groupPicker.js`.
-   *
-   * Gom vào đây cùng lý do với `pickTile`: cả `onAsk` lẫn `askDemolishGroup`
-   * đều cần đúng một cách hỏi, mà chỗ duy nhất giữ `scene` là controller.
-   */
-  pickGroup(data, ms = 0) {
-    return pickGroupOnBoard(this.scene, this.state, data, ms);
-  }
-
-  /** Thi hành thẻ dỡ nhà lên khu đã chốt ở `askDemolishGroup`. */
-  async demolishInGroup(p, card, title, key) {
-    const st = this.state;
-    // Bàn có thể vừa đổi thế trong lúc hỏi (người kia vỡ nợ) — soát lại từ đầu
-    if (!demolishGroups(st, card, p.id).includes(key)) return;
-    const { candidates, hits } = demolishPicks(st, card, p.id, key);
-    if (hits.length === 0) return;
-
-    await this.bc.show(title, candidates.length > 1
-      ? `<b>${p.name}</b> nhắm vào khu <b>${GROUPS[key].name}</b>.
-         Bàn cờ đang bốc thăm giữa <b>${candidates.length}</b> ô.`
-      : `<b>${p.name}</b> nhắm vào khu <b>${GROUPS[key].name}</b>.
-         Khu chỉ có <b>${tileLabel(candidates[0])}</b> có nhà, ô ấy lãnh đủ.`, { kind: 'bad', ms: 2200 });
-
-    /* Bốc thăm từng ô một, quay xong ô nào dỡ ô ấy: quay cả hai rồi mới dỡ thì
-       người xem không biết cấp nhà vừa mất là của vòng quay nào. Ô đã bốc rồi
-       thì rời khỏi vòng quay sau, đúng như bốc thăm không hoàn lại. */
-    let wheel = [...candidates];
-    for (const hit of hits) {
-      if (wheel.length > 1) {
-        this.netEmit('spin', { ids: wheel, tileId: hit.id });
-        await this.scene.spinTiles(wheel, hit.id);
-      }
-      wheel = wheel.filter((id) => id !== hit.id);
-      if (st.housesOn(hit.id) === 0) continue;   // ô vừa đổi chủ hoặc đã bị dỡ sạch
-      await this.demolishHouse(p, hit.id, hit.levels, title);
-    }
-    this.scene.highlightTile(p.pos, p.token.color);
-  }
-
-  /**
-   * Giải toả bốc thăm: lô đất do bàn cờ tự quay ra.
-   *
-   * Máy đang cầm lái gieo **một lần**, rồi phát cả danh sách ô lẫn ô trúng cho
-   * mọi máy cùng quay — không máy nào tự gieo lại một con số khác, mà ai cũng
-   * thấy vòng quay đi qua đúng những ô ấy.
-   */
-  async resumeRandom(p, card, title) {
-    const st = this.state;
-    const ids = cardTargets(st, card, p.id);
-    if (ids.length === 0) return;
-    const tileId = ids[Math.floor(Math.random() * ids.length)];
-
-    await this.bc.show(title,
-      `<b>${p.name}</b> bốc thăm giữa <b>${ids.length}</b> lô đất trống trên bàn.
-       Bàn cờ đang quay.`, { kind: 'trade', ms: 2200 });
-    this.netEmit('spin', { ids, tileId });
-    await this.scene.spinTiles(ids, tileId);
-    this.scene.highlightTile(p.pos, p.token.color);
-
-    await this.resumeTile(p, tileId, card, title);
-  }
-
-  /** Dỡ nhà một ô: mất mấy cấp, không đền bù đồng nào. */
-  async demolishHouse(p, tileId, levels, title) {
-    const st = this.state;
-    const owner = st.ownerOf(tileId);
-    const before = st.housesOn(tileId);
-    if (deedHolds(st, tileId, levels)) {
-      audio.sfx('shake');
-      this.netEmit('quake', {});
-      this.scene.shake(0.008, 420);
-      this.sync();
-      await this.bc.show(title,
-        `<b>${p.name}</b> cho thợ tới dỡ nhà của <b>${owner.name}</b> ở <b>${tileLabel(tileId)}</b>,
-         nhưng <b>Sổ Hồng</b> hợp lệ: nhà đứng nguyên.`);
-      await this.spot([tileId]);
-      return;
-    }
-    let gone = 0;
-    for (let i = 0; i < levels && st.housesOn(tileId) > 0; i++) {
-      st.demolish(tileId);
-      gone += 1;
-    }
-
-    audio.sfx('shake');
-    this.netEmit('quake', {});
-    this.scene.shake(0.008, 420);
-    this.hud.refresh();
-    this.scene.refresh(st);
-    if (gone) this.tileFx('quake', [tileId]);
-    this.sync();
-    await this.bc.show(title,
-      `<b>${p.name}</b> cho dỡ <b>${before === 5 && gone === 1 ? 'khách sạn' : `${gone} cấp nhà`}</b>
-       của <b>${owner.name}</b> ở <b>${tileLabel(tileId)}</b>,
-       <span class="down">không đền đồng nào</span>.`, { kind: 'bad' });
-    await this.spot([tileId]);
-  }
-
-  /**
-   * Giải toả: lô đất bị thu, chủ cũ lãnh tiền đền hậu (giá gốc +20%), rồi lô
-   * ấy đem đấu giá kín cho cả bàn — kể cả chủ cũ, họ cầm tiền đền trong tay
-   * nên có quyền tranh mua lại.
-   *
-   * Dùng lại đúng phiên đấu giá của thẻ Thời Cuộc: một vòng ghi giá kín, cao
-   * nhất lấy đất, hoà thì ai chốt giá trước thắng.
-   */
-  async resumeTile(p, tileId, card, title) {
-    const st = this.state;
-    const owner = st.ownerOf(tileId);
-    const payout = resumePrice(tileId, card);
-
-    st.owner.delete(tileId);
-    st.mortgaged.delete(tileId);
-    this.hud.refresh();
-    this.scene.refresh(st);
-    this.sync();
-
-    await this.bc.show(title,
-      `<b>${p.name}</b> cắm mốc giải toả <b>${tileLabel(tileId)}</b>.
-       <b>${owner.name}</b> lãnh tiền đền <span class="up">${money(payout)}</span>
-       (giá gốc +20%).`, { kind: 'trade' });
-    await this.spot([tileId]);
-    await this.receiveFromBank(owner.id, payout);
-
-    await this.events.auction(tileId, {
-      seller: null,
-      reason: `Lô đất vừa giải toả khỏi tay ${owner.name}. Toà Đô Chánh bán lại cho ai trả cao nhất.`,
-    });
-  }
-
-  /** Cưỡng chế mua: lô đất sang tên, chủ cũ nhận giá gốc +25%. */
-  async seizeTile(p, tileId, title) {
-    const st = this.state;
-    const owner = st.ownerOf(tileId);
-    const price = seizePrice(tileId);
-
-    await this.bc.show(title,
-      `<b>${p.name}</b> cưỡng chế mua <b>${tileLabel(tileId)}</b> của <b>${owner.name}</b>,
-       trả <span class="down">${money(price)}</span> (giá gốc +25%).`, { kind: 'trade' });
-    await this.spot([tileId]);
-    // Trả tiền đền trước: người dùng thẻ vỡ nợ ngay tại đây thì đất không đi đâu cả
-    if (!(await this.payPlayer(p.id, owner.id, price))) return;
-    if (st.owner.get(tileId) !== owner.id) return;
-
-    st.transfer(tileId, p.id);
-    audio.sfx('trade');
-    this.hud.refresh();
-    this.scene.refresh(st);
-    this.sync();
-    await this.bc.show('SANG TÊN',
-      `<b>${tileLabel(tileId)}</b> nay thuộc về
-       <b style="color:${p.token.css}">${p.name}</b>.`, { kind: 'trade' });
-  }
-
-  // -------------------------------------------------------------- tiền nong
-
-  /** Ngân hàng chi tiền cho người chơi — xu bay từ bảng ngân hàng vào ví. */
-  async receiveFromBank(playerId, amount) {
-    const p = this.state.players[playerId];
-    this.state.dryTurn = false;
-    p.money += amount;
-    this.hud.refresh();
-    this.sync();
-    this.hud.flashMoney(playerId, true);
-    await this.scene.flyMoney(this.hud.bankEl(), this.hud.cardEl(playerId), amount,
-      { text: `+${money(amount)}`, color: '#7BE0A0' });
-  }
-
-  /**
-   * Người chơi trả tiền cho ngân hàng. Nếu không đủ, mời bán nhà/thế chấp
-   * hoặc tuyên bố phá sản.
-   * @returns {Promise<boolean>} false nếu người chơi phá sản
-   */
-  async payBank(playerId, amount) {
-    if (!(await this.ensureFunds(playerId, amount))) return false;
-    const p = this.state.players[playerId];
-    this.state.dryTurn = false;
-    p.money -= amount;
-    this.hud.refresh();
-    this.sync();
-    this.hud.flashMoney(playerId, false);
-    await this.scene.flyMoney(this.hud.cardEl(playerId), this.hud.bankEl(), amount,
-      { text: `−${money(amount)}`, color: '#FF8A7A' });
-    return true;
-  }
-
-  /** Người chơi trả tiền cho người chơi khác. */
-  async payPlayer(fromId, toId, amount) {
-    const st = this.state;
-    /* Ghi khoản nợ vào trạng thái **trước khi** hỏi han. Hỏi xoay tiền hay hỏi
-       có chịu phá sản không đều là những chỗ đứng chờ người bấm, mà máy con nợ
-       có thể tắt ngang ở đó. Nợ nằm trong ảnh chụp thì máy tiếp quản còn biết
-       chủ đất chưa được trả — xem `coverDebt`. */
-    st.debt = { from: fromId, to: toId, amount };
-    this.sync();
-
-    if (!(await this.ensureFunds(fromId, amount))) {
-      // Vỡ nợ: `doBankrupt` đã chuyển phần còn lại cho chủ nợ, đây chỉ là chốt chặn cuối
-      await this.coverDebt(fromId);
-      return false;
-    }
-    const from = st.players[fromId];
-    const to = st.players[toId];
-    st.dryTurn = false;
-    from.money -= amount;
-    to.money += amount;
-    st.debt = null;
-    this.hud.refresh();
-    this.sync();
-    this.hud.flashMoney(fromId, false);
-    this.hud.flashMoney(toId, true);
-    await this.scene.flyMoney(this.hud.cardEl(fromId), this.hud.cardEl(toId), amount,
-      { text: `−${money(amount)}`, color: '#FF8A7A' });
-    return true;
-  }
-
-  /**
-   * Con nợ vỡ nợ thì chủ nợ nhận **số con nợ gom được** (tiền mặt, bán sạch
-   * nhà, thế chấp hết đất), ngân hàng không bù phần thiếu. `GameState.bankrupt`
-   * đã chốt con số vào `debt.left` trước khi thu đất.
-   *
-   * Khoản nợ đọc từ `state.debt` chứ không từ tham số, nên **máy nào tuyên bố
-   * phá sản cũng trả được**: máy con nợ tự bấm, hay trọng tài tịch thu người đã
-   * tắt máy giữa chừng, kết quả như nhau.
-   *
-   * @param {number} seat chỉ trả cho khoản nợ của đúng người này
-   * @returns {Promise<number>} số tiền chủ nợ thực nhận
-   */
-  async coverDebt(seat) {
-    const st = this.state;
-    const d = st.debt;
-    if (!d || d.from !== seat) return 0;
-    st.debt = null;
-    const to = st.players[d.to];
-    const from = st.players[d.from];
-    // Chủ nợ cũng đã rời ván thì không còn ai để nhận, tiền theo con nợ về ngân hàng
-    if (!to || to.bankrupt) { this.sync(); return 0; }
-    const left = d.left ?? 0;
-    if (left <= 0) {
-      this.sync();
-      await this.bc.show('MẤT TRẮNG',
-        `<b>${from.name}</b> vỡ nợ, bán sạch nhà đất vẫn không còn đồng nào trả <b>${to.name}</b>.`,
-        { kind: 'bad', ms: 3200 });
-      return 0;
-    }
-    st.dryTurn = false;
-    to.money += left;
-    this.hud.refresh();
-    this.sync();
-    await this.bc.show('TRẢ PHẦN CÒN LẠI',
-      `<b>${from.name}</b> vỡ nợ, bán sạch nhà đất trả được
-       <span class="up">${money(left)}</span> trên ${money(d.amount)} cho <b>${to.name}</b>.`, { ms: 3200 });
-    this.hud.flashMoney(d.to, true);
-    await this.scene.flyMoney(this.hud.cardEl(d.from), this.hud.cardEl(d.to), left,
-      { text: `+${money(left)}`, color: '#7BE0A0' });
-    return left;
-  }
-
-  /**
-   * Bảo đảm người chơi có đủ `amount`. Cho phép bán nhà / thế chấp nhiều lần.
-   * Nếu bán sạch nhà và thế chấp hết đất vẫn không đủ thì vỡ nợ ngay,
-   * khỏi bắt người chơi đi qua từng bước xoay tiền vô ích.
-   *
-   * Hàm này chạy dưới tay **người cầm lái**, nhưng `playerId` không nhất thiết
-   * là họ: thẻ "mỗi người góp tiền mừng", phiên đấu giá, cưỡng chiếm đất — đều
-   * bắt một người khác móc ví. Bán nhà hay cầm đất là tiêu vào cơ nghiệp của
-   * người ta, nên bảng quản lý phải mở ở **máy của chính con nợ**, chứ không
-   * bày tài sản người khác ra trước mặt người đang đi.
-   *
-   * @returns {Promise<boolean>} false nếu người chơi chọn (hoặc buộc phải) phá sản
-   */
-  async ensureFunds(playerId, amount) {
-    const st = this.state;
-    const p = st.players[playerId];
-    if (p.money >= amount) return true;
-    // Bảo Hiểm Xã Hội trả hộ trước khi hỏi bán nhà / thế chấp
-    await this.skills.insure(p, amount);
-    if (p.money >= amount) return true;
-
-    // Bot xoay tiền theo đúng cách ngân hàng cấn nợ hộ: cầm đất rẻ trước, giữ nhà
-    if (this.bot.is(playerId)) return this.autoCover(playerId, amount, this.bot.raiser(playerId));
-
-    // Con nợ ngồi máy khác → hỏi sang đó; ván gốc vẫn nằm lại máy này.
-    if (this.net && playerId !== this.net.mySeat) {
-      return this.ensureFundsRemote(playerId, amount);
-    }
-
-    /* Bản một máy mà con nợ không phải người đang đi: chuyền máy cho họ rồi
-       trả lại, đúng cách `EventRunner.askOne` hỏi han cả bàn.
-       Chỉ chuyền khi thật sự có gì để quyết — bán sạch nhà, cầm hết đất vẫn
-       không đủ thì hộp thoại kia chỉ có mỗi nút "Chấp nhận", chuyền máy hai
-       lượt chỉ để bấm một cái nút là làm phiền cả bàn. */
-    const relay = !this.net && playerId !== st.turn
-      && st.liquidValue(playerId) >= amount;
-    if (relay) {
-      await handoff(p.name, p.token.css,
-        `${p.name} đang thiếu tiền. Chuyền máy cho họ bán nhà hoặc thế chấp.`);
-    }
-    const { bankrupt } = await this.bot.human(() => this.runRaise(playerId, amount));
-    if (relay) {
-      const cur = st.players[st.turn];
-      await handoff(cur.name, cur.token.css, `Xong. Chuyền máy lại cho ${cur.name}.`);
-    }
-    if (bankrupt) { await this.doBankrupt(playerId); return false; }
-    return true;
-  }
-
-  /**
-   * Xoay tiền cho một con nợ **ngồi máy khác**.
-   *
-   * Máy họ chỉ *quyết định*: nó mở bảng quản lý trên bản sao ván của nó rồi gửi
-   * về đây danh sách thao tác đã bấm. Ván gốc chỉ nhúc nhích ở đây, qua đúng
-   * cửa luật của `GameState` — xem `applyRaiseActs`. Nhờ vậy hai máy không bao
-   * giờ ra hai kết quả, mà người đang đi cũng không đụng được vào đất người ta.
-   */
-  async ensureFundsRemote(playerId, amount) {
-    const st = this.state;
-    const p = st.players[playerId];
-
-    while (p.money < amount) {
-      /* Máy bên kia đã rớt thì đừng hỏi: `ask` cứ đứng chờ cho hết hạn rồi mới
-         trả về `fallback`, cả bàn ngồi nhìn một phút cho một câu không ai nghe. */
-      if (!this.net.isSeatLive(playerId)) {
-        if (!(await this.autoCover(playerId, amount))) return false;
-        continue;
-      }
-
-      // Gửi ván đi trước khi hỏi, để máy bên kia bày đúng số dư và đúng đất
-      this.sync();
-      await this.bc.show('CHỜ XOAY TIỀN',
-        `<b>${p.name}</b> còn thiếu <span class="down">${money(amount - p.money)}</span>,
-         đang chờ họ bán nhà hoặc thế chấp…`, { kind: 'bad', ms: 2600 });
-
-      /* Đồng hồ chuyển sang con nợ: cả bàn đang chờ họ chứ không chờ người đang
-         đi. Hạn của họ nới thêm vài giây so với con số hộp thoại đếm cho họ xem,
-         để người bấm đúng giây cuối vẫn kịp về đích. */
-      this.armClock(playerId, this.raiseMs + 5000, 'xoay tiền');
-      const ans = await this.net.ask(playerId, 'raise',
-        { seat: playerId, amount, ms: this.raiseMs },
-        { fallback: null, timeout: this.raiseMs + 8000 });
-      this.extendClock(this.busyMs);
-
-      // Không một tiếng trả lời (rớt mạng giữa chừng): cấn nợ hộ luôn
-      if (!ans) {
-        if (!(await this.autoCover(playerId, amount))) return false;
-        continue;
-      }
-
-      /* Thao tác họ kịp bấm thì vẫn tính, kể cả khi sau đó mới hết giờ — đừng
-         bắt người ta cầm cố hai lần cho cùng một khoản nợ. */
-      const done = await this.applyRaiseActs(playerId, ans.acts);
-      if (ans.bankrupt) { await this.doBankrupt(playerId); return false; }
-      if (p.money >= amount) break;
-
-      /* Hết giờ, hoặc trả lời về mà ván không nhúc nhích (bấm Xong sớm, thao
-         tác gửi tới không còn hợp lệ): hỏi lại nữa thì thành vòng lặp không
-         lối ra, nên cấn nợ hộ cho xong khoản này. */
-      if (ans.timeout || done === 0) {
-        if (!(await this.autoCover(playerId, amount))) return false;
-      }
-    }
-    return true;
-  }
-
-  /**
-   * Vòng xoay tiền — **luôn chạy ở máy của chính con nợ**.
-   *
-   * @param {number} playerId
-   * @param {number} amount
-   * @param {object} [o]
-   * @param {number} [o.ms] hạn trả lời; chỉ có ở bản online, khi máy này đang
-   *   trả lời hộ một câu hỏi của máy cầm lái
-   * @param {Array}  [o.record] khác `null` ⇒ máy này **không** giữ ván gốc: mọi
-   *   thao tác chỉ ghi vào đây rồi gửi về cho máy cầm lái làm lại
-   * @returns {Promise<{acts:Array, bankrupt:boolean, timeout?:boolean}>}
-   */
-  async runRaise(playerId, amount, o = {}) {
-    const st = this.state;
-    const p = st.players[playerId];
-    const acts = o.record ?? [];
-    const remote = !!o.record;
-    /* Hạn tính cho **cả vòng**, không cho từng hộp thoại: cầm ba ô là ba lần mở
-       bảng quản lý, mỗi lần một hạn riêng thì tổng lại vượt quá hạn máy cầm lái
-       đang chờ, mà câu trả lời về trễ thì bên ấy đã cấn nợ hộ mất rồi. */
-    const until = remote && o.ms ? Date.now() + o.ms : 0;
-    const timeLeft = () => (until ? Math.max(1500, until - Date.now()) : 0);
-
-    // Bán sạch nhà, cầm hết đất vẫn không đủ → khỏi bắt bấm qua từng bước
-    const raisable = st.liquidValue(playerId);
-    if (raisable < amount) {
-      await bankruptModal(st, playerId, true, amount - p.money, raisable);
-      return { acts, bankrupt: true };
-    }
-
-    while (p.money < amount) {
-      const props = st.propertiesOf(playerId);
-      // Còn gì để xoay không?
-      const canRaise = props.some(
-        (id) => st.canSellHouse(playerId, id).ok || st.canMortgage(playerId, id).ok,
-      );
-
-      if (!canRaise) {
-        await bankruptModal(st, playerId, true, amount - p.money);
-        return { acts, bankrupt: true };
-      }
-
-      if (until && Date.now() >= until) return { acts, bankrupt: false, timeout: true };
-      const choice = await this.shortfallModal(playerId, amount, timeLeft());
-
-      if (choice === 'auto') {
-        /* Máy này không giữ ván gốc thì đừng tự cấn nợ — con số sẽ lệch với máy
-           cầm lái. Báo về "hết giờ" để bên ấy cấn trên ván thật. */
-        if (remote) return { acts, bankrupt: false, timeout: true };
-        /* Cùng một cách cấn nợ với thẻ Thời Cuộc (`core/events.js`): thế chấp ô
-           rẻ nhất trước, giữ nhà tới cùng vì nhà bán ra chỉ được nửa giá xây. */
-        const { ok: raised, mortgaged, sold } = autoRaise(st, playerId, amount);
-        this.hud.refresh();
-        this.scene.refresh(st);
-        this.sync();
-        if (raised) {
-          const gone = [...mortgaged, ...sold].map((id) => tileLabel(id));
-          await this.bc.show('HẾT GIỜ',
-            `<b>${p.name}</b> chưa xoay tiền. Ngân hàng cấn nợ hộ cho đủ
-             <span class="down">${money(amount)}</span>: ${gone.join(' · ')}.`,
-            { kind: 'bad', ms: 3600 });
-        }
-        continue;   // không đủ thì vòng sau rơi vào cửa vỡ nợ như thường
-      }
-
-      if (choice === 'bankrupt') {
-        const sure = await bankruptModal(st, playerId, false);
-        if (sure) return { acts, bankrupt: true };
-      } else {
-        await this.openManage(playerId, remote ? acts : null, amount);
-      }
-    }
-    return { acts, bankrupt: false };
-  }
-
-  /**
-   * Hộp "còn thiếu bao nhiêu" — mở ở máy của con nợ.
-   *
-   * `ms` > 0 (bản online, con nợ không phải người đang đi) thì hộp tự đếm ngược:
-   * cả bàn đang đứng chờ một người, không thể để họ bỏ đi pha cà phê là ván treo.
-   */
-  shortfallModal(playerId, amount, ms = 0) {
-    const p = this.state.players[playerId];
-    let ticker = 0;
-    const pr = openModal({
-      eyebrow: 'THIẾU TIỀN',
-      title: `Còn thiếu <span class="debt-hot">${money(amount - p.money)}</span>`,
-      sub: 'Xoay đủ tiền mặt để trả, hoặc tuyên bố phá sản.',
-      body: debtPanelHtml(p.money, amount, raisePlan(this.state, playerId, amount)),
-      buttons: [
-        { label: 'Bán nhà / Thế chấp', value: 'manage', cls: 'btn-gold' },
-        { label: 'Tuyên bố phá sản', value: 'bankrupt', cls: 'btn-danger' },
-      ],
-      escValue: 'manage', // Esc không được vô tình đẩy người chơi vào cửa phá sản
-      /* Hết giờ thì không mở tiếp bảng quản lý cho một cái ghế trống — xoay
-         tiền hộ luôn, kẻo mỗi nhịp canh lại đóng/mở một hộp mà nợ vẫn đó. */
-      timeoutValue: 'auto',
-      onMount: (body, close) => {
-        if (ms) {
-          ticker = attachTimer(body, ms, close, 'auto',
-            'để xoay tiền. Hết giờ thì ngân hàng cấn nợ hộ.');
-        }
-      },
-    });
-    pr.finally(() => clearInterval(ticker));
-    return pr;
-  }
-
-  /**
-   * Làm lại trên **ván gốc** những thao tác con nợ vừa bấm ở máy họ.
-   *
-   * Không tin lời suông: mỗi thao tác vẫn đi qua đúng cửa luật của `GameState`,
-   * và chỉ nhắm vào đất mang tên chính người ấy. Máy kia gửi số ô nào tới cũng
-   * không đụng được tài sản của người khác.
-   *
-   * @returns {Promise<number>} số thao tác thật sự có hiệu lực
-   */
-  async applyRaiseActs(playerId, acts) {
-    const st = this.state;
-    const p = st.players[playerId];
-    const touched = [];
-    const words = [];
-    let gained = 0;
-
-    for (const a of Array.isArray(acts) ? acts : []) {
-      const id = Number(a?.id);
-      // Đất phải đang mang tên người ấy — chốt chặn trước cả luật bán/cầm
-      if (!Number.isInteger(id) || !BOARD[id] || st.owner.get(id) !== playerId) continue;
-
-      let res = null;
-      if (a.act === 'sell') res = st.sellHouse(playerId, id);
-      else if (a.act === 'mortgage') res = st.mortgage(playerId, id);
-      else if (a.act === 'redeem') res = st.redeem(playerId, id);
-      else if (a.act === 'build') res = st.build(playerId, id);
-      if (!res?.ok) continue;
-
-      touched.push(id);
-      const label = tileLabel(id);
-      if (a.act === 'sell') { gained += res.refund; words.push(`bán một căn ở <b>${label}</b>`); }
-      else if (a.act === 'mortgage') {
-        gained += res.amount;
-        addPressure(st, PRESSURE.mortgage);
-        words.push(`cầm cố <b>${label}</b>`);
-      } else if (a.act === 'redeem') { gained -= res.cost; words.push(`chuộc <b>${label}</b>`); }
-      else { gained -= res.cost; words.push(`xây ở <b>${label}</b>`); }
-    }
-
-    if (touched.length === 0) return 0;
-
-    audio.sfx('coin');
-    this.hud.refresh();
-    this.scene.refresh(st);
-    this.sync();
-    this.hud.flashMoney(playerId, gained > 0);
-    /* Một dòng cho cả loạt, không phải mỗi thao tác một dòng: người thiếu tiền
-       thường cầm liền ba bốn ô, mà cả bàn chỉ cần biết họ xoay được bao nhiêu. */
-    await this.bc.show('XOAY TIỀN',
-      `<b>${p.name}</b> ${words.join(' · ')},
-       ${gained >= 0 ? `nhận <span class="up">${money(gained)}</span>` : `chi <span class="down">${money(-gained)}</span>`}.`,
-      { ms: 3600 });
-    await this.spot(touched);
-    return touched.length;
-  }
-
-  /**
-   * Con nợ không trả lời kịp (hết giờ, rớt mạng) → ngân hàng cấn nợ hộ.
-   *
-   * Cùng thứ tự với `autoRaise` của thẻ Thời Cuộc: thế chấp ô rẻ nhất trước,
-   * giữ nhà tới cùng. Cấn hết mà vẫn thiếu thì mới tới cửa vỡ nợ. Bot truyền
-   * `raiser` của nó vào để xoay theo luật riêng.
-   * @returns {Promise<boolean>} false nếu đã phá sản
-   */
-  async autoCover(playerId, amount, raiser = null) {
-    const st = this.state;
-    const p = st.players[playerId];
-    // Bot xoay theo luật của cấp nó (core/botPolicy.js), không theo ngân hàng
-    const bot = !!raiser;
-    const { ok, mortgaged, sold } = (raiser ?? autoRaise)(st, playerId, amount);
-    this.hud.refresh();
-    this.scene.refresh(st);
-    this.sync();
-
-    if (mortgaged.length || sold.length) {
-      const gone = [...mortgaged, ...sold].map((id) => tileLabel(id));
-      await this.bc.show(bot ? 'XOAY TIỀN' : 'CẤN NỢ',
-        bot
-          ? `<b>${p.name}</b> xoay cho đủ <span class="down">${money(amount)}</span>: ${gone.join(' · ')}.`
-          : `<b>${p.name}</b> chưa xoay tiền. Ngân hàng cấn nợ hộ cho đủ
-         <span class="down">${money(amount)}</span>: ${gone.join(' · ')}.`,
-        { kind: 'bad', ms: 3600 });
-      await this.spot([...mortgaged, ...sold]);
-    }
-    if (ok) return true;
-
-    await this.bc.show('VỠ NỢ',
-      `<b>${p.name}</b> không xoay nổi <span class="down">${money(amount)}</span>, vỡ nợ.`,
-      { kind: 'bad', ms: 4000 });
-    await this.doBankrupt(playerId);
-    return false;
-  }
-
-  // ------------------------------------------------------------------- tù
-
-  async goToJail(p) {
-    const st = this.state;
-    st.sendToJail(p);
-    audio.sfx('jail');
-    this.netEmit('jail', { seat: p.id });
-    this.scene.shake(0.007, 340);
-    await this.scene.jumpToken(p.id, JAIL_TILE);
-    // Quân đáp xuống rồi song mới dựng
-    this.scene.syncJail(st);
-    this.hud.refresh();
-    this.sync();
-    this.scene.highlightTile(JAIL_TILE, p.token.color);
-    await this.skills.jailed(p);
-  }
-
-  /**
-   * Xài vé ra tù: được thả ngay, không tốn đồng nào, rồi lắc đi như thường.
-   * Tấm vé trả về bộ bài — người sau còn có cơ hội rút trúng.
-   */
-  async useJailCard(pull = true) {
-    const st = this.state;
-    const p = st.current;
-    await this.skills.jailWage(p);
-    // Gọi từ túi thẻ thì lá bài đã rời tay rồi, đừng rút thêm tấm nữa
-    if (pull) {
-      const at = st.jailCardAt(p.id);
-      if (at < 0 || !st.dropCard(p.id, at)) return;
-    }
-    st.releaseFromJail(p);
-    this.scene.syncJail(st);
-    audio.sfx('jail');
-    this.hud.refresh();
-    this.sync();
-    await this.bc.show('DÙNG VÉ RA TÙ',
-      `<b>${p.name}</b> dùng giấy bãi nại, ra khỏi Khám Lớn không tốn đồng nào.`);
-    await this.takeRoll();
-  }
-
-  /** Ở Tù Cho Lành: ngồi yên trong tù, hết lượt ngay. */
-  async sitInJail() {
-    const p = this.state.current;
-    await this.skills.jailWage(p);
-    if (!this.skills.canSit(p)) { this.restoreActions(); return; }
-    p.jailSits = (p.jailSits ?? 0) + 1;
-    this.sync();
-    await this.bc.show('NGỒI YÊN',
-      `<b>${p.name}</b> ở lại Khám Lớn. Lượt này không tính vào hạn 3 lượt.`, { ms: 2200 });
-    await this.endTurn();
-  }
-
-  async payOutOfJail() {
-    const st = this.state;
-    const p = st.current;
-    await this.skills.jailWage(p);
-    if (this.skills.freeBail(p, JAIL_FINE)) {
-      await this.bc.show('RA TÙ MIỄN PHÍ',
-        `<b>${p.name}</b> là <b>Khách Quen Nhà Đá</b>, ra tù không mất đồng nào.`);
-    } else {
-      await this.bc.show('NỘP TIỀN RA TÙ',
-        `<b>${p.name}</b> nộp <span class="down">${money(JAIL_FINE)}</span> để được tự do.`);
-      if (!(await this.payBank(p.id, JAIL_FINE))) { await this.endTurn(); return; }
-    }
-    st.releaseFromJail(p);
-    this.scene.syncJail(st);
-    this.hud.refresh();
-    await this.takeRoll();
-  }
-
-  /**
-   * Lắc trong tù — mỗi lượt chỉ được cầu đôi một lần. Trượt thì hết lượt,
-   * ngồi chờ tới lượt sau; tới lần thứ ba mà vẫn không ra đôi thì buộc nộp
-   * phạt 50$ rồi đi theo số vừa lắc.
-   */
-  async rollInJail() {
-    const st = this.state;
-    const p = st.current;
-    await this.skills.jailWage(p);
-    const d = rollDice();
-    this.netEmit('dice', d);
-    await this.scene.rollDiceAnim(d.a, d.b);
-    await this.skills.rollPerks(p, d);
-    if (st.over || p.bankrupt) { await this.endTurn(); return; }
-
-    if (d.isDouble) {
-      st.releaseFromJail(p);
-      this.scene.syncJail(st);
-      st.rolled = true;
-      this.hud.refresh();
-      await this.bc.show('RA ĐÔI, ĐƯỢC THA',
-        `<b>${p.name}</b> đổ đôi ${d.a}, rời Khám Lớn và đi ${d.sum} ô.`);
-      await this.advance(p, d.sum + await this.iceSlide(p), d);
-      // Ra đôi để thoát tù không cho thêm lượt lắc.
-      if (st.over || p.bankrupt || p.inJail) { await this.endTurn(); return; }
-      this.setTurnActions(true);
-      return;
-    }
-
-    p.jailTurns += 1;
-    this.hud.refresh();
-
-    if (p.jailTurns >= MAX_JAIL_TURNS) {
-      const free = this.skills.freeBail(p, JAIL_FINE);
-      await this.bc.show('HẾT HẠN 3 LƯỢT',
-        free
-          ? `<b>${p.name}</b> cầu đôi hụt lần thứ ${MAX_JAIL_TURNS}, là <b>Khách Quen Nhà Đá</b> nên khỏi nộp phạt, đi ${d.sum} ô.`
-          : `<b>${p.name}</b> cầu đôi hụt lần thứ ${MAX_JAIL_TURNS}, phải nộp
-         <span class="down">${money(JAIL_FINE)}</span> rồi đi ${d.sum} ô.`,
-        { kind: 'bad' });
-      if (!free && !(await this.payBank(p.id, JAIL_FINE))) { await this.endTurn(); return; }
-      st.releaseFromJail(p);
-      this.scene.syncJail(st);
-      st.rolled = true;
-      this.hud.refresh();
-      await this.advance(p, d.sum + await this.iceSlide(p), d);
-      if (st.over || p.bankrupt || p.inJail) { await this.endTurn(); return; }
-      this.setTurnActions(true);
-      return;
-    }
-
-    await this.bc.show('CHƯA RA ĐÔI',
-      `<b>${p.name}</b> ngồi tiếp, đã cầu đôi hụt <b>${p.jailTurns}/${MAX_JAIL_TURNS}</b> lượt.`,
-      { kind: 'bad' });
-    // Hết lượt: lần cầu đôi kế tiếp phải chờ vòng sau.
-    await this.endTurn();
-  }
-
-  // -------------------------------------------------------- quản lý tài sản
-
-  /**
-   * Nút "Quản lý tài sản" — mở đúng bảng của **người bấm**.
-   *
-   * Bản online lấy ghế của chính máy này, không lấy `state.turn`: hai con số ấy
-   * lệch nhau khi trọng tài cầm lái hộ một ghế đã rớt mạng, và lúc đó lấy theo
-   * lượt là bày đất người khác ra cho người này bán.
-   */
-  manage() {
-    const seat = this.actingSeat();
-    if (seat < 0) { this.restoreActions(); return Promise.resolve(); }
-    return this.openManage(seat).then(() => this.restoreActions());
-  }
-
-  /**
-   * Ghế mà các nút trên thanh thao tác nhắm tới: bản online là ghế của chính
-   * máy này, bản một máy là người đang tới lượt (cả bàn dùng chung bàn phím).
-   */
-  actingSeat() {
-    return this.net ? this.net.mySeat : (this.state?.turn ?? -1);
-  }
-
-  /**
-   * @param {number} playerId
-   * @param {?Array} [record] khác `null` ⇒ máy này chỉ đang trả lời hộ một câu
-   *   hỏi xoay tiền: ván gốc nằm ở máy cầm lái, nên mọi thao tác chỉ ghi vào
-   *   đây rồi gửi về đó làm lại. Không phát ảnh chụp, không loan tin — cả hai
-   *   việc ấy là của máy cầm lái, xem `applyRaiseActs`.
-   * @param {number} [need] đang xoay tiền trả nợ: khoản phải có trong túi
-   */
-  async openManage(playerId, record = null, need = 0) {
-    await manageModal(this.state, playerId, (act, id, res) => {
-      this.hud.refresh();
-      this.scene.refresh(this.state);
-      if (!res?.ok) return;
-      if (record) {
-        record.push({ act, id });
-        // Phản hồi tại chỗ cho người đang bấm; loan tin cho cả bàn là việc của
-        // máy cầm lái, sau khi nó làm lại thao tác này trên ván gốc
-        audio.sfx('coin');
-        this.hud.flashMoney(playerId, act === 'sell' || act === 'mortgage');
-        return;
-      }
-      const p = this.state.players[playerId];
-      const label = tileLabel(id);
-      /* Phát ảnh chụp ngay sau **từng** thao tác, đừng đợi lúc đóng bảng.
-         Người xây nhà có thể ngồi trong bảng quản lý cả phút; chờ tới lúc ấy
-         mới phát thì mấy máy kia đọc dòng "đã xây nhà ở X" mà số tiền và căn
-         nhà trên bàn vẫn y như cũ — hai thứ nói ngược nhau. */
-      this.sync();
-      // Người đang quản lý tài sản có hộp thoại che bàn; cái nháy này là cho
-      // mấy máy còn lại, họ chỉ thấy dòng thông báo chứ không thấy nút nào bấm
-      this.spot([id]);
-      if (act === 'build') {
-        // Tiếng búa do hoạt cảnh xây nhà trên bàn cờ phát, khỏi kêu hai lần
-        this.hud.flashMoney(playerId, false);
-        this.bc.show(res.isHotel ? 'LÊN KHÁCH SẠN' : 'XÂY NHÀ',
-          res.isHotel
-            ? `<b>${p.name}</b> xây <b>khách sạn</b> ở <b>${label}</b>, trả lại 4 căn nhà cho ngân hàng.`
-            : `<b>${p.name}</b> xây thêm một căn nhà ở <b>${label}</b> (<span class="down">−${money(res.cost)}</span>).`);
-        this.skills.contractorNote(res.payouts);
-      } else if (act === 'sell') {
-        this.hud.flashMoney(playerId, true);
-        this.bc.show('BÁN NHÀ',
-          `<b>${p.name}</b> bán lại một căn ở <b>${label}</b> (<span class="up">+${money(res.refund)}</span>).`);
-        this.skills.contractorNote(res.payouts);
-      } else if (act === 'mortgage') {
-        addPressure(this.state, PRESSURE.mortgage);
-        this.hud.flashMoney(playerId, true);
-        this.bc.show('THẾ CHẤP',
-          `<b>${p.name}</b> cầm cố <b>${label}</b>, nhận <span class="up">${money(res.amount)}</span>.`);
-      } else if (act === 'redeem') {
-        this.hud.flashMoney(playerId, false);
-        this.bc.show('CHUỘC TÀI SẢN',
-          `<b>${p.name}</b> chuộc <b>${label}</b> với <span class="down">${money(res.cost)}</span> (đã gồm lãi 10%).`);
-      }
-    }, need);
-    this.hud.refresh();
-    this.scene.refresh(this.state);
-    if (!record) this.sync();
-  }
-
-  restoreActions() {
-    if (this.state.over) return;
-    this.setTurnActions(this.state.rolled);
-  }
-
-  // -------------------------------------------------------------- giao dịch
-
-  async trade() {
-    const st = this.state;
-    const A = st.current;
-
-    const targetId = await tradePickModal(st, A.id);
-    if (targetId == null) { this.restoreActions(); return; }
-    const B = st.players[targetId];
-
-    const offer = await tradeBuildModal(st, A.id, targetId, this.scene);
-    if (!offer) { this.restoreActions(); return; }
-
-    // Cả bàn cùng thấy nội dung đề nghị
-    await this.bc.show('ĐỀ NGHỊ GIAO DỊCH',
-      `<b style="color:${A.token.css}">${A.name}</b> đưa: ${describe(st, offer.give, offer.giveMoney)}
-       <br><b style="color:${B.token.css}">${B.name}</b> đưa: ${describe(st, offer.get, offer.getMoney)}`,
-      { kind: 'trade', ms: 5200 });
-
-    /* Rồi chỉ thẳng lên bàn mấy lô đang đem đổi, y như lúc mở phiên đấu giá:
-       cả bàn đọc tên lô trong hộp thoại thì vẫn chưa biết nó nằm cạnh nào, có
-       chắn mất bộ ai đang gom hay không. `spot` phát sang cả máy khác. */
-    const tiles = offerTiles(offer);
-    if (tiles.length) await this.spot(tiles, 2200);
-    else await wait(700);
-
-    /* Ai duyệt đề nghị: chơi một máy thì chuyền máy tay này sang tay kia; chơi
-       online thì bên B ngồi máy khác, phải hỏi sang đó rồi chờ họ bấm. Bên B
-       rớt mạng giữa chừng thì `ask` trả về `false` chứ không treo lượt của A. */
-    let accepted;
-    if (this.bot.is(B.id)) {
-      accepted = await litTiles(this.scene, offerTiles(offer),
-        () => this.bot.reviewTrade(offer, B.id, A.id));
-    } else if (this.net) {
-      await this.bc.show('CHỜ TRẢ LỜI',
-        `Đang chờ <b>${B.name}</b> xem xét đề nghị…`, { kind: 'trade', ms: 3000 });
-      /* Đồng hồ chuyển sang B — giờ cả bàn chờ họ, không chờ A nữa. Hạn của B
-         nới thêm vài giây so với con số hộp thoại đếm cho họ xem, để người bấm
-         đúng giây cuối vẫn kịp về đích trước lúc hộp tự đóng. */
-      this.armClock(targetId, this.tradeMs + 5000, 'trả lời giao dịch');
-      accepted = await this.net.ask(targetId, 'trade-review', { offer },
-        { fallback: false, timeout: this.tradeMs + 8000 });
-      // Trả lời rồi (hay hết giờ rồi) thì đồng hồ về lại người đang đi
-      this.armClock(A.id, this.busyMs, 'đang thao tác');
-
-      /* Bên kia để hết giờ → coi như họ từ chối, y như người ngồi im hết lượt
-         thì được lắc hộ. `ask` trả về chuỗi `'timeout'` (truthy!) nên phải hạ
-         xuống `false` ngay tại đây, kẻo giao dịch chốt luôn vì không ai bấm. */
-      if (accepted === 'timeout') {
-        accepted = false;
-        await this.bc.show('HẾT GIỜ',
-          `<b>${B.name}</b> không trả lời kịp, đề nghị coi như bị từ chối.`,
-          { kind: 'bad', ms: 3200 });
-      }
-    } else {
-      await handoff(B.name, B.token.css, `${A.name} gửi một đề nghị giao dịch. Chuyền máy cho ${B.name} xem xét.`);
-      accepted = await litTiles(this.scene, offerTiles(offer),
-        () => tradeReviewModal(st, offer));
-    }
-
-    if (!accepted) {
-      // Không ai chịu đổi chác chính là lúc bàn cần một cơn biến động
-      addPressure(st, PRESSURE.tradeRefused);
-      await this.bc.show('TỪ CHỐI GIAO DỊCH',
-        `<b>${B.name}</b> không đồng ý với đề nghị của <b>${A.name}</b>.`, { kind: 'bad', ms: 4200 });
-      if (!this.net && !this.bot.is(B.id)) {
-        await handoff(A.name, A.token.css, `Đề nghị bị từ chối. Chuyền máy lại cho ${A.name}.`);
-      }
-      this.restoreActions();
-      return;
-    }
-
-    /* Kiểm lại trước khi chốt — thương lượng có thể kéo dài hơn ta tưởng. Tiền
-       thì đổi được (trả thuê, nhận thẻ), mà người thì cũng có thể rời bàn giữa
-       chừng: mình mải chọn đất trong hộp thoại quá hạn `busyMs` thì chính mình
-       cũng bị gạch, lúc ấy đất đem đổi đã về ngân hàng cả rồi. */
-    if (A.bankrupt || B.bankrupt) {
-      await this.bc.show('GIAO DỊCH HỎNG', 'Một bên đã rời bàn trước khi chốt.', { kind: 'bad' });
-      if (!this.net && !this.bot.is(B.id)) await handoff(A.name, A.token.css);
-      this.restoreActions();
-      return;
-    }
-    if (A.money < offer.giveMoney || B.money < offer.getMoney) {
-      await this.bc.show('GIAO DỊCH HỎNG', 'Một bên không còn đủ tiền mặt như đã đề nghị.', { kind: 'bad' });
-      if (!this.net && !this.bot.is(B.id)) await handoff(A.name, A.token.css);
-      this.restoreActions();
-      return;
-    }
-
-    await this.executeTrade(offer, A, B);
-    if (!this.net && !this.bot.is(B.id)) {
-      await handoff(A.name, A.token.css, `Giao dịch xong. Chuyền máy lại cho ${A.name} tiếp tục lượt.`);
-    }
-    this.restoreActions();
-  }
-
-  /** Thực hiện chuyển tài sản + tiền giữa hai bên, kèm hiệu ứng. */
-  async executeTrade(offer, A, B) {
-    const st = this.state;
-
-    audio.sfx('trade');
-    for (const id of offer.give) st.transfer(id, B.id);
-    for (const id of offer.get) st.transfer(id, A.id);
-
-    const net = offer.giveMoney - offer.getMoney;
-    A.money -= offer.giveMoney; A.money += offer.getMoney;
-    B.money -= offer.getMoney; B.money += offer.giveMoney;
-
-    this.hud.refresh();
-    this.scene.refresh(st);
-    this.sync();
-
-    if (net !== 0) {
-      const [srcId, dstId, amt] = net > 0 ? [A.id, B.id, net] : [B.id, A.id, -net];
-      this.hud.flashMoney(srcId, false);
-      this.hud.flashMoney(dstId, true);
-      await this.scene.flyMoney(this.hud.cardEl(srcId), this.hud.cardEl(dstId), amt,
-        { text: money(amt), color: '#E9CE85' });
-    }
-
-    // Thông báo kết quả cho cả bàn
-    await this.bc.show('GIAO DỊCH THÀNH CÔNG',
-      `<b style="color:${A.token.css}">${A.name}</b> nhận: ${describe(st, offer.get, offer.getMoney)}
-       <br><b style="color:${B.token.css}">${B.name}</b> nhận: ${describe(st, offer.give, offer.giveMoney)}`,
-      { kind: 'trade', ms: 6000 });
-    await this.spot([...offer.give, ...offer.get], 2600);
-    await this.skills.tradeFees(offer, A, B);
-
-    // Chủ mới của đất đang thế chấp được mời chuộc lại (phí = thế chấp + 10%)
-    await this.offerRedeem(B.id, offer.give.filter((id) => st.isMortgaged(id)));
-    await this.offerRedeem(A.id, offer.get.filter((id) => st.isMortgaged(id)));
-  }
-
-  /**
-   * Mời **chủ mới** chuộc các ô vừa nhận đang bị thế chấp.
-   *
-   * Tiền chuộc lấy từ túi chủ mới, nên quyết định cũng phải là của chủ mới:
-   * hộp thoại hiện ở máy của họ chứ không ở máy người dựng giao dịch. Không
-   * hỏi tới nơi được (rớt mạng, hết giờ) thì coi như "để sau" — đất vẫn nguyên
-   * đó, chuộc lúc nào cũng được ở mục Quản lý tài sản.
-   */
-  async offerRedeem(playerId, ids) {
-    if (ids.length === 0) return;
-    const st = this.state;
-    const p = st.players[playerId];
-
-    let choice;
-    if (this.bot.is(playerId)) {
-      choice = this.bot.redeemChoice(playerId, ids);
-    } else if (this.net && playerId !== this.net.mySeat) {
-      await this.bc.show('CHỜ TRẢ LỜI',
-        `Đang chờ <b>${p.name}</b> quyết định có chuộc ${ids.length} ô vừa nhận không…`,
-        { kind: 'trade', ms: 2600 });
-      choice = await this.net.ask(playerId, 'redeem', { ids },
-        { fallback: null, timeout: this.tradeMs + 8000 });
-    } else {
-      // Cả bàn một máy: chuyền máy cho chủ mới rồi mới hỏi
-      if (!this.net && playerId !== st.turn) {
-        await handoff(p.name, p.token.css,
-          `${p.name} vừa nhận đất đang thế chấp. Chuyền máy cho họ quyết định.`);
-      }
-      choice = await this.bot.human(
-        () => litTiles(this.scene, ids, () => redeemPromptModal(st, playerId, ids)));
-    }
-
-    const total = ids.reduce((s, id) => s + BOARD[id].redeem, 0);
-    /* Chốt lại ở máy cầm lái: từ lúc hỏi tới lúc trả lời, túi tiền của họ có
-       thể đã vơi đi (trả tiền thuê, bóc thẻ) nên không tin câu trả lời suông. */
-    if (choice !== 'all' || p.money < total) {
-      await this.bc.show('CÒN NỢ NGÂN HÀNG',
-        `<b>${p.name}</b> giữ ${ids.length} ô đang thế chấp, chuộc sau ở mục Quản lý tài sản.`,
-        { ms: 3600 });
-      return;
-    }
-    for (const id of ids) st.redeem(playerId, id);
-    this.hud.refresh();
-    this.scene.refresh(st);
-    this.sync();
-    this.hud.flashMoney(playerId, false);
-    await this.scene.flyMoney(this.hud.cardEl(playerId), this.hud.bankEl(), total,
-      { text: `−${money(total)}`, color: '#FF8A7A' });
-    await this.bc.show('CHUỘC TÀI SẢN',
-      `<b>${p.name}</b> trả ngân hàng <span class="down">${money(total)}</span> để chuộc ${ids.length} ô (đã gồm lãi 10%).`);
-    await this.spot(ids);
-  }
-
-  // --------------------------------------------------------------- phá sản
-
-  async declareBankrupt() {
-    // Bỏ ván là bỏ cơ nghiệp của chính mình — cùng lý do với `manage()`
-    const seat = this.actingSeat();
-    if (seat < 0) { this.restoreActions(); return; }
-    const sure = await bankruptModal(this.state, seat, false);
-    if (!sure) { this.restoreActions(); return; }
-    await this.doBankrupt(seat);
-    if (this.checkGameOver()) { this.sync(); return; }
-    await this.endTurn();
-  }
-
-  /** Giải thể tài sản về ngân hàng + hiệu ứng. */
-  async doBankrupt(playerId) {
-    const st = this.state;
-    const p = st.players[playerId];
-    const props = st.propertiesOf(playerId).length;
-
-    audio.sfx('bankrupt');
-    st.bankrupt(playerId);
-    this.hud.refresh();
-    this.scene.refresh(st);
-    this.scene.placeTokens();
-    this.sync();
-
-    await this.bc.show('PHÁ SẢN',
-      `<b>${p.name}</b> vỡ nợ! ${props} ô đất cùng toàn bộ nhà cửa được trả về <b>ngân hàng</b>.`,
-      { kind: 'bad', ms: 5000 });
-    await this.scene.bankruptFx(playerId);
-    // Còn nợ ai thì chuyển số gom được từ tiền mặt + nhà đất cho chủ nợ
-    await this.coverDebt(playerId);
-
-    // Pháo hoa tiễn người thua — cũng là một cách kết thúc có hậu
-    const c = this.scene.boardCenter();
-    this.scene.fireworks(c.x, c.y, 0xB3322A, 2);
-    await wait(600);
-  }
-
-  // ------------------------------------------------------ tra cứu thông tin
 
   /** Đang có hộp thoại nào mở không — tránh chồng hộp thoại lên nhau. */
   modalOpen() { return document.querySelector('#modal-root .scrim') !== null; }
 
-  /** Bấm vào thẻ người chơi → bảng tài sản đầy đủ. */
   async showPlayer(playerId) {
     if (this.modalOpen() || !this.state) return;
     const res = await playerModal(this.state, playerId);
-    // Bấm tiếp vào một thẻ đất trong bảng thì mở chi tiết ô đó
     if (res?.openTile != null) {
       await wait(120);
       await tileModal(this.state, res.openTile, this.memeSeat());
     }
   }
 
-  /** Bấm vào một ô trên bàn cờ → thông tin chi tiết ô. */
   async showTile(tileId) {
     if (this.modalOpen() || !this.state) return;
-    // Bảng giá tính cả kỹ năng của người xem, ra đúng số họ trả khi đáp xuống
     await tileModal(this.state, tileId, this.memeSeat());
   }
 
-  // ------------------------------------------------------------- kết thúc
+  // ---------------------------------------------------------------- hạ màn
 
-  checkGameOver() {
-    const st = this.state;
-    const w = st.winCheck();
-    if (!w) return false;
-    st.over = true;
-    st.endedAt = Date.now();
-    // Mốc cho lượt cuối đang dở, để biểu đồ thống kê có điểm kết
-    sampleMoney(st, st.turnNo + 1);
-    if (!this.bot.active) this.analytics.gameEnd(st, w);
-    this.clock = null;
-    this.hud.setClock(null);
-    this.hud.refresh();
+  /** @param {{player:object, by:string}} win */
+  async finish(win) {
+    if (this.finishing) return;
+    this.finishing = true;
+    this.ghostPanel?.panel.close();
+    this.clearClock();
     this.hud.clearActions();
     this.scene.clearHighlight();
     this.scene.hideDice();
-    this.finish(w);
-    return true;
-  }
-
-  /**
-   * @param {{player:object, by:string}} win kết quả của `GameState.winCheck`
-   */
-  async finish(win) {
-    // Máy cầm lái gọi từ `checkGameOver`, máy khác gọi khi ảnh chụp báo hết ván
-    if (this.finishing) return;
-    this.finishing = true;
-    this.ghosts.close();
+    if (!this.botSeats().length && !this.net) this.analytics.gameEnd(this.state, win);
     const winner = win.player;
     const why = {
       last: 'là người cuối cùng trụ lại',
       empire: `giữ ${WIN_SETS} bộ màu, ${WIN_HOTEL_SETS} bộ đã phủ kín khách sạn`,
       worth: `gom đủ ${money(WIN_WORTH)} tổng tài sản`,
     }[win.by];
-    await this.bc.show('HẠ MÀN',
-      `<b>${winner.name}</b> ${why}, <b>thắng ván này!</b>`, { ms: 6000 });
+    this.bc.show('HẠ MÀN', `<b>${winner.name}</b> ${why}, <b>thắng ván này!</b>`, { ms: 6000 });
     this.scene.celebrate(5200, winner.token.color);
     this.scene.skeletonBow?.(winner.token.css);
     await wait(1600);
-    // Ván đã hạ màn — quay về "màn hình chờ", nhạc nền nổi lại (bản Giáng Sinh
-    // có riêng một bài cho lúc này)
     audio.startMusic('win');
-    /* Gửi nốt số liệu trước khi người chơi bấm gì: bản online sẽ rời trang
-       ngay sau hộp này. Máy ngồi xem cũng gửi — nó có thể còn batch từ lúc
-       chính nó cầm lái. */
     await this.analytics.flushNow({ keepalive: true, timeoutMs: 500 });
     const again = await winnerModal(this.state, winner);
-
-    /* Ván online hạ màn thì phòng cũng hết việc: mã phòng cũ đã mang trạng
-       thái "đang chơi" nên không nhận người vào lại được. Về trang chủ để chủ
-       phòng mở phòng mới, ai muốn chơi tiếp thì nhận đường mời mới. */
     if (this.net) {
-      clearInterval(this.absentTimer);
-      await this.net.leave();
+      await this.net.leave?.();
       window.location.href = `${window.location.origin}${window.location.pathname}`;
       return;
     }
-
     if (again === 'again') {
       this.finishing = false;
+      this.reset();
       this.bc.clear();
       await this.start();
     }
   }
+
+  // ---------------------------------------------------------------- cho bộ kiểm thử
+
+  /**
+   * Bộ kiểm thử bản một máy sửa tay ván đang vẽ (`c.state…`) rồi gọi `sync()`:
+   * đẩy nguyên ván ấy vào engine, vòng lượt dựng lại từ đầu. Bản online không
+   * có đường này — ván nằm trên server.
+   */
+  sync() {
+    if (this.net || !this.host?.force) return;
+    this.host.force(snapshot(this.state));
+  }
+
+  /** Bày lại thanh nút. Bài kiểm thử vừa sửa tay ván thì đẩy ván ấy vào engine trước. */
+  beginTurn() {
+    if (this.testSync(null) == null) this.renderAsk();
+  }
+  restoreActions() { this.beginTurn(); }
+  async guard(fn) { return fn(); }
+
+  /**
+   * Chạy thẳng một mạch luật trên engine (bản một máy), sau khi đẩy ván đang
+   * vẽ vào — bài kiểm thử thường sửa tay vài con số ngay trước đó. Xong khi
+   * hàng sự kiện diễn tới cuối mạch ấy.
+   */
+  debug(path, ...args) {
+    return new Promise((resolve) => {
+      this.debugWaiters.push({ path, resolve });
+      this.host.force(snapshot(this.state));
+      this.host.inject(path, args);
+    });
+  }
+
+  /** Gọi một hàm luật thường trên engine, lấy giá trị trả về. */
+  rulesCall(path, ...args) {
+    this.host.force(snapshot(this.state));
+    const v = this.host.call(path, args);
+    // Bài kiểm thử đọc lại ván ngay trong cùng lệnh: chép ván engine sang tại chỗ
+    applySnapshot(this.state, snapshot(this.host.engine.st));
+    return v;
+  }
+
+  /** Dọn sạch trạng thái diễn trước ván mới. */
+  reset() {
+    this.queue = [];
+    this.pending = null;
+    this.showing.clear();
+    this.sent.clear();
+    this.menuQueue = [];
+    this.fateAsks.clear();
+    this.fateDone = 0;
+    this.fateWaiter = null;
+    this.fateOpen = null;
+    this.holder = null;
+    this.home = null;
+    dismissTopModal();
+  }
 }
+
+/* Các mạch luật bộ kiểm thử gọi thẳng như trước (`c.payPlayer(...)`): chạy trên
+   engine qua `debug`. */
+for (const name of [
+  'payPlayer', 'payBank', 'resolveOwnable', 'resolveTile', 'resolveCard', 'executeTrade',
+  'doBankrupt', 'goToJail', 'takeRoll', 'endTurn', 'payOutOfJail', 'rollInJail', 'seizeTile',
+  'evictPlayer', 'coverDebt', 'useHeldCard', 'declareBankrupt', 'advance', 'autoMove',
+  'stallBankrupt', 'rollOff', 'useJailCard', 'sitInJail', 'offerRedeem', 'ensureFunds',
+  'cardCollect', 'cardMoney', 'cardGift', 'cardCurse', 'cardRepair', 'cardSkill', 'cardMove',
+  'keepCard', 'resumeTile', 'strikeWithPick', 'demolishInGroup', 'resumeRandom', 'askStrikeTile',
+  'askDemolishGroup', 'expireMini', 'manageAct', 'skipAbandonedTurn',
+]) {
+  const rule = function rule(...a) { return this.debug(name, ...a); };
+  /* Bài kiểm thử có lúc tạm thay một mạch luật bằng hàm rỗng (`c.takeRoll =
+     async () => {}`) rồi trả lại. Mạch thật nằm trong engine, nên thay ở đây
+     thì engine cũng chạy mạch rỗng; trả lại hàm cũ thì engine về như thường. */
+  Object.defineProperty(Game.prototype, name, {
+    configurable: true,
+    get() { return this.ruleStubs?.[name] ?? rule; },
+    set(fn) {
+      this.ruleStubs ??= {};
+      const rules = this.host?.engine?.rules;
+      if (fn === rule) {
+        delete this.ruleStubs[name];
+        if (rules) delete rules[name];
+      } else {
+        this.ruleStubs[name] = fn;
+        if (rules) rules[name] = function* stub() {};
+      }
+    },
+  });
+}
+for (const name of ['checkGameOver', 'receiveFromBank', 'applyRaiseActs', 'demolishHouse', 'iceSlide', 'spendCard']) {
+  Game.prototype[name] = function rule(...a) { return this.rulesCall(name, ...a); };
+}
+
+export { BOARD, cardOf, cardType };
