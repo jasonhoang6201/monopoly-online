@@ -45,7 +45,14 @@ if (!token) {
 }
 
 async function call(path, method = 'GET') {
-  const res = await fetch(`${server}${path}`, { method, headers: { Authorization: `Bearer ${token}` } });
+  let res;
+  try {
+    res = await fetch(`${server}${path}`, { method, headers: { Authorization: `Bearer ${token}` } });
+  } catch (err) {
+    console.error(`Không nối được ${server} (${err.cause?.code ?? err.message}).`);
+    console.error('Chỉ định server: --server wss://..., hoặc VITE_GAME_SERVER trong .env.');
+    process.exit(1);
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`${res.status} ${body.error ?? ''} (${server}${path})`);
   return body;
