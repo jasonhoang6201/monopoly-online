@@ -76,6 +76,9 @@ export async function enter(url, name, tag, { ready = true, netTiming = null } =
 
 export const seatCount = (page) => page.locator('.lobby-seat').count();
 export const title = (page) => page.locator('.scrim.show .modal-title').first().textContent().catch(() => '');
+/** Có hộp thoại nào đang mở mang tiêu đề này không — hộp mới có thể nằm chồng lên hộp cũ. */
+export const hasTitle = (page, text) => page.locator('.scrim.show .modal-title').allTextContents()
+  .then((all) => all.some((t) => t.trim() === text)).catch(() => false);
 
 /** Chạy `fn(controller, arg)` trong tab. */
 export const c = (page, fn, arg) => page.evaluate(
@@ -127,12 +130,20 @@ export async function settle(page, ms = 40000) {
   return false;
 }
 
-/** Tab đang giữ ghế tới lượt. */
-export async function driver(pages) {
-  for (const p of pages) {
-    if (await c(p, (g) => g.state && !g.state.over && g.net.mySeat === g.state.turn).catch(() => false)) return p;
-  }
-  return null;
+/**
+ * Tab đang giữ ghế tới lượt. Máy vừa đi xong thường đã sang lượt mới trong
+ * khi máy kế tiếp còn đang diễn nốt nước đi trước, nên chờ tới khi có máy thấy
+ * lượt là của mình.
+ */
+export async function driver(pages, ms = 30000) {
+  let found = null;
+  await until(async () => {
+    for (const p of pages) {
+      if (await c(p, (g) => g.state && !g.state.over && g.net.mySeat === g.state.turn).catch(() => false)) { found = p; return true; }
+    }
+    return false;
+  }, ms, 250);
+  return found;
 }
 
 /** Đi trọn một lượt bằng thanh nút của tab đang tới lượt: lắc (kể cả cầu đôi) rồi kết thúc. */

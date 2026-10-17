@@ -16,6 +16,7 @@ thẳng ở gốc repo.
 | `npm run server` | máy chủ ván cờ trên máy (wrangler dev) | 8787 |
 | `npm run server:test` | như trên, bật `TEST_TIMING=1` cho bộ kiểm thử online | 8787 |
 | `npm run server:deploy` | deploy lên Cloudflare (`TEST_TIMING` phải là `"0"`) | |
+| `npm run rooms -- list \| wipe [MÃ]` | liệt kê / xoá phòng trên server, cần `ADMIN_TOKEN` | |
 | `npm run test:online` | bộ kiểm thử nhiều máy | cần dev server ở **5179** và `server:test` |
 | `npm run sim:skills` | cân bằng kỹ năng: bot chơi trọn ván, báo tối thượng lệch | không cần |
 | `npm run sim:bots` | ba cấp bot Dễ / Vừa / Khó đấu nhau, báo nếu thứ bậc lệch | không cần |

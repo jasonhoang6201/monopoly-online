@@ -83,7 +83,7 @@ export class GameRoom {
     this.awayMs = 120000;
     this.on = {
       room: () => {}, kicked: () => {}, full: () => {}, closed: () => {}, denied: () => {},
-      start: () => {}, game: () => {}, link: () => {}, chat: () => {}, meme: () => {},
+      start: () => {}, game: () => {}, link: () => {}, chat: () => {}, meme: () => {}, wiped: () => {},
     };
     /** Controller nghe sự kiện ván ở đây — mặt "chủ ván" giống `LocalHost`. */
     this.onEvents = () => {};
@@ -248,6 +248,11 @@ export class GameRoom {
       case 'kicked':
         this.left = true;
         this.on.kicked();
+        return;
+      case 'wiped':
+        // Server xoá phòng bằng lệnh quản trị; socket đóng ngay sau tin này (4004)
+        this.left = true;
+        this.on.wiped();
         return;
       case 'start':
         this.phase = 'playing';

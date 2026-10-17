@@ -22,7 +22,8 @@
     "test:telemetry": "node tests/telemetry.mjs && node --experimental-websocket tests/analytics.mjs && node tests/analytics-sql.mjs",
     "server": "wrangler dev --config server/wrangler.toml --port 8787",
     "server:deploy": "wrangler deploy --config server/wrangler.toml",
-    "server:test": "wrangler dev --config server/wrangler.toml --port 8787 --var TEST_TIMING:1"
+    "server:test": "wrangler dev --config server/wrangler.toml --port 8787 --var TEST_TIMING:1 --var ADMIN_TOKEN:test-admin",
+    "rooms": "node scripts/rooms.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

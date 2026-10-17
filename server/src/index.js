@@ -12,6 +12,10 @@
  * engine (ảnh chụp mốc yên + log action) sau mỗi tin. WebSocket dùng
  * Hibernation API, nên lúc cả phòng ngồi im, object được ngủ mà không tính
  * thời gian chạy; thức dậy thì dựng lại engine từ `doc`.
+ *
+ * Quản trị (`/admin/*`, cần `ADMIN_TOKEN`): liệt kê và xoá phòng. Cloudflare
+ * không cho Worker liệt kê các Durable Object đã có, nên mỗi phòng tự ghi mã
+ * của mình vào `RoomIndex` (một object duy nhất) lần đầu được tạo hoặc thức dậy.
  */
 import { DurableObject } from 'cloudflare:workers';
 import { Engine } from '../../src/engine/engine.js';
@@ -37,17 +41,61 @@ const LOBBY_GRACE_MS = 8000;
 const SILENT_MS = 30000;
 /** Một tin nhắn chat dài nhất. */
 const CHAT_MAX = 240;
+/**
+ * Số phòng xoá trong một lần gọi `/admin/wipe`. Gói free cho mỗi request tối
+ * đa 50 lần gọi sang Durable Object khác; mỗi phòng tốn hai lần (xoá phòng,
+ * gỡ khỏi danh mục). Còn thừa thì lệnh `npm run rooms` gọi tiếp.
+ */
+const WIPE_BATCH = 20;
+
+const roomStub = (env, code) => env.ROOMS.get(env.ROOMS.idFromName(code));
+const indexStub = (env) => env.INDEX.get(env.INDEX.idFromName('index'));
+const json = (v, status = 200) => new Response(JSON.stringify(v), {
+  status, headers: { 'content-type': 'application/json; charset=utf-8' },
+});
+
+/**
+ * `/admin/rooms`: danh sách phòng kèm tình trạng.
+ * `/admin/wipe` (POST): xoá một phòng (`?code=ABCD`) hoặc một đợt phòng.
+ * Thiếu `ADMIN_TOKEN` trên server thì đóng hẳn cả hai đường.
+ */
+async function admin(request, env, url) {
+  const token = env.ADMIN_TOKEN;
+  if (!token || request.headers.get('Authorization') !== `Bearer ${token}`) return json({ error: 'cấm' }, 403);
+  const index = indexStub(env);
+  if (url.pathname === '/admin/rooms' && request.method === 'GET') {
+    const all = await (await index.fetch('https://index/list')).json();
+    // Hỏi tình trạng từng phòng tốn một lần gọi mỗi phòng: chỉ hỏi đợt đầu
+    const rooms = await Promise.all(all.slice(0, 40).map(async (r) => {
+      const info = await (await roomStub(env, r.code).fetch(`https://room/${r.code}/info`)).json();
+      return { ...r, ...info };
+    }));
+    return json({ total: all.length, rooms });
+  }
+  if (url.pathname === '/admin/wipe' && request.method === 'POST') {
+    const one = url.searchParams.get('code')?.toUpperCase();
+    if (one && !CODE.test(one)) return json({ error: 'mã phòng không hợp lệ' }, 400);
+    const all = await (await index.fetch('https://index/list')).json();
+    const codes = one ? [one] : all.slice(0, WIPE_BATCH).map((r) => r.code);
+    for (const code of codes) {
+      await roomStub(env, code).fetch(`https://room/${code}/wipe`, { method: 'POST' });
+      await index.fetch(`https://index/remove?code=${code}`, { method: 'POST' });
+    }
+    return json({ wiped: codes, left: one ? all.filter((r) => r.code !== one).length : Math.max(0, all.length - codes.length) });
+  }
+  return json({ error: 'không có gì ở đây' }, 404);
+}
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/admin/')) return admin(request, env, url);
     const m = url.pathname.match(/^\/room\/([A-Za-z0-9]{4})$/);
     if (m) {
       const code = m[1].toUpperCase();
       if (!CODE.test(code)) return new Response('mã phòng không hợp lệ', { status: 400 });
       if (request.headers.get('Upgrade') !== 'websocket') return new Response('cần WebSocket', { status: 426 });
-      const stub = env.ROOMS.get(env.ROOMS.idFromName(code));
-      return stub.fetch(new Request(`https://room/${code}`, request));
+      return roomStub(env, code).fetch(new Request(`https://room/${code}`, request));
     }
     if (url.pathname === '/health') return new Response('ok');
     return new Response('không có gì ở đây', { status: 404 });
@@ -115,12 +163,56 @@ export class GameRoom extends DurableObject {
   }
 
   /* ================================================================
+     Quản trị
+     ================================================================ */
+
+  /** Tình trạng phòng cho `/admin/rooms`. */
+  info() {
+    const meta = this.meta;
+    if (!meta) return { phase: 'empty', seats: 0, online: 0 };
+    return {
+      phase: meta.phase,
+      seats: meta.seats.length,
+      names: meta.seats.map((s) => s.name),
+      online: meta.seats.filter((s) => this.socketsOf(s.id).length).length,
+      turnNo: this.engine?.st.turnNo ?? null,
+      over: this.engine?.st.over ?? null,
+    };
+  }
+
+  /**
+   * Xoá phòng: báo mọi máy đang nối (`wiped`), đóng socket bằng mã 4004 để
+   * máy khách không nối lại, xoá sạch storage và hẹn giờ. Có người vào lại
+   * đúng mã ấy sau này thì phòng mới tinh được dựng.
+   */
+  async wipe() {
+    this.broadcast({ t: 'wiped' });
+    for (const ws of this.ctx.getWebSockets()) {
+      try { ws.close(4004, 'phòng đã bị xoá'); } catch { /* đã đóng */ }
+    }
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+    this.meta = null;
+    this.engine = null;
+    this.analytics = null;
+    return json({ ok: true });
+  }
+
+  /* ================================================================
      Kết nối
      ================================================================ */
 
   async fetch(request) {
-    const code = new URL(request.url).pathname.slice(1);
+    const [code, action] = new URL(request.url).pathname.slice(1).split('/');
+    if (action === 'wipe') return this.wipe();
+    if (action === 'info') return json(this.info());
     if (!this.meta) this.meta = this.fresh(code);
+    // Ghi tên vào danh mục một lần, kể cả phòng có từ trước khi có danh mục
+    if (!this.meta.indexed) {
+      await indexStub(this.env).fetch(`https://index/add?code=${code}`, { method: 'POST' });
+      this.meta.indexed = true;
+      await this.save();
+    }
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server);
@@ -529,5 +621,30 @@ export class GameRoom extends DurableObject {
       fetch: (...a) => fetch(...a),
     });
     this.analytics.mode = 'online';
+  }
+}
+
+/**
+ * Danh mục phòng: một object duy nhất (`idFromName('index')`), mỗi phòng một
+ * khoá `room:<mã>` → mốc ghi vào. Chỉ phục vụ lệnh quản trị.
+ */
+export class RoomIndex extends DurableObject {
+  async fetch(request) {
+    const url = new URL(request.url);
+    const code = url.searchParams.get('code');
+    if (url.pathname === '/add' && code) {
+      if (!(await this.ctx.storage.get(`room:${code}`))) await this.ctx.storage.put(`room:${code}`, Date.now());
+      return new Response('ok');
+    }
+    if (url.pathname === '/remove' && code) {
+      await this.ctx.storage.delete(`room:${code}`);
+      return new Response('ok');
+    }
+    if (url.pathname === '/list') {
+      const rows = [...(await this.ctx.storage.list({ prefix: 'room:' })).entries()]
+        .map(([k, at]) => ({ code: k.slice(5), createdAt: new Date(at).toISOString() }));
+      return json(rows);
+    }
+    return new Response('không có gì ở đây', { status: 404 });
   }
 }

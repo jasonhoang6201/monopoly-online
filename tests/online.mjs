@@ -14,7 +14,7 @@
 import { orderOf, playRollOff } from './rolloff.mjs';
 import {
   SERVER, BASE, ok, until, newPage, enter, bootToLobby, seatCount, title, c, sameBoard, settle,
-  playTurn, finish,
+  playTurn, finish, hasTitle,
 } from './onlinekit.mjs';
 
 /* ================================================================ 1 · phòng chờ */
@@ -160,5 +160,21 @@ ok(await until(() => c(A, (g) => g.state.players[2].bankrupt), 20000), 'quá h�
 ok(await until(() => c(B, (g) => g.state.players[2].bankrupt), 10000), 'máy B cũng thấy');
 
 /* ================================================================ */
+
+/* ================================================================ 8 · xoá phòng */
+
+console.log('\n▸ 8. Lệnh quản trị xoá phòng đang chơi');
+const HTTP = SERVER.replace(/^ws(s?):\/\//, 'http$1://');
+const res = await fetch(`${HTTP}/admin/wipe?code=${code}`, {
+  method: 'POST', headers: { Authorization: `Bearer ${process.env.ADMIN_TOKEN ?? 'test-admin'}` },
+});
+ok(res.ok, 'server nhận lệnh xoá', String(res.status));
+for (const [p, tag] of [[A, 'A'], [B, 'B']]) {
+  await p.bringToFront();
+  ok(await until(() => hasTitle(p, 'Phòng đã bị xoá'), 8000), `máy ${tag} thấy "Phòng đã bị xoá"`);
+}
+ok(!(await c(A, (g) => g.net.ws)), 'máy khách không nối lại phòng đã xoá');
+await A.locator('.scrim.show button.btn', { hasText: 'Về màn hình đầu' }).click();
+ok(await until(async () => !new URL(A.url()).searchParams.get('room'), 8000), 'bấm nút thì về màn hình đầu');
 
 await finish();

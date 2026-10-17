@@ -13,7 +13,11 @@
 const SERVER = process.env.GAME_SERVER ?? 'ws://localhost:8787';
 let fails = 0;
 let n = 0;
-const ok = (cond, msg) => { n += 1; if (cond) console.log(`  ✓ ${msg}`); else { fails += 1; console.log(`  ✗ ${msg}`); } };
+const ok = (cond, msg, extra = '') => {
+  n += 1;
+  if (cond) console.log(`  ✓ ${msg}`);
+  else { fails += 1; console.log(`  ✗ ${msg}${extra ? ` — ${extra}` : ''}`); }
+};
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const code = () => Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 32)]).join('');
 
@@ -181,6 +185,39 @@ console.log('▸ 5. Vắng quá hạn thì bị gạch tên');
 B2.close();
 await until(() => A.snap.players[seatB]?.bankrupt || A.snap.over, 12000);
 ok(A.snap.players[seatB]?.bankrupt || A.snap.over, 'quá hạn ân: ghế ấy phá sản, tài sản về ngân hàng');
+
+/* ------------------------------------------------------------------ 6 */
+
+/* Lệnh quản trị cần ADMIN_TOKEN của server. `npm run server:test` đặt sẵn
+   `test-admin`; chạy vào server thật mà không có khoá thì bỏ qua phần này. */
+const TOKEN = process.env.ADMIN_TOKEN ?? (SERVER.includes('localhost') ? 'test-admin' : null);
+const HTTP = SERVER.replace(/^ws(s?):\/\//, 'http$1://');
+const admin = (path, method = 'GET', token = TOKEN) => fetch(`${HTTP}${path}`, {
+  method, headers: token ? { Authorization: `Bearer ${token}` } : {},
+});
+if (TOKEN) {
+  console.log('▸ 6. Lệnh quản trị: liệt kê và xoá phòng');
+  ok((await admin('/admin/rooms', 'GET', null)).status === 403, 'thiếu khoá thì bị chặn');
+  ok((await admin('/admin/rooms', 'GET', 'sai-khoa')).status === 403, 'sai khoá thì bị chặn');
+  const list = await (await admin('/admin/rooms')).json();
+  const row = list.rooms?.find((r) => r.code === R);
+  ok(!!row && row.phase === 'playing', 'danh sách có phòng đang chơi', JSON.stringify(row));
+  const W = await new Client(R, 'a-1').open();
+  const wiped = await (await admin(`/admin/wipe?code=${R}`, 'POST')).json();
+  ok(wiped.wiped?.[0] === R, 'xoá đúng phòng');
+  await until(() => W.closed, 4000);
+  ok(W.msgs.some((m) => m.t === 'wiped'), 'máy đang nối nhận tin "wiped"');
+  ok(W.closed, 'socket bị đóng');
+  const after = await (await admin('/admin/rooms')).json();
+  ok(!after.rooms.some((r) => r.code === R), 'phòng không còn trong danh sách');
+  const N = await new Client(R, 'n-1').open();
+  await until(() => N.roomView, 4000);
+  ok(N.roomView?.phase === 'lobby' && N.roomView.seats.length === 1 && N.roomView.hostId === 'n-1',
+    'vào lại đúng mã ấy là phòng mới tinh');
+  N.close();
+} else {
+  console.log('▸ 6. Lệnh quản trị: bỏ qua (không có ADMIN_TOKEN)');
+}
 
 A.close();
 spoof.close();

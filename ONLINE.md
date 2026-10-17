@@ -154,6 +154,29 @@ cũng nối vào đúng server ấy.
 Gói free của Workers đủ dùng: Durable Object kiểu SQLite là kiểu duy nhất gói free
 cho phép, và Hibernation API không tính giờ chạy lúc phòng im.
 
+## Quản trị phòng
+
+```bash
+npm run rooms -- list            # danh sách phòng, 40 phòng đầu kèm tình trạng
+npm run rooms -- wipe ABCD       # xoá một phòng
+npm run rooms -- wipe            # xoá hết (gõ XOA để xác nhận; --yes để bỏ qua)
+```
+
+Lệnh gọi `/admin/rooms` và `/admin/wipe` của Worker, kèm `Authorization: Bearer
+<ADMIN_TOKEN>`. Server lấy từ `--server`, `GAME_SERVER` hoặc `VITE_GAME_SERVER`
+trong `.env`; khoá lấy từ `ADMIN_TOKEN` (biến môi trường hoặc `.env`). Trên
+Cloudflare, khoá là secret: `npx wrangler secret put ADMIN_TOKEN --config
+server/wrangler.toml`. Server thiếu secret thì `/admin/*` luôn trả 403.
+
+- Cloudflare không cho Worker liệt kê Durable Object, nên có thêm object
+  `RoomIndex` giữ danh mục mã phòng. Phòng ghi tên vào danh mục ở lần nối đầu
+  tiên sau khi có bản này (phòng cũ chưa ai vào lại thì chưa có tên).
+- Xoá phòng: server gửi `{t:'wiped'}` rồi đóng socket bằng mã 4004 (máy khách
+  không nối lại), xoá hẹn giờ và toàn bộ storage của phòng. Máy khách hiện hộp
+  "Phòng đã bị xoá" rồi về màn hình đầu. Vào lại đúng mã ấy là phòng mới tinh.
+- Mỗi lần gọi `/admin/wipe` xoá tối đa 20 phòng (gói free giới hạn 50 lần gọi
+  sang Durable Object khác trong một request); lệnh tự gọi lại tới khi hết.
+
 ## Kiểm thử
 
 ```bash

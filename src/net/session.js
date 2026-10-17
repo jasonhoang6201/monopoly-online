@@ -104,6 +104,7 @@ export async function startSession(controller) {
   for (;;) {
     const room = new GameRoom(code, me(), mySecret());
     window.__room = room;   // để soi phòng từ devtools và từ bộ kiểm thử
+    room.on.wiped = () => wipedModal(room.code);
 
     /* Bắt ván **trước khi** vào phòng. Người quay lại giữa ván được server gửi
        trạng thái ngay sau `welcome`; cài người nghe sau khi `join()` xong là
@@ -156,6 +157,20 @@ export async function startSession(controller) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Phòng bị xoá bằng lệnh quản trị (`npm run rooms -- wipe`): báo rồi về màn hình đầu. */
+async function wipedModal(code) {
+  dropSeat(code);
+  await openModal({
+    eyebrow: `PHÒNG ${code}`,
+    title: 'Phòng đã bị xoá',
+    sub: 'Máy chủ vừa dọn phòng này. Mở phòng mới để chơi tiếp.',
+    dismissible: false,
+    peekable: false,
+    buttons: [{ label: 'Về màn hình đầu', value: 'home', cls: 'btn-primary' }],
+  });
+  window.location.href = homeUrl();
+}
 
 /** Chờ tới khi `get()` trả về giá trị thật, hoặc hết giờ. */
 function waitFor(get, ms) {
