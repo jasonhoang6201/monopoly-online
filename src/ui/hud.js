@@ -643,6 +643,32 @@ export class Broadcast {
    */
   show(title, html, o = {}) {
     this.onShow?.(title, html, o);
+    this.queue.push([title, html, o]);
+    if (!this.dripTimer) this.drip();
+    /* Trả về ngay: dòng thông báo đứng đó cho người đọc, nhưng không giữ nhịp
+       ván. Trước đây mỗi dòng giữ mạch 900ms, một lượt có chục dòng là chục
+       giây cả bàn ngồi chờ chữ chạy. Mấy chỗ `await` cũ vẫn để nguyên, giờ là
+       chờ một lời hứa đã xong. */
+    return Promise.resolve();
+  }
+
+  /**
+   * Nhả hàng chờ từng dòng một. Ván chạy tiếp ngay nên một nước đi có thể bắn
+   * bốn năm dòng trong cùng một khung hình; hiện cùng lúc thì chúng chồng hiệu
+   * ứng vào nhau và người chơi không biết đọc dòng nào trước. Mỗi dòng cách
+   * dòng trước `GAP_MS`; hàng dồn quá 3 dòng thì rút còn `FAST_MS`, để chữ
+   * không tụt lại sau bàn cờ quá một hai giây.
+   */
+  drip() {
+    const GAP_MS = 420;
+    const FAST_MS = 200;
+    const next = this.queue.shift();
+    if (!next) { this.dripTimer = null; return; }
+    this.render(...next);
+    this.dripTimer = setTimeout(() => this.drip(), this.queue.length > 3 ? FAST_MS : GAP_MS);
+  }
+
+  render(title, html, o) {
     const div = document.createElement('div');
     div.className = `bcast${o.kind ? ` kind-${o.kind}` : ''}`;
     div.innerHTML = `<div class="bcast-title">${title}</div><div class="bcast-text">${html}</div>`;
@@ -655,11 +681,6 @@ export class Broadcast {
       div.classList.add('out');
       setTimeout(() => div.remove(), 340);
     }, ms);
-    /* Trả về ngay: dòng thông báo đứng đó cho người đọc, nhưng không giữ nhịp
-       ván. Trước đây mỗi dòng giữ mạch 900ms, một lượt có chục dòng là chục
-       giây cả bàn ngồi chờ chữ chạy. Mấy chỗ `await` cũ vẫn để nguyên, giờ là
-       chờ một lời hứa đã xong. */
-    return Promise.resolve();
   }
 
   /**
@@ -683,5 +704,10 @@ export class Broadcast {
     }
   }
 
-  clear() { this.el.innerHTML = ''; }
+  clear() {
+    this.queue = [];
+    clearTimeout(this.dripTimer);
+    this.dripTimer = null;
+    this.el.innerHTML = '';
+  }
 }
