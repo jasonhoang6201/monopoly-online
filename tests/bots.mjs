@@ -103,7 +103,10 @@ while (Date.now() - t0 < 6 * 60000) {
     if (!learnedOffTurn && botTurnsSeen.size >= 2) {
       await page.evaluate(() => {
         const c = window.__monopoly.controller;
+        /* Ván thật nằm ở engine, và engine đã chạy xong cả lượt bot trong lúc
+           màn hình còn đang diễn lại: cộng điểm ở cả hai bên. */
         c.state.players[0].skillPoints += 2;
+        c.host.engine.st.players[0].skillPoints += 2;
         c.refreshSkillBtn();
       });
       await page.locator('#skill-btn:not([hidden])').click();
@@ -203,14 +206,19 @@ if (end.over || end.players[1].bankrupt) {
   const target = await page.evaluate(async () => {
     const { GROUP_TILES } = await import('/src/data/board.js');
     const { DECKS } = await import('/src/data/cards.js');
-    const st = window.__monopoly.controller.state;
+    /* Ván thật nằm ở engine, màn hình có thể còn đang diễn lại lượt bot (ảnh
+       chụp diễn sau sẽ đè phần sửa tay): bày tình huống ở cả hai bên. */
+    const c = window.__monopoly.controller;
+    const eng = c.host.engine.st;
     const ids = Object.values(GROUP_TILES).find((g) => g.length >= 2
-      && g.every((id) => st.housesOn(id) === 0 && !st.isMortgaged(id)));
+      && g.every((id) => eng.housesOn(id) === 0 && !eng.isMortgaged(id)));
     if (!ids) return null;
-    ids.forEach((id, i) => st.owner.set(id, i === 0 ? 0 : 1));
-    st.players[1].money = Math.max(st.players[1].money, 3000);
-    st.takeCard(1, 'chance', DECKS.chance.findIndex((c) => c.type === 'seize'));
-    window.__monopoly.controller.hud.refresh();
+    for (const st of [c.state, eng]) {
+      ids.forEach((id, i) => st.owner.set(id, i === 0 ? 0 : 1));
+      st.players[1].money = Math.max(st.players[1].money, 3000);
+      st.takeCard(1, 'chance', DECKS.chance.findIndex((x) => x.type === 'seize'));
+    }
+    c.hud.refresh();
     return ids[0];
   });
   ok(target != null, `bày được khu màu để thử (ô ${target})`);
@@ -248,8 +256,15 @@ if (inBotTurn) {
     return Promise.race([handoff('Máy 3', '#fff'), new Promise((r) => setTimeout(() => r('mở'), 300))]);
   }) === true, 'chuyền máy sang ghế máy thì bỏ qua');
 
-  // Nút cây kỹ năng giữa lượt bot: hỏi người nào học
-  await page.locator('#skill-btn:not([hidden])').click();
+  /* Nút cây kỹ năng giữa lượt bot: hỏi người nào học. Bot giờ đi hết lượt
+     trong vài giây (không còn chờ chữ chạy), nên lúc tới đây lượt ấy đã qua;
+     ép bàn đang vẽ về lượt bot rồi bấm ngay trong cùng một nhịp, kẻo ảnh
+     chụp kế tiếp đưa lượt về người thật trước cú bấm. */
+  await page.evaluate(() => {
+    const c = window.__monopoly.controller;
+    c.state.turn = 2;
+    document.querySelector('#skill-btn').click();
+  });
   const ask = page.locator('.scrim.show .modal-title', { hasText: 'Ai học kỹ năng?' });
   await ask.waitFor({ timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(2000);

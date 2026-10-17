@@ -3,7 +3,7 @@
  * đồng hồ (cả bàn ngồi quanh một máy, không ai treo được ai), rồi bảng giá chốt
  * phiên — kể cả phiên ế.
  *
- * Bản online có `auction-online.mjs` lo phần hết giờ và tab nằm nền.
+ * Bản online có `online.mjs` (phần 4) lo phiên đấu giá hỏi nhiều máy cùng lúc.
  *
  * Cần dev server đang chạy ở cổng 5178.
  */
@@ -130,11 +130,13 @@ const state = () => page.evaluate(() => {
 
 /* ------------------------------------------------- 4 · ván chạy tiếp sau phiên */
 {
-  const acts = await page.evaluate(() => {
-    const c = window.__monopoly.controller;
-    c.beginTurn();
-    return document.querySelectorAll('#actions button').length;
-  });
+  /* Máy đang trong tay người ghi giá cuối: màn "Chuyền máy lại" hiện trước khi
+     bày thanh nút cho người đang đi. */
+  await page.evaluate(() => window.__monopoly.controller.beginTurn());
+  const back = page.locator('.scrim.show button.btn', { hasText: 'Tiếp tục' });
+  if (await back.count()) await back.click();
+  await page.waitForTimeout(400);
+  const acts = await page.evaluate(() => document.querySelectorAll('#actions button').length);
   ok('thanh nút bày lại sau phiên đấu giá', acts > 0, String(acts));
 }
 

@@ -12,3 +12,4 @@ assets/raw/
 
 # Bộ đệm dựng sẵn của Vite — máy nào chạy dev cũng tự sinh lại
 .vite/
+.wrangler/

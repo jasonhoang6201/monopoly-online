@@ -61,7 +61,7 @@
  * Ván chủ đề mặc định giữ nguyên bộ thẻ cũ, không lệch tỉ lệ ra.
  *
  * Luật thực thi nằm ở `core/events.js` (phần thuần dữ liệu) và
- * `game/eventRunner.js` (phần diễn).
+ * `engine/events.js` (phần thi hành).
  */
 import { money } from './board.js';
 

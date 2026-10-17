@@ -1,6 +1,6 @@
 # Cờ Tỷ Phú — Sài Gòn · Gia Định (bản online)
 
-> Bản **nhiều máy** chạy trên Supabase Realtime.
+> Bản **nhiều máy**: luật chạy trên máy chủ Cloudflare Durable Object, mỗi phòng một object.
 > Kiến trúc mạng cùng lộ trình: [`ONLINE.md`](ONLINE.md).
 
 Monopoly phiên bản Việt Nam, chạy hoàn toàn **local** bằng thư viện [Phaser 3](https://phaser.io)
@@ -16,7 +16,8 @@ và **phụng** ở ô Khí Vận / Cơ Hội.
 
 ```bash
 npm install
-cp .env.example .env    # điền khoá Supabase, xem ONLINE.md
+cp .env.example .env    # điền khoá Supabase (số liệu kỹ năng) và VITE_GAME_SERVER, xem ONLINE.md
+npm run server          # máy chủ ván cờ trên máy (wrangler dev, cổng 8787), cần cho bản online
 npm run dev             # mở http://localhost:5174
 ```
 
@@ -344,15 +345,17 @@ src/
   ui/caseOpen.js           băng chuyền bóc thẻ: dải thẻ trôi rồi hãm lại ở thẻ trúng
   ui/skillTree.js          bảng cây kỹ năng
   ui/lobby.js              phòng chờ, chọn nấc Thời Cuộc và chủ đề
-  game/controller.js       điều phối lượt chơi, nối luật ↔ hình ảnh ↔ giao diện
-  game/eventRunner.js      thi hành thẻ Thời Cuộc, hỏi nhiều người cùng lúc
-  game/skillPlay.js        phần kỹ năng phải hỏi người chơi hoặc có hoạt cảnh
+  engine/                  luật ván dạng generator: nhận action, trả sự kiện; chạy cả trên trình duyệt lẫn server
+  game/controller.js       diễn sự kiện của engine lên bàn cờ, mở hộp thoại, gửi câu trả lời
+  game/localHost.js        chủ ván của bản một máy: giữ engine ngay trong trình duyệt
+  game/skillUi.js          bảng chọn kỹ năng phía máy khách (cược, kho kỹ năng, cây kỹ năng)
   theme/                   đổi chủ đề (Halloween, Giáng sinh)
   audio/                   nhạc và âm thanh tổng hợp, kèm bộ theo mùa
-  net/                     phòng, phiên, đường truyền, danh tính — xem ONLINE.md
+  net/                     phòng trên máy chủ (gameServer.js), phiên, danh tính — xem ONLINE.md
   core/telemetry.js        bộ đệm sự kiện kỹ năng (học, tẩy, phát huy kèm tiền có dấu)
   net/analytics.js         gom sự kiện thành batch, gửi về Supabase Postgres
   stats/                   trang /stats.html: dashboard cân bằng kỹ năng
+server/                    Worker + Durable Object GameRoom (Cloudflare), dùng lại src/engine
 supabase/                  migration SQL + hướng dẫn cho phần số liệu
 ```
 
@@ -382,24 +385,25 @@ npx vite --port 5178 --strictPort &
 npm test
 ```
 
-Riêng bộ kiểm thử phòng online chạy ở **cổng 5179** vì nó mở nhiều tab cùng lúc:
+Riêng bộ kiểm thử phòng online chạy ở **cổng 5179** và cần máy chủ ván cờ bật cờ
+`TEST_TIMING=1` (cho bài kiểm thử hạ hạn chờ và dựng sẵn tình huống):
 
 ```bash
+npm run server:test &                 # wrangler dev, cổng 8787
 npx vite --port 5179 --strictPort &
-npm run test:online              # lõi, 3 tab
-node tests/online.mjs --full     # thêm phần đổ đầy phòng 6 người, chậm
+npm run test:online                   # server, online, online-flows, online-net
 ```
 
 | Tệp | Kiểm tra |
 |---|---|
-| `tests/online.mjs` | Phòng online đa-tab: đường mời, màu do phòng chỉ định, tên chỉ hiện sau khi bấm Sẵn sàng, Khai cuộc khoá tới khi cả phòng sẵn sàng, có người rời thì ghế và màu mở lại, mời ra khỏi phòng chờ, khoá lượt theo người, trạng thái lan giữa các máy, giao dịch giữa hai máy, đứt mạng giữa ván rồi tự nối lại, rớt mạng rồi vào lại đúng ghế, đi luôn quá hạn thì đất về ngân hàng, hết giờ đi và hết giờ trả lời giao dịch. Cờ `--full` thêm phần sức chứa 6 người |
+| `tests/server.mjs` | Giao thức máy chủ không qua trình duyệt: sổ ghế, khoá giữ ghế, chỉ chủ phòng mời ra / khai cuộc, 120 câu hỏi hai máy cùng một ảnh chụp, máy này không nói thay ghế khác, hết giờ thì server đi hộ, rớt mạng rồi vào lại, quá hạn thì bị gạch tên |
+| `tests/online.mjs` | Ba máy (ba browser context) qua máy chủ thật: đường mời giữ `?server=`, mời ra, Khai cuộc khoá tới khi cả phòng sẵn sàng, lắc giành quyền và 6 lượt bằng thanh nút với ván khớp nhau, chat mang tên theo ghế, đấu giá hỏi ba máy cùng lúc, F5 giữa ván về đúng ghế, ngồi im hết giờ, đóng tab quá hạn thì phá sản |
+| `tests/online-flows.mjs` | Ba máy qua máy chủ: giao dịch (hộp duyệt và câu hỏi chuộc ở đúng máy người nhận, tiền chuộc trừ đúng túi), học kỹ năng lúc chưa tới lượt không làm khựng lượt đang chạy, Hội Đồng Hồn Ma bầu từ máy người đã phá sản |
+| `tests/online-net.mjs` | Hai máy, mạng chập chờn: đứt 6 giây lúc ngồi xem, đứt 2 giây lúc đang đi (giữ lượt), đứt quá `skipMs` (mất lượt), socket chết lặng (server và máy khách tự phát hiện bằng nhịp ping), `setOffline` cả máy |
 | `tests/play-through.mjs` | Chơi tự động 22 lượt với 4 người, bắt lỗi JS |
 | `tests/features.mjs` | Xây nhà đều tay, giới hạn 32 căn, lên khách sạn trả lại 4 nhà, thế chấp/chuộc lãi 10%, giao dịch hai chiều kèm đất thế chấp |
 | `tests/endgame.mjs` | Đổ đôi 3 lần vào tù, các cách ra tù, phá sản trả tài sản về ngân hàng, thắng cuộc |
 | `tests/jail-debt.mjs` | Đáp xuống ô Vào Tù là hết lượt, ở tù cầu đôi từng lượt một (hụt lần 3 nộp 50$), vỡ nợ ngay khi tổng tài sản không đủ trả |
 | `tests/audio.mjs` | Đo biên độ RMS thật: nhạc có tiếng ở màn hình chờ, **im hẳn sau khi khai cuộc**, 11 hiệu ứng đều kêu; kiểm tra hai công tắc độc lập |
-| `tests/chat-online.mjs` | Chat hai máy: gửi từ phòng chờ, số chưa đọc và dòng trích ở máy nhận, tên lấy từ sổ ghế, HTML trong tin hiện thành chữ, hạn mức 5 tin / 6 giây; vào ván rồi thì Enter/Esc gõ trong ô chat không bấm "Học" của cây kỹ năng, không chốt hay huỷ phiên chọn ô |
-| `tests/cards-online.mjs` | Băng chuyền bóc thẻ hai máy: cùng `seed` thì hai máy dựng cùng số ô, dừng cùng một ô, lật cùng một mặt thẻ; hộp ở máy ngồi xem tự đóng |
 | `tests/events.mjs` | Thẻ Thời Cuộc: thanh áp lực chỉ chạy khi bàn đã bão hoà, ngưỡng hạ dần, hệ số tiền thuê / giá xây / lương, ô mất giấy tờ, cấn nợ tự động, ảnh chụp mang đủ phần mới (kể cả ảnh chụp cũ thiếu trường), và **cả tám thẻ Kỳ 2 chạy thật từ đầu tới cuối** |
-| `tests/events-online.mjs` | Nấc luật đồng bộ trong phòng chờ, thẻ hiện ở mọi máy, và một **phiên đấu giá kín hai máy** chạy trọn: ai trả cao thì lấy đất, tiền trừ đúng, sổ chủ đất khớp nhau |
 | `tests/ui-v2.mjs` | Độ nét theo DPR, bàn cờ chiếm hết khoảng trống và dựng lại khi đổi cỡ cửa sổ, bảng tài sản người chơi, chi tiết ô khi bấm vào bàn cờ, thẻ đất trong danh sách |

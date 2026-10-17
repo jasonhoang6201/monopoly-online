@@ -9,8 +9,7 @@
 import { openModal } from './modal.js';
 import { TOKENS, MAX_PLAYERS } from '../core/state.js';
 import { money, START_MONEY } from '../data/board.js';
-import { inviteLink } from '../net/room.js';
-import { transportKind } from '../net/transport.js';
+import { inviteLink } from '../net/gameServer.js';
 import { myName, setMyName } from '../net/identity.js';
 import { EVENT_LEVELS } from '../data/events.js';
 import { THEMES, themeKey } from '../data/themes.js';
@@ -21,13 +20,12 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /**
- * @param {import('../net/room.js').Room} room
+ * @param {import('../net/gameServer.js').GameRoom} room
  * @param {{close?:Function}} [handle] nhận lại hàm đóng, để phiên chơi tự đóng
  *   phòng chờ khi chủ phòng khai cuộc
  * @returns {Promise<'start'|'started'|'kicked'|'closed'|'left'>}
  */
 export function lobbyModal(room, handle = {}) {
-  const local = transportKind() === 'local';
   /** Tên đang gõ — chỉ nằm trên máy này cho tới khi bấm "Sẵn sàng". */
   let draft = myName() || '';
 
@@ -56,9 +54,6 @@ export function lobbyModal(room, handle = {}) {
             <input id="lobby-link" type="text" readonly value="${esc(link)}" />
             <button class="btn btn-gold" id="lobby-copy" type="button">Chép</button>
           </div>
-          ${local ? `<p class="lobby-warn">Chưa có khoá Supabase nên đường mời này
-            <b>chỉ nối các tab trên cùng máy</b>. Muốn chơi nhiều máy thì
-            điền <code>.env.local</code> theo <code>.env.example</code>.</p>` : ''}
         </div>
         <div class="lobby-count"></div>
         <div class="lobby-seats"></div>

@@ -1,6 +1,6 @@
 /**
  * Luật quyết định của bot theo ba cấp Dễ / Vừa / Khó — thuần dữ liệu, không
- * đụng Phaser hay DOM, để `game/bot.js` (ván thật) và `tests/gamesim.mjs`
+ * đụng Phaser hay DOM, để `engine/bot.js` (ván thật) và `tests/gamesim.mjs`
  * (mô phỏng cả ván, `--bots`) dùng chung đúng một bộ luật. Số trong `LEVELS`
  * chỉnh bằng mô phỏng ấy: chạy `npm run sim:bots` sau mỗi lần sửa.
  *

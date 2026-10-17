@@ -76,6 +76,23 @@ export function setMyName(name) {
   return clean;
 }
 
+/**
+ * Khoá giữ ghế của id hiện tại. Máy chủ ván cờ chỉ lưu băm của nó lúc người
+ * này vào phòng lần đầu; vào lại phải đưa đúng khoá. Để ở localStorage theo
+ * id, nên tab mở lại nhận lại id cũ (`reclaimSeat`) cũng nhận được khoá cũ.
+ */
+export function mySecret() {
+  const key = `monopoly.secret.${myId()}`;
+  try {
+    let s = localStorage.getItem(key);
+    if (!s) { s = randomId() + randomId(); localStorage.setItem(key, s); }
+    return s;
+  } catch {
+    // localStorage bị chặn: khoá chỉ sống tới hết tab, đủ cho F5 thì không — chấp nhận
+    return (globalThis.__seatSecret ??= randomId() + randomId());
+  }
+}
+
 /** Danh tính gọn để gửi lên phòng. */
 export function me() {
   return { id: myId(), name: myName() || 'Khách' };

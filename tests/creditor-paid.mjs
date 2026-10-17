@@ -251,9 +251,10 @@ await page.evaluate(() => {
 await page.waitForTimeout(1400);
 await clickDanger();
 await page.waitForTimeout(4000);
-await drain(12000);
-await idle();
+/* Đọc trước khi dọn hộp thoại: Cô Ba vỡ nợ thì bàn chỉ còn Chú Hoả, ván hạ
+   màn ngay, mà `drain` sẽ bấm "Chơi tiếp" sang ván mới với vốn 750$. */
 s = await st();
+await drain(12000);
 log(`  Bảy Viễn (đã phá sản) = ${s.p[0].m}$`);
 check(s.p[0].m === 0, 'người đã phá sản không được cộng thêm đồng nào');
 

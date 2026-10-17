@@ -381,7 +381,7 @@ export function respec(player) {
 
 /* ================================================================
    Tác dụng trong ván — những phần tính thuần bằng số, không đụng giao diện.
-   Phần cần hỏi người chơi hay diễn hoạt cảnh nằm ở game/skillPlay.js.
+   Phần cần hỏi người chơi hay diễn hoạt cảnh nằm ở engine/skills.js.
    ================================================================ */
 
 /**

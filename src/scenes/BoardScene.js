@@ -813,11 +813,11 @@ export default class BoardScene extends Phaser.Scene {
   /**
    * Quân nhảy từng ô một tới đích, mỗi ô `STEP_MS`. Trước đây 190ms một ô: một
    * bước lắc trung bình 7 ô mất 1,3 giây, cộng thêm thẻ di chuyển và Tàu Tốc
-   * Hành thì cả bàn ngồi nhìn quân đi. 120ms còn chừng 0,85 giây mà vẫn đếm
-   * được từng ô qua tiếng gõ.
+   * Hành thì cả bàn ngồi nhìn quân đi. 85ms còn chừng 0,6 giây cho 7 ô mà vẫn
+   * đếm được từng ô qua tiếng gõ.
    */
   moveToken(playerIndex, fromPos, steps, onPass) {
-    const STEP_MS = 120;
+    const STEP_MS = 85;
     const HALF = STEP_MS / 2;
     const spr = this.tokens[playerIndex];
     if (!spr || steps === 0) return Promise.resolve();
@@ -1040,8 +1040,8 @@ export default class BoardScene extends Phaser.Scene {
     const S = this.size;
     const G = S * 9.5;            // trọng lực, điểm ảnh/giây²
     const REST = 0.42;            // hệ số nảy sau mỗi lần chạm bàn
-    const SETTLE = 850;           // mốc bắt đầu nắn về mặt số (ms)
-    const SNAP = 280;             // thời gian nắn (ms)
+    const SETTLE = 550;           // mốc bắt đầu nắn về mặt số (ms) — hạ từ 850 cho ván nhanh
+    const SNAP = 220;             // thời gian nắn (ms)
     const values = [a, b];
     // Viên đứng yên mà đang ẩn (máy vừa vào giữa chừng) thì cho lăn luôn, khỏi mất một viên
     const lives = this.dice.map((d, i) => only == null || only === i || !d.visible);
