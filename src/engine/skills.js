@@ -9,10 +9,10 @@ import { BOARD, money, tileLabel } from '../data/board.js';
 import {
   skillById, has, param, roll, rolled, ready, usesLeft, spend, onLap, levyRate, levyEach, levelOf,
   freeHouseTarget, credit, rentGains, lateFee, lottoPrize, tollStops, forecloseOffers,
-  tourPassed, leftoverOffers, isOff, setSkillOn, learnSkill, canSeize, teleportTargets, tally, respec,
+  tourPassed, leftoverOffers, isOff, setSkillOn, learnSkill, canSeize, teleportTargets, tally, respec, buyPoint,
 } from '../core/skills.js';
 import { cardType } from '../core/cards.js';
-import { SKILLS } from '../data/skills.js';
+import { SKILLS, POINT_PRICE } from '../data/skills.js';
 import { kitCells, canSit, sitsLeft, pendingBet } from './kit.js';
 
 const STATIONS = BOARD.filter((t) => t.type === 'station').map((t) => t.id);
@@ -123,20 +123,22 @@ export class SkillRules {
   }
 
   /**
-   * Thao tác trên cây kỹ năng trong lượt mình: học / lên level, tẩy điểm.
+   * Thao tác trên cây kỹ năng trong lượt mình: học / lên level, tẩy điểm, mua điểm.
    * Đóng cây thì loan tin cho cả bàn những gì đã đổi — so level trước và sau.
    *
-   * @param {Array<{op:'learn'|'respec', id?:string}>} ops
+   * @param {Array<{op:'learn'|'respec'|'buy', id?:string}>} ops
    */
   *applyTree(p, ops) {
     const st = this.st;
     if (!Array.isArray(ops) || !ops.length) return;
     const before = Object.fromEntries(SKILLS.map((s) => [s.id, levelOf(p, s.id)]));
     const wasOn = new Set(p.skills.filter((id) => has(p, id)));
+    const bought0 = p.boughtPoints ?? 0;
     let changed = 0;
     for (const o of ops.slice(0, 60)) {
       if (o?.op === 'learn' && typeof o.id === 'string') changed += learnSkill(p, o.id, st).ok ? 1 : 0;
       else if (o?.op === 'respec') changed += respec(p)?.ok === false ? 0 : 1;
+      else if (o?.op === 'buy') changed += buyPoint(p).ok ? 1 : 0;
     }
     if (!changed) return;
     this.g.sync();
@@ -149,6 +151,8 @@ export class SkillRules {
         return `<b>${s.name}</b>${lv > 1 ? ` lên level ${lv}` : ''}`;
       });
     const lines = [];
+    const bought = (p.boughtPoints ?? 0) - bought0;
+    if (bought > 0) lines.push(`${named(p)} mua <b>${bought} điểm kỹ năng</b>, trả <span class="down">${money(bought * POINT_PRICE)}</span>.`);
     if (wiped) {
       lines.push(`${named(p)} tẩy toàn bộ kỹ năng để học lại từ đầu${gained.length ? `, rồi học ${gained.join(', ')}` : ''}.`);
     } else if (gained.length) lines.push(`${named(p)} học ${gained.join(', ')}.`);

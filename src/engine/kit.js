@@ -14,7 +14,7 @@
  *   - việc làm ngay (`act`): Ngồi Yên trong tù.
  */
 import {
-  skillById, has, param, ready, usesLeft, leftoverOffers, forecloseOffers, isOff, switchable,
+  skillById, has, param, ready, usesLeft, leftoverOffers, forecloseOffers, isOff, switchable, waitText,
 } from '../core/skills.js';
 
 /** Còn ngồi yên được không (nút Ngồi Yên trong tù). */
@@ -43,7 +43,7 @@ export function kitCells(st, p, rolled) {
 function listCells(st, p, rolled) {
   const out = [];
   const jail = p.inJail;
-  const wait = (id) => `Chờ ${p.cooldowns[id]} lần qua ô Bắt Đầu`;
+  const wait = (id) => waitText(p, id);
   const beforeRoll = rolled ? 'Chỉ dùng trước khi lắc' : jail ? 'Không dùng khi đang ở tù' : '';
   const cell = (id, o) => { if (has(p, id)) out.push({ id, switch: switchable(skillById(id)), ok: true, ...o }); };
   const toggle = (id) => cell(id, ready(p, id) ? {} : { ok: false, why: wait(id) });

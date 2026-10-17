@@ -9,7 +9,7 @@
  */
 import { money, tileLabel } from '../data/board.js';
 import {
-  skillById, has, param, lottoPrize, leftoverOffers, forecloseOffers, isOff, teleportTargets,
+  skillById, has, param, lottoPrize, leftoverOffers, forecloseOffers, isOff, teleportTargets, waitText,
 } from '../core/skills.js';
 import { cardType, isKeepable, moveDest, repairBill } from '../core/cards.js';
 import { cardEffect, CARD_KINDS, DECK_META, DECKS } from '../data/cards.js';
@@ -109,7 +109,7 @@ export class SkillUi {
   cellText(p, c, d) {
     const st = this.st;
     if (!c.ok) return c.why;
-    const wait = (id) => `Chờ ${p.cooldowns[id]} lần qua ô Bắt Đầu`;
+    const wait = (id) => waitText(p, id);
     let s;
     switch (c.id) {
       case 'ddU': s = d.on ? `Tất tay cửa ${PARITY_NAME[d.val]} khi Chốt` : 'Bấm để chọn cửa, đoán với cả bàn'; break;
@@ -423,7 +423,7 @@ export class SkillUi {
    * ngay một action, để máy khác thấy ngay trong lúc cây còn mở; ván đang vẽ
    * đổi theo ảnh chụp engine gửi về.
    *
-   * Trong lượt mình (`manage`) được tẩy điểm, thao tác đi qua thanh nút
+   * Trong lượt mình (`manage`) được tẩy điểm và mua điểm, thao tác đi qua thanh nút
    * (`tree`). Ngoài lượt chỉ học / lên level qua action `learn` — lượt người
    * khác vẫn chạy.
    *
@@ -432,7 +432,8 @@ export class SkillUi {
   async openTree(p, o = {}) {
     if (this.treeOpen) return null;
     const manage = o.manage !== false;
-    let learned = false;
+    /** Lần `onChange` kế tiếp đi kèm thao tác nào; không kèm gì là một lần tẩy điểm. */
+    let paired = false;
     this.treeOpen = true;
     // Bộ kiểm thử vừa sửa tay ván: đẩy vào engine trước khi cây đổi ván đang vẽ
     if (manage) this.g.testSync(null);
@@ -446,14 +447,17 @@ export class SkillUi {
         state: () => this.st,
         manage,
         onLearn: (id) => {
-          learned = true;
+          paired = true;
           if (manage) this.g.act({ do: 'tree', ops: [{ op: 'learn', id }] }, keep);
           else o.onLearn?.(id);
         },
+        onBuy: () => {
+          paired = true;
+          if (manage) this.g.act({ do: 'tree', ops: [{ op: 'buy' }] }, keep);
+        },
         onChange: () => {
-          // Lần đổi không đi kèm lần học là một lần tẩy điểm
-          if (!learned && manage) this.g.act({ do: 'tree', ops: [{ op: 'respec' }] }, keep);
-          learned = false;
+          if (!paired && manage) this.g.act({ do: 'tree', ops: [{ op: 'respec' }] }, keep);
+          paired = false;
           this.g.hud.refresh();
           this.g.refreshSkillBtn();
         },

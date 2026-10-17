@@ -381,6 +381,7 @@ function buyHtml(player) {
  *   mở cây ngoài lượt của mình: chỉ học và lên level
  * @param {()=>void} [o.onChange] gọi sau mỗi lần nâng cấp hoặc tẩy điểm
  * @param {(id:string)=>void} [o.onLearn] gọi sau mỗi lần học ô mới hoặc lên level
+ * @param {()=>void} [o.onBuy] gọi sau mỗi lần mua 1 điểm kỹ năng
  * @param {()=>void} [o.onClose] bấm nút ✕ trên thanh điểm
  * @param {()=>?object} [o.state] trả GameState hiện tại — điều kiện lên level
  *   theo tài sản (số ô, tổng tài sản, số màu) cần đọc bàn cờ
@@ -575,6 +576,7 @@ export function mountSkillTree(player, o = {}) {
       ?.focus({ preventScroll: true });
     floatPoints('+1');
     audio.sfx('buy');
+    o.onBuy?.();
     o.onChange?.();
   }
 
@@ -695,7 +697,7 @@ export function openSkillTree(player, o = {}) {
   let closeModal = null;
   let scrimEl = null;
   const view = mountSkillTree(player, {
-    manage: o.manage, onChange: o.onChange, onLearn: o.onLearn, state: o.state, onClose: () => closeModal?.(null),
+    manage: o.manage, onChange: o.onChange, onLearn: o.onLearn, onBuy: o.onBuy, state: o.state, onClose: () => closeModal?.(null),
   });
   liveView = view;
 

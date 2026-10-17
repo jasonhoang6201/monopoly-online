@@ -22,7 +22,7 @@ import {
   demolishGroups, demolishPicks, othersOf, collectEach, repairBill, seizePrice, resumePrice, giftShares,
 } from '../core/cards.js';
 import { cardOf, CARD_KINDS, cardName, cardEffect, DECKS } from '../data/cards.js';
-import { has, offSpent, grantLapPoint, deedHolds } from '../core/skills.js';
+import { has, offSpent, tickTurns, grantLapPoint, deedHolds } from '../core/skills.js';
 import { track } from '../core/telemetry.js';
 import { noteRent, sampleMoney } from '../core/history.js';
 import { EventRules } from './events.js';
@@ -360,7 +360,7 @@ export class Rules {
     if (this.checkGameOver()) { this.sync(); return; }
     if (st.dryTurn) addPressure(st, PRESSURE.dryTurn);
     offSpent(st.current);
-    yield* this.expireMini(st.current);
+    tickTurns(st.current);
 
     const fired = eventDue(st);
     if (fired) {
@@ -375,7 +375,7 @@ export class Rules {
     this.fx('turn', { seat: st.turn });
   }
 
-  /** Chung Cư Mini: hết lượt thì nhà trên đất lẻ già thêm một lượt. */
+  /** Chung Cư Mini: qua ô Bắt Đầu thì nhà trên đất lẻ già thêm một nấc. */
   *expireMini(p) {
     const st = this.st;
     const gone = st.ageMini(p.id);
@@ -479,6 +479,7 @@ export class Rules {
       this.skills.paid(p, parts);
       yield* this.skills.lapEnd(p);
       if (st.over || p.bankrupt) return;
+      yield* this.expireMini(p);
     }
 
     // Trạm Thu Phí BOT: tính sau lương, để người vừa lãnh lương có tiền nộp phí
