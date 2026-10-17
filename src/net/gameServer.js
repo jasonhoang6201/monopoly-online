@@ -14,6 +14,39 @@ import { TOKENS, MAX_PLAYERS } from '../core/state.js';
 import { DEFAULT_EVENT_LEVEL } from '../data/events.js';
 import { DEFAULT_THEME } from '../data/themes.js';
 
+/** Mã phòng 4 ký tự, bỏ các chữ dễ đọc nhầm (I, O, 0, 1). */
+export function makeRoomCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(4));
+  return [...bytes].map((b) => alphabet[b % alphabet.length]).join('');
+}
+
+/**
+ * Phần truy vấn của địa chỉ phòng `code`. Giữ `?server=` nếu đang có: người
+ * thử bản preview trỏ sang server khác thì người được mời và lần F5 cũng phải
+ * nối vào đúng server ấy.
+ */
+export function roomQuery(code) {
+  const q = new URLSearchParams({ room: code });
+  const server = new URLSearchParams(window.location.search).get('server');
+  if (server) q.set('server', server);
+  return `?${q}`;
+}
+
+/** Đường mời — dán vào chat là người kia bấm vào vào thẳng phòng. */
+export function inviteLink(code) {
+  const u = new URL(window.location.href);
+  u.search = roomQuery(code);
+  u.hash = '';
+  return u.toString();
+}
+
+/** Mã phòng nằm trong địa chỉ hiện tại, nếu có. */
+export function roomFromUrl() {
+  const v = new URLSearchParams(window.location.search).get('room');
+  return v ? v.toUpperCase().slice(0, 8) : null;
+}
+
 /** Địa chỉ máy chủ: biến môi trường lúc build, mặc định là `wrangler dev` trên máy. */
 export function serverUrl() {
   const env = import.meta.env ?? {};
@@ -119,6 +152,8 @@ export class GameRoom {
     switch (m.t) {
       case 'welcome':
         this.skew = (m.now ?? Date.now()) - Date.now();
+        // Sổ ghế (`room`) tới sau tin này, mà `join()` xong là phiên chơi hỏi `phase` ngay
+        if (m.phase) this.phase = m.phase;
         this.setLink('ok');
         this.joinOk?.();
         this.joinOk = null;
@@ -163,7 +198,8 @@ export class GameRoom {
     }
   }
 
-  send(m) {
+  /** Gửi một tin thô lên server. */
+  post(m) {
     if (this.ws?.readyState !== 1) return false;
     this.ws.send(JSON.stringify(m));
     return true;
@@ -171,7 +207,7 @@ export class GameRoom {
 
   // ------------------------------------------------------------------ phòng chờ
 
-  setReady(name, ready) { this.send({ t: 'ready', name, ready }); }
+  setReady(name, ready) { this.post({ t: 'ready', name, ready }); }
 
   /** Đổi màu quân. Màu đã có người giữ thì từ chối ngay tại đây. */
   setToken(index) {
@@ -181,36 +217,36 @@ export class GameRoom {
     if (!Number.isInteger(index) || index < 0 || index >= TOKENS.length) return false;
     const held = this.tokenSeat(index);
     if (held >= 0 && held !== mine) return false;
-    return this.send({ t: 'pick', token: index });
+    return this.post({ t: 'pick', token: index });
   }
 
   kick(id) {
     if (this.phase !== 'lobby' || !this.isHost || id === this.me.id) return false;
-    return this.send({ t: 'kick', id });
+    return this.post({ t: 'kick', id });
   }
 
   setOptions(patch) {
     if (this.phase !== 'lobby' || !this.isHost) return false;
-    return this.send({ t: 'options', patch });
+    return this.post({ t: 'options', patch });
   }
 
-  startGame() { return this.send({ t: 'start' }); }
+  startGame() { return this.post({ t: 'start' }); }
 
   /** Tin nhắn chat. Server gắn id người nói, tên lấy từ sổ ghế ở máy nhận. */
-  chat(text) { return this.send({ t: 'chat', text }); }
+  chat(text) { return this.post({ t: 'chat', text }); }
 
   emit(name, data) {
-    if (name === 'meme') this.send({ t: 'meme', id: data?.id });
+    if (name === 'meme') this.post({ t: 'meme', id: data?.id });
   }
 
   // ------------------------------------------------------------------ chủ ván
 
-  /** Action cho engine — server tự gắn số ghế của máy này. */
-  sendAction(a) { return this.send({ t: 'act', a }); }
+  /** Action cho engine — server tự gắn số ghế của máy này. Cùng tên với `LocalHost.send`. */
+  send(a) { return this.post({ t: 'act', a }); }
 
   async leave() {
     if (this.left) return;
-    if (this.phase === 'lobby') this.send({ t: 'leave' });
+    if (this.phase === 'lobby') this.post({ t: 'leave' });
     this.left = true;
     try { this.ws?.close(1000, 'rời phòng'); } catch { /* đã đóng */ }
     this.ws = null;

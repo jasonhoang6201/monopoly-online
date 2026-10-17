@@ -164,6 +164,58 @@ export class Game {
       { ms: 4200 });
   }
 
+  /**
+   * Bản online: chủ ván là phòng trên máy chủ (`net/gameServer.js`). Khai cuộc
+   * và vào lại giữa ván đều đi qua đây với tin `start` / `game` của server:
+   * ảnh chụp, câu hỏi đang treo, và (lúc khai cuộc) dãy sự kiện đầu ván.
+   *
+   * @param {import('../net/gameServer.js').GameRoom} room
+   * @param {{snap:object, pending?:object, events?:Array<object>}} view
+   */
+  startOnline(room, view) {
+    audio.stopMusic();
+    this.net = room;
+    this.host = room;
+    room.onEvents = (evs) => this.receive(evs);
+    // Server gửi lại cả ván mỗi lần nối lại socket: sự kiện lỡ mất trong lúc đứt không đòi lại được
+    room.on.game = (m) => this.resume(m);
+    room.on.room = () => this.onRoomChange();
+    room.on.link = (status) => this.onLink(status);
+    // Server phát meme cho cả phòng, kể cả máy gửi — máy gửi đã tự hiện lúc bấm
+    room.on.meme = (m) => { if (m.seat !== room.mySeat) this.memes.receive(m.seat, m.id); };
+    this.mount(view.snap);
+    this.onRoomChange();
+    if (view.pending) this.receive([view.pending]);
+    if (view.events?.length) this.receive(view.events);
+  }
+
+  /** Nối lại giữa ván: bỏ hàng sự kiện cũ, áp ảnh chụp mới, dựng lại câu hỏi đang treo. */
+  resume(m) {
+    if (!this.state || !m?.snap) return;
+    this.queue = [];
+    this.sent.clear();
+    this.pending = null;
+    this.applySync(m.snap);
+    if (m.pending) this.receive([m.pending]);
+    else { this.clearClock(); this.hud.clearActions(); }
+  }
+
+  /** Sổ ghế của phòng đổi: ai đang rớt mạng, ai đã rời bàn. */
+  onRoomChange() {
+    if (!this.net || !this.state) return;
+    this.hud.setSeatStatus(this.net.seats.map((s, i) => (
+      this.state.players[i]?.bankrupt ? 'out' : (s.online ? 'live' : 'away')
+    )));
+  }
+
+  /** Đường truyền của máy mình đứt / thông. Đứt thì cất thanh nút: bấm cũng không tới server. */
+  onLink(status) {
+    if (!this.net || !this.state) return;
+    const lost = status === 'lost';
+    this.hud.setLinkLost(lost);
+    if (lost) { this.clearClock(); this.hud.clearActions(); }
+  }
+
   /** Dựng bàn cờ và giao diện từ ảnh chụp đầu tiên. */
   mount(snap) {
     this.state = fromSnapshot(snap);

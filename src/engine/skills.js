@@ -2,7 +2,7 @@
  * Kỹ năng trong ván — phần phải hỏi người chơi, chuyển tiền hoặc loan tin.
  * Phần tính bằng số thuần nằm ở core/skills.js và GameState.
  *
- * Chuyển từ `game/skillPlay.js`. Các bảng chọn (cược, kho kỹ năng, cây kỹ
+ * Các bảng chọn (cược, kho kỹ năng, cây kỹ
  * năng) giờ dựng ở máy khách; engine nhận kết quả rồi soát lại.
  */
 import { BOARD, money, tileLabel } from '../data/board.js';

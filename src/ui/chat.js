@@ -140,7 +140,7 @@ class ChatDock {
   /**
    * Gắn vào phòng vừa vào được. Đổi phòng thì khung trống lại: tin của phòng cũ
    * không thuộc về ai ở phòng mới.
-   * @param {import('../net/room.js').Room} room
+   * @param {import('../net/gameServer.js').GameRoom} room
    */
   attach(room) {
     this.room = room;

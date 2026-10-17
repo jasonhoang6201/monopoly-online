@@ -1,48 +1,29 @@
 /**
- * Phòng chơi online — kiểm thử bằng nhiều tab trong **cùng một browser context**.
+ * Bản online trên máy chủ ván cờ (Durable Object) — ba tab trình duyệt thật.
  *
- * Cùng context là điều kiện bắt buộc: chưa cắm khoá Supabase thì đường truyền
- * chạy qua BroadcastChannel, mà BroadcastChannel chỉ nối được các tab dùng
- * chung một kho lưu trữ. Mỗi tab có sessionStorage riêng nên vẫn là một người
- * chơi riêng — đúng thứ ta cần để giả lập nhiều máy.
+ * Mỗi người một browser context, như ba máy riêng. Luật chạy trên
+ * server, nên bài này không kiểm luật (bộ một máy và tests/engine.mjs lo) mà
+ * kiểm phần chỉ bản online mới có: phòng chờ, nhiều máy cùng thấy một ván,
+ * câu hỏi gửi nhiều người cùng lúc, chat, F5 giữa ván, hết giờ, bỏ bàn.
  *
- * Mặc định chạy **ba tab**: mỗi tab dựng một bàn cờ Phaser đầy đủ (nghìn nét vẽ
- * canvas, bốn tấm hoạ tiết), sáu tab cùng lúc thì máy nghẽn và mỗi tab mất hàng
- * phút mới xong. Phần đổ đầy phòng sáu người nằm sau cờ `--full`.
- *
- * Chạy: cần dev server ở cổng 5179
- *   npx vite --port 5179 --strictPort &
- *   node tests/online.mjs          # lõi, ~3 phút
- *   node tests/online.mjs --full   # thêm phần sức chứa, chậm
+ * Chạy: cần cả hai máy chủ
+ *   npm run server:test                 # wrangler dev, cổng 8787, TEST_TIMING=1
+ *   npx vite --port 5179 --strictPort   # bàn cờ
+ *   node tests/online.mjs
  */
 import { launchChrome } from './launch.mjs';
-import { pickTradeTiles } from './boardpick.mjs';
 import { playRollOff, orderOf } from './rolloff.mjs';
 
-const SHOT = process.env.SHOT_DIR
-  || '/private/tmp/claude-501/-Users-jasonhoang-Desktop-monopoly/7a09827d-43ef-49a5-9023-fcc4ac74181e/scratchpad';
-const BASE = 'http://localhost:5179/';
-const MAX = 6;
-const FULL = process.argv.includes('--full');
+const SERVER = process.env.GAME_SERVER ?? 'ws://localhost:8787';
+const BASE = `http://localhost:5179/?server=${encodeURIComponent(SERVER)}`;
 
 const errors = [];
 const fails = [];
-
-const browser = await launchChrome();
-const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
-
-function watch(page, tag) {
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(`[${tag}] ${m.text()}`); });
-  page.on('pageerror', (e) => errors.push(`[${tag}] ${e.message}`));
-  return page;
-}
-
 const ok = (cond, label, extra = '') => {
   console.log(`  ${cond ? '✓' : '✗'} ${label}${extra ? ` — ${extra}` : ''}`);
   if (!cond) fails.push(label);
 };
 
-/** Chờ tới khi hàm trả về true, hoặc hết giờ. */
 async function until(fn, ms = 12000, step = 200) {
   const t0 = Date.now();
   for (;;) {
@@ -52,28 +33,31 @@ async function until(fn, ms = 12000, step = 200) {
   }
 }
 
-const title = (page) => page.locator('.scrim.show .modal-title').first().textContent().catch(() => '');
-const seatCount = (page) => page.locator('.lobby-seat').count();
+const browser = await launchChrome();
+/* Mỗi người một context: mỗi context là một cửa sổ riêng nên tab nào cũng được
+   cấp khung hình (tab nền thì Phaser đứng), và mỗi người có kho lưu trữ riêng
+   như ba máy thật. */
+const newPage = async () => (await browser.newContext({ viewport: { width: 1280, height: 860 } })).newPage();
 
-/**
- * Chờ tab khởi động xong tới phòng chờ.
- *
- * Phải `bringToFront()` trước: Phaser dựng scene bằng `requestAnimationFrame`,
- * mà tab đang ẩn thì trình duyệt ngừng cấp khung hình — để nguyên thì tab mở
- * sau nằm im mãi ở màn hình đen.
- */
+function watch(page, tag) {
+  page.on('console', (m) => {
+    // Đóng tab / F5 làm socket đứt giữa chừng: trình duyệt ghi lỗi WebSocket, không phải lỗi mã
+    if (m.type() === 'error' && !/WebSocket/.test(m.text())) errors.push(`[${tag}] ${m.text()}`);
+  });
+  page.on('pageerror', (e) => errors.push(`[${tag}] ${e.message}`));
+  return page;
+}
+
 async function bootToLobby(page, ms = 90000) {
   await page.bringToFront();
   const mode = page.locator('.scrim.show button.btn', { hasText: 'Mở phòng online' });
   await until(async () => (await mode.count()) > 0 || (await page.locator('#lobby-link').count()) > 0, ms);
-  // Tab mở phòng phải chọn chế độ trước; tab vào bằng đường mời thì không.
   if (await mode.count()) await mode.click();
   await page.locator('#lobby-link').waitFor({ timeout: 30000 });
 }
 
-/** Mở một tab, vào phòng, gõ tên rồi bấm Sẵn sàng. */
 async function enter(url, name, tag, { ready = true } = {}) {
-  const page = watch(await ctx.newPage(), tag);
+  const page = watch(await newPage(), tag);
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await bootToLobby(page);
   await page.locator('.lobby-seat.is-me input.lobby-name').fill(name);
@@ -81,729 +65,231 @@ async function enter(url, name, tag, { ready = true } = {}) {
   return page;
 }
 
-/**
- * Trả lời mọi hộp thoại cho tới khi thanh nút hành động hiện lại.
- *
- * Không chờ cứng theo thời gian được: một cú lắc ra 11 ô thì quân nhảy từng ô
- * một, hộp thoại mua đất mãi mới mở.
- */
-async function settleTurn(page, ms = 30000) {
+const seatCount = (page) => page.locator('.lobby-seat').count();
+const title = (page) => page.locator('.scrim.show .modal-title').first().textContent().catch(() => '');
+
+/** Đọc controller của một tab. */
+const c = (page, fn, arg) => page.evaluate(
+  ([src, a]) => (0, eval)(src)(window.__monopoly.controller, a), [fn.toString(), arg],
+);
+
+/** Phần ván mà mọi máy phải thấy giống nhau. */
+const view = (page) => c(page, (g) => g.state && JSON.stringify({
+  turn: g.state.turn,
+  money: g.state.players.map((p) => p.money),
+  pos: g.state.players.map((p) => p.pos),
+  owner: [...g.state.owner.entries()].sort((a, b) => a[0] - b[0]),
+}));
+
+/** Chờ mọi tab diễn xong hàng sự kiện rồi so ván. */
+async function sameBoard(pages, ms = 20000) {
+  let last = [];
+  const same = await until(async () => {
+    const busy = await Promise.all(pages.map((p) => c(p, (g) => g.busy)));
+    if (busy.some(Boolean)) return false;
+    last = await Promise.all(pages.map(view));
+    return last.every((v) => v && v === last[0]);
+  }, ms, 300);
+  return { same, last };
+}
+
+/** Bấm các hộp thoại của lượt cho tới khi thanh nút hiện lại. */
+async function settle(page, ms = 40000) {
   const t0 = Date.now();
-  const order = ['Mua ', 'Nhận tiền', 'Đành chịu', 'Bỏ qua', 'Tiếp tục', 'Chấp nhận',
-                 'Xong', 'Đóng', 'Để sau', 'Thôi', 'Không cược', 'Chưa đạp'];
+  const order = ['Bỏ qua', 'Đành chịu', 'Nhận tiền', 'Tiếp tục', 'Không cược', 'Xong', 'Đóng', 'Để sau', 'Thôi', 'Chưa đạp', 'Mua '];
   while (Date.now() - t0 < ms) {
     if (await page.locator('#modal-root .scrim.show').count()) {
       let clicked = false;
       for (const label of order) {
         const b = page.locator('.scrim.show button.btn', { hasText: label }).first();
-        if (await b.count() && !(await b.isDisabled())) { await b.click(); clicked = true; break; }
+        if (await b.count() && !(await b.isDisabled())) { await b.click().catch(() => {}); clicked = true; break; }
       }
       if (!clicked) {
         const any = page.locator('.scrim.show button.btn:not([disabled])').first();
-        if (await any.count()) await any.click();
+        if (await any.count()) await any.click().catch(() => {});
       }
-      await page.waitForTimeout(400);
+      await page.waitForTimeout(300);
       continue;
     }
     if (await page.locator('#actions button:not([disabled])').count()) return true;
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(250);
   }
   return false;
 }
 
-/* ================================================================ 1 · mở phòng */
+/** Tab đang giữ ghế tới lượt. */
+async function driver(pages) {
+  for (const p of pages) {
+    if (await c(p, (g) => g.state && g.net.mySeat === g.state.turn)) return p;
+  }
+  return null;
+}
 
-console.log('\n▸ 1. Chủ phòng mở phòng, lấy đường mời');
-const A = watch(await ctx.newPage(), 'A');
+/** Đi trọn một lượt bằng thanh nút của tab đang tới lượt: lắc (kể cả cầu đôi) rồi kết thúc. */
+async function playTurn(pages) {
+  const p = await driver(pages);
+  if (!p) return false;
+  const turn0 = await c(p, (g) => g.state.turnNo);
+  for (let i = 0; i < 12; i++) {
+    await settle(p);
+    if (await c(p, (g, t) => g.state.turnNo !== t, turn0)) return true;
+    const roll = p.locator('#actions button', { hasText: 'Lắc xí ngầu' }).first();
+    const end = p.locator('#actions button', { hasText: 'Kết thúc lượt' }).first();
+    const fine = p.locator('#actions button', { hasText: 'ra tù' }).first();
+    if (await end.count()) await end.click().catch(() => {});
+    else if (await roll.count()) await roll.click().catch(() => {});
+    else if (await fine.count()) await fine.click().catch(() => {});
+    await until(() => c(p, (g, t) => g.state.turnNo !== t || !g.busy, turn0), 20000, 250);
+    if (await c(p, (g, t) => g.state.turnNo !== t, turn0)) return true;
+  }
+  return false;
+}
+
+/* ================================================================ 1 · phòng chờ */
+
+console.log('\n▸ 1. Phòng chờ trên server');
+const A = watch(await newPage(), 'A');
 await A.goto(BASE, { waitUntil: 'domcontentloaded' });
 await bootToLobby(A);
 const link = await A.locator('#lobby-link').inputValue();
 const code = new URL(link).searchParams.get('room');
-ok(/^[A-Z2-9]{4}$/.test(code ?? ''), 'mã phòng 4 ký tự trong đường mời', code);
-ok(await A.locator('#lobby-start').isDisabled(), 'chưa ai sẵn sàng thì Khai cuộc bị khoá');
-
+ok(/^[A-Z0-9]{4}$/.test(code ?? ''), 'mở phòng có mã 4 ký tự', link);
+ok(new URL(link).searchParams.get('server') === SERVER, 'đường mời giữ tham số ?server=');
 await A.locator('.lobby-seat.is-me input.lobby-name').fill('Bảy Viễn');
+
+const B = await enter(link, 'Cô Ba Trà', 'B');
+const X = await enter(link, 'Khách Lạ', 'X', { ready: false });
+ok(await until(async () => (await seatCount(A)) === 3), 'chủ phòng thấy 3 ghế');
+const tokens = await A.evaluate(() => window.__room.seats.map((s) => s.token));
+ok(new Set(tokens).size === 3, 'ba ghế ba màu khác nhau', tokens.join(','));
+
+// Chủ phòng mời người thứ ba ra
+await A.bringToFront();
+const xId = await X.evaluate(() => window.__room.me.id);
+await A.locator(`[data-kick="${xId}"]`).click();
+// Tab nền không được cấp khung hình: hộp thoại chưa hiện hẳn nếu không đưa tab lên trước
+await X.bringToFront();
+ok(await until(async () => (await title(X)) === 'Bạn đã bị mời ra khỏi phòng', 8000), 'người bị mời ra thấy thông báo');
+await A.bringToFront();
+ok(await until(async () => (await seatCount(A)) === 2), 'phòng còn 2 ghế');
+await X.close();
+
+const C = await enter(link, 'Năm Cam', 'C', { ready: false });
+ok(await until(async () => (await seatCount(A)) === 3), 'người mới vào chỗ trống');
+ok(await A.locator('#lobby-start').isDisabled(), 'chưa ai đủ Sẵn sàng thì nút Khai cuộc tắt');
+await C.locator('.lobby-seat.is-me .lobby-ready').click();
 await A.locator('.lobby-seat.is-me .lobby-ready').click();
-ok(await until(async () => (await A.locator('.lobby-seat').first().innerText()).includes('Bảy Viễn')),
-  'bấm Sẵn sàng thì tên mới lên sổ');
-ok(await A.locator('#lobby-start').isDisabled(), 'một mình sẵn sàng vẫn chưa khai cuộc được');
-await A.screenshot({ path: `${SHOT}/on-01-lobby-host.png` });
+ok(await until(() => A.locator('#lobby-start').isEnabled(), 8000), 'đủ Sẵn sàng thì nút Khai cuộc bật');
 
-/* ====================================== 2 · tên chỉ hiện khi bấm Sẵn sàng */
-
-console.log('\n▸ 2. Người thứ hai vào — tên giấu tới khi bấm Sẵn sàng');
-const B = await enter(link, 'Cô Ba', 'B', { ready: false });
-ok(await until(async () => (await seatCount(A)) === 2), 'chủ phòng thấy 2 ghế');
-
-await A.bringToFront();
-const beforeReady = await A.locator('.lobby-seat').nth(1).innerText();
-ok(!beforeReady.includes('Cô Ba'), 'chưa sẵn sàng thì máy khác không thấy tên', beforeReady.replace(/\s+/g, ' ').trim());
-ok((await A.locator('.lobby-name-wait').count()) === 1, 'chỗ tên hiện "đang nhập tên…"');
-ok(await A.locator('#lobby-start').isDisabled(), 'còn người chưa sẵn sàng thì chưa khai cuộc được');
-await A.screenshot({ path: `${SHOT}/on-02-lobby-waiting.png` });
-
-await B.bringToFront();
-await B.locator('.lobby-seat.is-me .lobby-ready').click();
-await A.bringToFront();
-ok(await until(async () => (await A.locator('.lobby-seat').nth(1).innerText()).includes('Cô Ba')),
-  'bấm Sẵn sàng xong thì tên hiện ra cho cả phòng');
-ok(await until(async () => !(await A.locator('#lobby-start').isDisabled())),
-  'cả phòng sẵn sàng thì Khai cuộc mở khoá');
-
-const colors = await A.locator('.lobby-seat .dot').evaluateAll((els) => els.map((e) => e.style.background));
-ok(new Set(colors).size === 2, 'phòng chỉ định hai màu khác nhau', colors.join(' · '));
-/* Tab B vừa bị đẩy xuống nền nên nhịp vẽ lại của nó bị bóp — chờ chứ đừng
-   đọc ngay, không thì bắt đúng lúc ghế còn đang giữ ô nhập tên cũ. */
-ok(await until(async () => (await B.locator('.lobby-seat input.lobby-name').count()) === 0),
-  'đã sẵn sàng thì ô nhập tên đóng lại');
-ok((await B.locator('.lobby-seat select, .lobby-seat [data-token]').count()) === 0,
-  'không có chỗ nào cho tự chọn màu');
-await A.screenshot({ path: `${SHOT}/on-03-lobby-ready.png` });
-
-/* ================================================ 3 · rời phòng → ghế mở lại */
-
-console.log('\n▸ 3. Người thứ ba vào rồi rời — ghế phải mở lại');
-const C = await enter(link, 'Chú Hoả', 'C');
-ok(await until(async () => (await seatCount(A)) === 3, 25000), 'phòng lên 3 ghế');
-const tokensBefore = await A.locator('.lobby-seat .dot').evaluateAll((e) => e.map((x) => x.style.background));
-await C.close();
-await A.bringToFront();
-ok(await until(async () => (await seatCount(A)) === 2, 25000),
-  'người rời phòng bị bỏ ghế, chỗ ấy trống lại');
-
-const D = await enter(link, 'Bà Từ', 'D');
-ok(await until(async () => (await seatCount(A)) === 3, 25000), 'người mới lấp được chỗ vừa trống');
-const tokensAfter = await A.locator('.lobby-seat .dot').evaluateAll((e) => e.map((x) => x.style.background));
-ok(tokensAfter[2] === tokensBefore[2], 'màu của ghế vừa trống được dùng lại',
-  `${tokensBefore[2]} → ${tokensAfter[2]}`);
-
-/* ============================================= 4 · mời ra khỏi phòng chờ */
-
-console.log('\n▸ 4. Chủ phòng mời một người ra khỏi phòng chờ');
-await A.bringToFront();
-ok((await D.locator('.lobby-kick').count()) === 0, 'người thường không có nút mời ai ra');
-/* Ghế hiện ra trước, cái tên tới sau: số ghế đi đường presence, còn tên chỉ
-   được công bố lúc bấm Sẵn sàng nên đi đường broadcast. Chờ đúng cái tên rồi
-   mới tìm nút mời ra, không thì bắt nhằm lúc ghế còn ghi "đang nhập tên…". */
-ok(await until(async () => (await A.locator('.lobby-seat:has-text("Bà Từ")').count()) === 1, 15000),
-  'tên người mới vào đã lên ghế bên máy chủ phòng');
-const kickBtn = A.locator('.lobby-seat:has-text("Bà Từ") .lobby-kick').first();
-ok((await kickBtn.count()) === 1, 'chủ phòng có nút mời Bà Từ ra');
-await kickBtn.click();
-ok(await until(async () => (await title(D)).includes('bị mời ra'), 20000),
-  'người bị mời nhận được thông báo');
-ok(await until(async () => (await seatCount(A)) === 2, 15000), 'ghế người bị mời được giải phóng');
-await D.close();
-
-/* ==================================================== 5 · khai cuộc, khoá lượt */
-
-console.log('\n▸ 5. Chủ phòng khai cuộc');
-await A.bringToFront();
+// Hạn chờ dài trong lúc bài kiểm bấm tay; phần 6 mới hạ xuống
+await A.evaluate(() => window.__room.setOptions({ timing: { turnMs: 60000, awayMs: 60000, skipMs: 60000 } }));
+await A.waitForTimeout(400);
 await A.locator('#lobby-start').click();
-ok(await until(async () => (await A.locator('.pcard').count()) === 2, 30000),
-  'bàn cờ dựng đủ 2 người trên máy chủ phòng');
-ok(await until(async () => (await B.locator('.pcard').count()) === 2, 30000),
-  'máy khách cũng vào ván cùng lúc');
 
-/* Mở màn là vòng lắc giành quyền đi trước: hộp thoại "Lắc xí ngầu" phải hiện ở
-   **máy của từng người**, và thứ tự chốt được phải giống nhau ở mọi máy. Lắc
-   xong thì kéo thứ tự về đúng thứ tự ghế cho các phần sau chạy trên nền cố
-   định (phần bốc thăm có bài kiểm riêng ngay dưới đây). */
-const rollOrder = await playRollOff([A, B], { normalize: false });
-ok(Array.isArray(rollOrder) && rollOrder.length === 2, 'lắc xong thì có thứ tự đi',
-  JSON.stringify(rollOrder));
-ok(JSON.stringify(rollOrder) === JSON.stringify(await orderOf(B)),
-  'hai máy cùng một thứ tự đi');
-ok([...(rollOrder ?? [])].sort().join() === '0,1', 'thứ tự đi là hoán vị đủ mọi ghế');
-const firstSeat = rollOrder?.[0];
-ok(await until(async () => (await B.evaluate(() => window.__monopoly.controller.state.turn)) === firstSeat, 15000),
-  'người đầu bảng được trao lượt trên cả hai máy', `ghế ${firstSeat}`);
-
-// Về thứ tự ghế để phần sau vẫn kiểm được đúng cảnh "chủ phòng đi trước"
-await A.evaluate(() => {
-  const c = window.__monopoly.controller;
-  c.state.setOrder(c.state.players.map((_, i) => i));
-  c.sync();
-  c.beginTurn();
-});
-await A.waitForTimeout(3800);
-
-const aBtns = await A.locator('#actions button:not([disabled])').count();
-const bBtns = await B.locator('#actions button:not([disabled])').count();
-const bBar = (await B.locator('#actions').innerText()).replace(/\s+/g, ' ').trim();
-ok(aBtns > 0, 'chủ phòng đi trước nên có nút bấm', `${aBtns} nút`);
-ok(bBtns === 0 && bBar === '', 'máy chưa tới lượt không có bảng nút giữa bàn', bBar);
-ok((await A.locator('#room-toggle').count()) === 0, 'không còn nút quản trị phòng giữa ván');
-await A.screenshot({ path: `${SHOT}/on-04-game-host.png` });
-
-/* ============================================== 6 · lắc — trạng thái lan sang */
-
-console.log('\n▸ 6. Lắc xí ngầu — trạng thái lan sang máy kia');
-await B.evaluate(() => {
-  window.__bcSeen = 0;
-  const room = window.__monopoly.controller.net;
-  const prev = room.on.bc;
-  room.on.bc = (m) => { window.__bcSeen += 1; prev(m); };
-});
-await A.bringToFront();
-await A.locator('#actions button[data-key="r"]').click();
-ok(await settleTurn(A), 'lượt chạy xong, thanh nút hiện lại');
-await A.waitForTimeout(1200);
-
-const posA = await A.evaluate(() => window.__monopoly.controller.state.players.map((p) => p.pos));
-const posB = await B.evaluate(() => window.__monopoly.controller.state.players.map((p) => p.pos));
-ok(posA[0] !== 0, 'quân của người đi đã rời ô Bắt Đầu', `ô ${posA[0]}`);
-ok(JSON.stringify(posA) === JSON.stringify(posB), 'vị trí quân giống nhau ở hai máy',
-  `${posA} vs ${posB}`);
-const bcSeen = await B.evaluate(() => window.__bcSeen);
-ok(bcSeen > 0, 'máy ngồi xem cũng nhận được diễn biến', `${bcSeen} dòng`);
-
-/* `beginTurn` chạy lại mỗi lần sổ ghế nhúc nhích (presence chập chờn) hay mạng
-   nối lại. Trước đây cờ "đã lắc" chỉ nằm ở controller nên lần chạy lại ấy bày
-   nút "Lắc xí ngầu" cho người vừa lắc xong — đi được hai nước trong một lượt. */
-const rolledA = await A.evaluate(() => window.__monopoly.controller.state.rolled);
-if (!rolledA) {
-  console.log('  … bỏ qua kiểm lắc hai lần: cú vừa rồi ra đôi, vẫn còn quyền lắc');
-} else {
-  await A.evaluate(() => {
-    const c = window.__monopoly.controller;
-    c.onRoomChange();
-    c.onLink('ok');
-  });
-  await A.waitForTimeout(300);
-  ok(await A.locator('#actions button[data-key="r"]').count() === 0
-    && await A.locator('#actions button[data-key="e"]').count() === 1,
-  'sổ ghế đổi sau khi lắc vẫn chỉ còn nút kết thúc lượt, không lắc thêm được');
+const pages = [A, B, C];
+let booted = true;
+for (const p of pages) {
+  await p.bringToFront();
+  booted = await until(() => c(p, (g) => !!g.state), 30000) && booted;
 }
+ok(booted, 'cả ba máy vào bàn cờ');
+const names = await c(B, (g) => g.state.players.map((p) => p.name));
+ok(names.join('|') === 'Bảy Viễn|Cô Ba Trà|Năm Cam', 'tên theo đúng thứ tự ghế', names.join(', '));
+const seats = await Promise.all(pages.map((p) => c(p, (g) => g.net.mySeat)));
+ok(seats.join(',') === '0,1,2', 'mỗi máy ngồi đúng ghế của mình', seats.join(','));
 
-/* ============================================ 7 · giao dịch giữa hai máy */
+/* ================================================================ 2 · lắc giành quyền + vài lượt */
 
-/* Đường hỏi–đáp **hai chiều** duy nhất trong cả hệ thống: mọi thứ khác chỉ là
-   phát một chiều rồi thôi. Bên A dựng đề nghị trên máy mình, nhưng người bấm
-   đồng ý phải là B ngồi máy khác — và A đứng chờ tới khi B bấm. */
+console.log('\n▸ 2. Ba máy cùng một ván');
+const order = await playRollOff(pages, { normalize: false });
+ok(Array.isArray(order) && order.length === 3, 'lắc giành quyền xong', JSON.stringify(order));
+const orders = await Promise.all(pages.map(orderOf));
+ok(orders.every((o) => JSON.stringify(o) === JSON.stringify(orders[0])), 'ba máy cùng một thứ tự đi');
 
-console.log('\n▸ 7. Giao dịch giữa hai máy');
-const seatA = await A.evaluate(() => window.__monopoly.controller.net.mySeat);
-const seatB = await B.evaluate(() => window.__monopoly.controller.net.mySeat);
-// Hai ô nằm quá tầm một cú lắc (xa nhất 12 ô) nên chắc chắn chưa ai mua mất.
-const GIVE = 16;
-const GET = 18;
-await A.evaluate(({ a, b, give, get }) => {
-  const c = window.__monopoly.controller;
-  c.state.buy(a, give);
-  c.state.buy(b, get);
-  // Ô A đem đổi đang thế chấp: dùng để kiểm xem **ai** được hỏi có chuộc không
-  c.state.mortgage(a, give);
-  c.sync();
-}, { a: seatA, b: seatB, give: GIVE, get: GET });
-await A.waitForTimeout(700);
+let played = 0;
+for (let i = 0; i < 6; i++) if (await playTurn(pages)) played += 1;
+ok(played === 6, 'đi được 6 lượt bằng thanh nút', `${played}/6`);
+const s2 = await sameBoard(pages);
+ok(s2.same, 'ván ở ba máy khớp nhau (tiền, vị trí, chủ đất)', s2.same ? '' : s2.last.join('\n'));
 
+/* ================================================================ 3 · chat */
+
+console.log('\n▸ 3. Chat đi qua server');
 await A.bringToFront();
-await A.locator('#actions button[data-key="t"]').click();
-await A.locator(`.scrim.show .pick[data-id="${seatB}"]`).click();
-await pickTradeTiles(A, 'mine', [GIVE]);
-await pickTradeTiles(A, 'theirs', [GET]);
-await A.locator('.scrim.show button.btn', { hasText: 'Gửi đề nghị' }).click();
+await A.locator('#chat-btn').click();
+await A.locator('.chat-input').fill('xin chào cả bàn');
+await A.locator('.chat-input').press('Enter');
+const heard = async (p) => p.locator('#chat-dock .chat-msg').evaluateAll(
+  (els) => els.map((e) => e.textContent).join('\n'),
+).catch(() => '');
+ok(await until(async () => (await heard(B)).includes('xin chào cả bàn'), 8000), 'máy B nhận tin');
+ok(await until(async () => (await heard(C)).includes('xin chào cả bàn'), 8000), 'máy C nhận tin');
+ok((await heard(B)).includes('Bảy Viễn'), 'tin mang tên người nói, lấy theo ghế');
+const echo = (await heard(A)).split('xin chào cả bàn').length - 1;
+ok(echo === 1, 'máy gửi không hiện tin của mình hai lần', `${echo} lần`);
+await A.keyboard.press('Escape');
 
-const review = B.locator('.scrim.show button.btn', { hasText: 'Đồng ý giao dịch' });
-ok(await until(async () => (await review.count()) > 0, 30000),
-  'đề nghị bay sang máy kia, hộp xét duyệt mở ở đó');
-ok((await A.locator('.scrim.show button.btn', { hasText: 'Đồng ý giao dịch' }).count()) === 0,
-  'bên gửi không tự duyệt được đề nghị của mình');
-ok((await A.locator('#broadcast').innerText()).includes('CHỜ TRẢ LỜI'),
-  'bên gửi thấy rõ mình đang chờ chứ không phải treo máy');
-await B.screenshot({ path: `${SHOT}/on-05-trade-review.png` });
+/* ================================================================ 4 · hỏi nhiều người cùng lúc */
 
-await B.bringToFront();
-await review.click();
-
-const swapped = (page) => page.evaluate(({ a, b, give, get }) => {
-  const st = window.__monopoly.controller.state;
-  return st.owner.get(give) === b && st.owner.get(get) === a;
-}, { a: seatA, b: seatB, give: GIVE, get: GET });
-
-ok(await until(async () => swapped(B), 30000), 'đất đổi chủ trên máy vừa bấm đồng ý');
-ok(await until(async () => swapped(A), 30000), 'và trên cả máy bên kia — hai bàn khớp nhau');
-
-/* Ô vừa sang tay B đang thế chấp. Tiền chuộc lấy từ túi B nên câu hỏi "có
-   chuộc không" phải hiện ở **máy B**, chứ không phải ở máy A — người dựng giao
-   dịch không được tiêu tiền của người khác. */
-const money = (page, seat) => page.evaluate(
-  (s) => window.__monopoly.controller.state.players[s].money, seat);
-const redeemBtn = B.locator('.scrim.show button.btn', { hasText: 'Chuộc hết' });
-ok(await until(async () => (await redeemBtn.count()) > 0, 30000),
-  'lời mời chuộc hiện ở máy chủ mới');
-ok((await A.locator('.scrim.show button.btn', { hasText: 'Chuộc hết' }).count()) === 0,
-  'máy người dựng giao dịch không bị hỏi thay');
-const aCash = await money(A, seatA);
-const bCash = await money(A, seatB);
-await B.bringToFront();
-await redeemBtn.click();
-ok(await until(async () => A.evaluate(
-  (t) => !window.__monopoly.controller.state.mortgaged.has(t), GIVE), 30000),
-  'B bấm chuộc thì ô hết thế chấp trên cả hai bàn');
-ok((await money(A, seatA)) === aCash, 'tiền chuộc không trừ vào túi người bán',
-  `${aCash} → ${await money(A, seatA)}`);
-ok((await money(A, seatB)) < bCash, 'mà trừ đúng vào túi người mua',
-  `${bCash} → ${await money(A, seatB)}`);
-
-await A.bringToFront();
-ok(await until(async () => (await A.locator('#actions button:not([disabled])').count()) > 0, 20000),
-  'xong giao dịch thì bên gửi được trả lại thanh nút');
-
-/* ============ 7b · bảng quản lý tài sản phát từng thao tác, không đợi đóng */
-
-/* Người xây nhà có thể ngồi trong bảng quản lý cả phút. Nếu ảnh chụp chỉ phát
-   lúc đóng bảng thì mấy máy kia đọc dòng "đã xây nhà ở X" mà số tiền và căn
-   nhà trên bàn vẫn y như cũ — hai thứ nói ngược nhau. Kiểm đúng chỗ ấy: bảng
-   **vẫn đang mở** ở máy A mà máy B đã thấy đủ cả nhà lẫn tiền. */
-
-console.log('\n▸ 7b. Xây nhà hiện ngay trên máy kia, chưa cần đóng bảng');
-const built = await A.evaluate(async () => {
-  const { GROUP_TILES } = await import('/src/data/board.js');
-  const c = window.__monopoly.controller;
-  const st = c.state;
-  const seat = c.net.mySeat;
-  // Khu đầu bảng là khu rẻ nhất — đủ bộ thì xây được ngay
-  const ids = GROUP_TILES[Object.keys(GROUP_TILES)[0]];
-  st.players[seat].money = 99999;
-  for (const id of ids) {
-    st.owner.delete(id);
-    st.mortgaged.delete(id);
-    st.houses.delete(id);
-    st.buy(seat, id);
-  }
-  st.players[seat].money = 5000;
-  c.hud.refresh();
-  c.scene.refresh(st);
-  c.sync();
-  return { seat, ids };
-});
-await A.waitForTimeout(700);
-
-await A.bringToFront();
-await A.locator('#actions button[data-key="q"]').click();
-const buildBtn = A.locator(`.scrim.show [data-act="build"][data-tile="${built.ids[0]}"]`).first();
-ok(await until(async () => (await buildBtn.count()) > 0, 20000), 'bảng quản lý mở ra, khu đủ bộ xây được');
-const cashBefore = await money(B, built.seat);
-await buildBtn.click();
-
-ok(await until(async () => B.evaluate(
-  (id) => window.__monopoly.controller.state.housesOn(id) === 1, built.ids[0]), 15000),
-  'căn nhà vừa xây hiện trên máy bên kia');
-ok(await until(async () => (await money(B, built.seat)) < cashBefore, 15000),
-  'tiền xây cũng trừ ngay ở đó', `${cashBefore} → ${await money(B, built.seat)}`);
-ok((await A.locator('.scrim.show #mg-body').count()) === 1,
-  'và bảng quản lý vẫn đang mở suốt lúc ấy');
-
-await A.locator('.scrim.show .modal-foot button.btn', { hasText: 'Xong' }).click();
-ok(await until(async () => (await A.locator('#actions button:not([disabled])').count()) > 0, 20000),
-  'đóng bảng thì thanh nút trở lại');
-
-/* ======================================= 8 · đứt đường truyền rồi nối lại */
-
-console.log('\n▸ 8. Đứt đường truyền giữa ván rồi tự nối lại');
-const linkKind = await B.evaluate(() => window.__monopoly.controller.net.tp.kind);
-if (linkKind !== 'supabase') {
-  console.log('  … bỏ qua: đang chạy LocalTransport, BroadcastChannel không đứt được');
-} else {
-  const MARK = 24;
-  /* Ngắt mạng thật ở tầng trình duyệt. `setOffline` ngắt cả browser context —
-     mọi tab ở đây dùng chung một context nên A cũng mất mạng theo, không tách
-     riêng một máy được. Không sao: điều cần kiểm là **chuỗi hồi phục**, mà A đi
-     một nước trong lúc đứt rồi B có bắt kịp hay không thì kiểm được đủ. */
-  await ctx.setOffline(true);
-
-  await B.bringToFront();
-  ok(await until(async () => (await B.locator('#link-warn.show').count()) === 1, 20000),
-    'mất mạng thì dải "Mất kết nối" hiện ngay');
-  ok(await until(async () => (await B.locator('#actions button').count()) === 0, 20000),
-    'thanh nút bị cất đi — bấm lúc này thì nước đi sẽ bị nuốt mất');
-  await B.screenshot({ path: `${SHOT}/on-06-link-lost.png` });
-
-  // Bàn vẫn nhúc nhích trong lúc đứt — nước này không tới được máy kia
-  await A.bringToFront();
-  await A.evaluate(({ a, id }) => {
-    const c = window.__monopoly.controller;
-    c.state.buy(a, id);
-    c.sync();
-  }, { a: seatA, id: MARK });
-  await A.waitForTimeout(800);
-  ok(!(await B.evaluate((id) => window.__monopoly.controller.state.owner.get(id) !== undefined, MARK)),
-    'máy đang đứt quả nhiên không nhận được nước vừa đi');
-
-  await ctx.setOffline(false);
-  await B.bringToFront();
-  ok(await until(async () => (await B.locator('#link-warn.show').count()) === 0, 60000),
-    'đường truyền tự nối lại, dải cảnh báo tắt');
-  ok(await until(async () => B.evaluate(
-    (id) => window.__monopoly.controller.state.owner.get(id) !== undefined, MARK), 30000),
-    'nối lại xong tự xin ván hiện tại, bắt kịp nước đã bỏ lỡ');
-  ok(await until(async () => A.evaluate(
-    (s) => window.__monopoly.controller.net.isSeatLive(s), seatB), 30000),
-    'bàn bên kia thấy mình có mặt trở lại (đã khai lại presence)');
-  ok(await until(async () => (await B.locator('#actions button').count()) === 0
-      && B.evaluate(() => !window.__monopoly.controller.net.linkLost), 20000),
-    'nối lại xong vẫn đúng trạng thái đang ngồi xem: không có nút');
-  await B.screenshot({ path: `${SHOT}/on-07-relinked.png` });
-}
-
-/* =========================== 8b · presence hụt một nhịp thì chưa bỏ lượt */
-
-console.log('\n▸ 8b. Người tới lượt hụt presence một nhịp — trọng tài chưa nhận cầm lái');
-/* Lỗi cũ: presence hụt một nhịp là trọng tài bỏ lượt ngay, trong khi máy người
-   ấy vẫn đang chạy lượt (chọn viên xí ngầu lắc lại) — hai lượt chồng nhau.
-   Kiểm thẳng `isDriver` ở máy không tới lượt, giả lập ghế kia vắng và máy này
-   là trọng tài. Chạy đồng bộ trong một lần `evaluate` nên nhịp canh không chen
-   vào được giữa lúc giả lập. */
-{
-  const watcher = (await A.evaluate(() => {
-    const c = window.__monopoly.controller;
-    return c.state.turn !== c.net.mySeat;
-  })) ? A : B;
-  const r = await watcher.evaluate(() => {
-    const c = window.__monopoly.controller;
-    const net = c.net;
-    Object.defineProperty(net, 'isArbiter', { get: () => true, configurable: true });
-    net.isSeatLive = () => false;
-    net.awayFor = () => 3000;
-    const brief = c.isDriver();
-    net.awayFor = () => c.skipGraceMs + 1;
-    const long = c.isDriver();
-    delete net.isArbiter; delete net.isSeatLive; delete net.awayFor;
-    return { brief, long };
-  });
-  ok(r.brief === false, 'vắng 3 giây: chưa ai nhận cầm lái lượt ấy');
-  ok(r.long === true, 'vắng quá hạn ân: trọng tài nhận cầm lái để bỏ lượt');
-}
-
-/* ================================================= 9 · rớt mạng rồi vào lại */
-
-console.log('\n▸ 9. Rớt mạng rồi vào lại — về đúng ghế cũ, tài sản nguyên vẹn');
-// Cho người sắp rớt giữ hai ô đất ở dãy cuối (một cú lắc xa nhất 12 ô nên
-// người vừa đi chắc chắn chưa mua mất)
-const LOTS = [31, 34];
-await A.evaluate(async ({ s, lots }) => {
+console.log('\n▸ 4. Đấu giá: server hỏi ba máy cùng lúc');
+await sameBoard(pages);
+const free = await A.evaluate(async () => {
   const { BOARD } = await import('/src/data/board.js');
   const st = window.__monopoly.controller.state;
-  /* Vốn khởi điểm không ôm nổi hai lô dãy cuối — bơm đủ tiền rồi mới mua. Mục
-     kiểm ở đây là vào lại giữ nguyên tài sản, không phải đủ tiền hay không. */
-  st.players[s].money += lots.reduce((n, id) => n + BOARD[id].price, 0);
-  for (const id of lots) st.buy(s, id);
-  window.__monopoly.controller.sync();
-}, { s: seatB, lots: LOTS });
-await A.waitForTimeout(700);
-const lotsB = await A.evaluate((s) => window.__monopoly.controller.state.propertiesOf(s).length, seatB);
-ok(lotsB >= 2, 'người chơi đang giữ đất trước khi rớt mạng', `${lotsB} ô`);
+  return BOARD.find((t) => t.type === 'property' && !st.owner.has(t.id))?.id;
+});
+await A.evaluate(([tileId]) => window.__room.post({
+  t: 'test', inject: { path: 'events.auction', args: [tileId, { seller: null, reason: 'Bài kiểm thử' }] },
+}), [free]);
+const bidOpen = (p) => p.locator('.scrim.show .bid-box').count().then((n) => n > 0);
+ok(await until(async () => (await Promise.all(pages.map(bidOpen))).every(Boolean), 15000),
+  'ba máy cùng mở hộp ghi giá');
+// A trả cao nhất, hai người kia trả mức thấp nhất
+for (const [p, pick] of [[A, 'last'], [B, 'first'], [C, 'first']]) {
+  await p.bringToFront();
+  const q = p.locator('.scrim.show .bid-q');
+  if (await q.count()) await (pick === 'last' ? q.last() : q.first()).click();
+  await p.locator('.scrim.show button.btn', { hasText: 'Chốt giá' }).click();
+}
+ok(await until(() => c(A, (g, id) => g.state.owner.has(id), free), 20000), 'phiên đấu giá chốt chủ');
+const owners = await Promise.all(pages.map((p) => c(p, (g, id) => g.state.owner.get(id), free)));
+ok(owners.every((o) => o === 0), 'người trả cao nhất (A) thắng, ba máy cùng thấy', owners.join(','));
+for (const p of pages) await settle(p, 8000).catch(() => {});
 
+/* ================================================================ 5 · F5 giữa ván */
+
+console.log('\n▸ 5. F5 giữa ván về đúng ghế');
+await sameBoard(pages);
 await B.reload({ waitUntil: 'domcontentloaded' });
 await B.bringToFront();
-ok(await until(async () => B.evaluate(() => !!window.__monopoly?.controller?.net), 45000),
-  'máy vào lại được phòng');
-ok(await until(async () => B.evaluate((s) => window.__monopoly.controller.net.mySeat === s, seatB), 20000),
-  'về đúng ghế cũ');
-ok(await until(async () => B.evaluate(
-  (l) => { const st = window.__monopoly.controller?.state; return !!st && l.every((id) => st.owner.get(id) !== undefined); },
-  LOTS), 20000), 'ván cờ dựng lại đủ, đất vẫn thuộc về mình');
-ok(!(await A.evaluate((s) => window.__monopoly.controller.state.players[s].bankrupt, seatB)),
-  'vào lại trong hạn ân thì không bị tịch thu');
-await B.screenshot({ path: `${SHOT}/on-08-rejoined.png` });
+ok(await until(() => c(B, (g) => !!g.state && g.net?.mySeat === 1), 60000), 'máy B vào lại đúng ghế 1');
+const s5 = await sameBoard(pages, 30000);
+ok(s5.same, 'ván sau F5 khớp với hai máy kia');
+ok(await until(() => c(A, (g) => g.hud.seatStatus[1] === 'live'), 10000), 'máy A thấy B có mặt lại');
 
-/* ========================================= 10 · đi luôn → tài sản về ngân hàng */
+/* ================================================================ 6 · hết giờ */
 
-console.log('\n▸ 10. Đi luôn quá hạn — tài sản trả về ngân hàng');
-await A.bringToFront();
-await A.evaluate(() => { window.__monopoly.controller.awayGraceMs = 8000; });
-await B.close();
+console.log('\n▸ 6. Ngồi im hết giờ thì server đi hộ');
+await A.evaluate(() => window.__room.post({ t: 'test', timing: { turnMs: 2500, skipMs: 1500 } }));
+// Hạn mới áp từ câu hỏi kế tiếp: đi một lượt tay để mở câu hỏi mới
+await playTurn(pages);
+const t6 = await c(A, (g) => g.state.turnNo);
+ok(await until(() => c(A, (g, t) => g.state.turnNo > t, t6), 20000), 'không ai bấm, lượt vẫn qua');
+await A.evaluate(() => window.__room.post({ t: 'test', timing: { turnMs: 60000, skipMs: 60000 } }));
+await playTurn(pages);
 
-/* Không "ngay" như tên gọi: sau khi B vào lại, presence của B chưa hề tới máy
-   A, nên A giữ B ở trạng thái còn sống hoàn toàn bằng cầu `hello` — mà cầu ấy
-   hết hạn đúng `HELLO_GRACE_MS` (6 giây). Đo được ~6,4 giây, nên hạn chờ phải
-   rộng gấp ba chứ đừng để sát 12 giây. */
-ok(await until(async () => (await A.locator('.rchip.is-away').count()) === 1, 20000),
-  'danh sách bên cột trái báo "mất kết nối"');
-ok((await A.locator('#players .pcard-off, #roster .rchip.is-away').count()) > 0,
-  'không cần mở bảng nào cũng thấy ai đang rớt');
-await A.screenshot({ path: `${SHOT}/on-09-away.png` });
+/* ================================================================ 7 · bỏ bàn */
 
-ok(await until(async () => A.evaluate((s) => window.__monopoly.controller.state.players[s].bankrupt, seatB), 30000),
-  'quá hạn ân thì bị gạch khỏi bàn');
-ok((await A.evaluate((s) => window.__monopoly.controller.state.propertiesOf(s).length, seatB)) === 0,
-  'toàn bộ đất đã trả về ngân hàng');
-ok(await A.evaluate((lots) => {
-  const st = window.__monopoly.controller.state;
-  return lots.every((id) => st.owner.get(id) === undefined);
-}, LOTS), 'hai ô ấy thành đất trống, ai cũng mua lại được');
-await A.waitForTimeout(1200);
-await A.screenshot({ path: `${SHOT}/on-10-evicted.png` });
+console.log('\n▸ 7. Đóng tab quá hạn thì bị gạch tên');
+await A.evaluate(() => window.__room.post({ t: 'test', timing: { awayMs: 3000, skipMs: 1500 } }));
+await C.close();
+ok(await until(() => c(A, (g) => g.hud.seatStatus[2] === 'away'), 10000), 'máy A thấy C mất kết nối');
+ok(await until(() => c(A, (g) => g.state.players[2].bankrupt), 20000), 'quá hạn: ghế C phá sản');
+ok(await until(() => c(B, (g) => g.state.players[2].bankrupt), 10000), 'máy B cũng thấy');
 
-/* ================================================ 11 · đồng hồ lượt hết giờ */
+/* ================================================================ */
 
-/* Phải là **ván ba người** riêng, không dùng lại ván cũ: ván hai người mà một
-   người ngồi im thì chẳng còn ai để kiểm "lượt có sang người kế không". Đóng
-   tab cũ trước — mỗi tab giữ một ngữ cảnh WebGL và Chrome chỉ cho một số lượng
-   nhất định. */
-
-console.log('\n▸ 11. Hết giờ thì được lắc hộ, không bị đuổi');
-await A.close();
-
-const H = watch(await ctx.newPage(), 'H');
-await H.goto(BASE, { waitUntil: 'domcontentloaded' });
-await bootToLobby(H);
-const link3 = await H.locator('#lobby-link').inputValue();
-await H.locator('.lobby-seat.is-me input.lobby-name').fill('Chủ ván');
-await H.locator('.lobby-seat.is-me .lobby-ready').click();
-const P2 = await enter(link3, 'Người hai', 'P2');
-const P3 = await enter(link3, 'Người ba', 'P3');
-
-await H.bringToFront();
-await until(async () => (await seatCount(H)) === 3, 60000);
-await H.locator('#lobby-start').click();
-ok(await until(async () => (await P3.locator('.pcard').count()) === 3, 45000),
-  'ván ba người dựng xong trên mọi máy');
-// Lắc giành quyền đi trước rồi kéo về thứ tự ghế: phần này kiểm đồng hồ lượt,
-// cần biết chắc ai đang đi.
-ok(!!(await playRollOff([H, P2, P3])), 'ván ba người lắc giành quyền xong');
-await H.waitForTimeout(3800);
-
-const turnNow = (page) => page.evaluate(() => window.__monopoly.controller.state.turn);
-const turn0 = await turnNow(H);
-
-// -- vòng đếm ngược: cả bàn cùng thấy, cùng chỉ một người
-for (const [page, tag] of [[H, 'người đang đi'], [P2, 'người ngồi xem']]) {
-  await page.bringToFront();
-  ok(await until(async () => (await page.locator('#turn-clock.show').count()) === 1, 20000),
-    `vòng đếm ngược hiện ở máy ${tag}`);
-  // `innerText` trả về chữ **đã dựng hình**, mà CSS viết hoa nhãn ấy — so thường hoá
-  ok((await page.locator('#turn-clock .tc-who').innerText()).toLowerCase().includes('chủ ván'),
-    `vòng ấy ghi rõ đang đếm cho ai (${tag})`);
-}
-await P2.bringToFront();
-const num1 = Number(await P2.locator('#turn-clock .tc-num').innerText());
-await P2.waitForTimeout(2200);
-const num2 = Number(await P2.locator('#turn-clock .tc-num').innerText());
-ok(num1 > 0 && num2 < num1, 'kim chạy thật ở máy ngồi xem', `${num1}s → ${num2}s`);
-await P2.screenshot({ path: `${SHOT}/on-11-turn-clock.png` });
-
-/* Rút hạn xuống vài giây rồi lên dây lại. Người ra tay khi hết giờ là **máy của
-   chính người đang đi** (chỉ máy cầm lái mới được gieo xí ngầu), nên hạn phải
-   đổi ở đúng máy ấy, và tab ấy phải nổi lên: tab ẩn bị Chrome bóp nhịp hẹn giờ. */
-await H.bringToFront();
-const moneyOf = (page, seat) => page.evaluate(
-  (s) => window.__monopoly.controller.state.players[s].money, seat);
-const lotsOf = (page, seat) => page.evaluate(
-  (s) => window.__monopoly.controller.state.propertiesOf(s).length, seat);
-await H.evaluate(() => {
-  const c = window.__monopoly.controller;
-  c.turnMs = 6000;
-  /* Rút cả hạn hộp thoại: lắc hộ xong rất có thể đáp xuống đất trống, mà hộp
-     "tậu đất" cũng phải tự đóng thì lượt mới đi tiếp được. */
-  c.busyMs = 6000;
-  c.stallGraceMs = 4000;
-  c.clock = null;              // ép lên dây lại, khỏi bị chặn vì "vẫn việc cũ"
-  c.beginTurn();
-});
-// Không bấm gì cả — đúng cái tình huống muốn kiểm
-ok(await until(async () => (await H.locator('#broadcast').innerText()).includes('HẾT GIỜ'), 30000),
-  'cả bàn đọc được lý do lượt tự trôi');
-ok(await until(async () => (await turnNow(H)) !== turn0, 90000),
-  'ngồi im hết giờ thì được lắc hộ, lượt trôi sang người kế');
-ok(!(await H.evaluate(
-  (s) => window.__monopoly.controller.state.players[s].bankrupt, turn0)),
-  'một lượt bỏ trôi thì vẫn ngồi nguyên trong ván, không bị đuổi');
-ok((await lotsOf(H, turn0)) === (await lotsOf(P2, turn0)),
-  'tài sản của họ vẫn nguyên trên mọi máy');
-ok(await until(async () => (await turnNow(P2)) !== turn0, 20000),
-  'mấy máy còn lại cũng thấy lượt đã sang người kế');
-
-/* Bấm một cái nút bất kỳ là xoá chuỗi "để hết giờ" — người còn ngồi đó thì
-   không có cớ gì cho họ rời ván. */
-const streakAfterClick = await H.evaluate(() => {
-  const c = window.__monopoly.controller;
-  c.stallStreak = 2;
-  document.querySelector('#actions button, .scrim.show button.btn, #skill-btn')
-    ?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-  return c.stallStreak;
-});
-ok(streakAfterClick === 0, 'bấm một nút là chuỗi hết giờ về 0');
-
-/* Lượt thứ ba liền không đi thì mới coi là bỏ ván. Gài sẵn hai lượt trước cho
-   chủ ván rồi trả lượt về tay họ. Việc trả lượt phải do **máy đang cầm lái**
-   làm: ép ở máy khác thì máy kia vẫn tưởng mình đang đi và cứ thế phát đồng hồ
-   của nó đè lên. Chờ ba lượt trôi thật thì không được — tab ẩn bị Chrome bóp
-   nhịp hẹn giờ, ván ba người sẽ bò mất mấy phút. */
-await H.evaluate(() => { window.__monopoly.controller.stallStreak = 2; });
-const seatNow = await Promise.all([H, P2, P3].map(
-  (page) => page.evaluate(() => window.__monopoly.controller.net.mySeat)));
-const curTurn = await turnNow(H);
-const driver = [H, P2, P3][seatNow.indexOf(curTurn)];
-await driver.bringToFront();
-await driver.evaluate((seat) => {
-  const c = window.__monopoly.controller;
-  c.state.turn = seat;
-  c.state.rolled = false;   // ép sang lượt mới: chưa lắc, như sau `nextTurn`
-  c.sync();
-  c.beginTurn();
-}, turn0);
-await H.bringToFront();
-ok(await until(async () => H.evaluate(
-  (s) => window.__monopoly.controller.state.players[s].bankrupt, turn0), 60000),
-  'để hết giờ lượt thứ ba liền thì mới bị coi là bỏ ván');
-ok((await H.locator('#broadcast').innerText()).includes('BỎ VÁN'),
-  'cả bàn đọc được lý do rời ván');
-ok(await until(async () => P2.evaluate(
-  (s) => window.__monopoly.controller.state.players[s].bankrupt, turn0), 20000),
-  'mấy máy còn lại cũng nhận được tin ấy');
-ok(!(await P2.evaluate(() => window.__monopoly.controller.state.over)),
-  'còn hai người nên ván vẫn chạy tiếp');
-// Trả hạn về như cũ ở mọi máy, kẻo mục sau vừa mở hộp thoại đã bị tự đóng
-for (const page of [H, P2, P3]) {
-  await page.evaluate(() => {
-    const c = window.__monopoly.controller;
-    c.turnMs = 60000;
-    c.busyMs = 120000;
-    c.stallGraceMs = 15000;
-    c.stallStreak = 0;
-  });
-}
-await P2.screenshot({ path: `${SHOT}/on-12-timed-out.png` });
-
-/* =========================== 12 · hết giờ trả lời giao dịch = coi như từ chối */
-
-console.log('\n▸ 12. Để hết giờ trả lời giao dịch');
-/* Ai đang tới lượt thì người ấy gửi đề nghị — cả ba đều còn trong ván, nên phải
-   dò chứ không đoán. Bên nhận lấy người kế tiếp còn sống. */
-const seatOf = (page) => page.evaluate(() => window.__monopoly.controller.net.mySeat);
-const pages = [H, P2, P3];
-const seats = await Promise.all(pages.map(seatOf));
-// Ghế vừa bỏ ván còn phải trao lượt lại đã — hỏi sớm thì bắt trúng lúc giao thời
-await until(async () => (await turnNow(P2)) !== turn0, 30000);
-const turnSeat = await turnNow(P2);
-const asker = pages[seats.indexOf(turnSeat)];
-/* Bên nhận phải là người **còn trong ván**: ghế vừa bỏ ván ở mục trên không
-   còn hiện trong bảng chọn đối tác nữa. */
-const aliveSeats = await P2.evaluate(
-  () => window.__monopoly.controller.state.players.map((p) => !p.bankrupt));
-const target = pages.find((page, i) => page !== asker && aliveSeats[seats[i]]);
-const askSeat = await asker.evaluate(() => window.__monopoly.controller.net.mySeat);
-const tgtSeat = await target.evaluate(() => window.__monopoly.controller.net.mySeat);
-const T_GIVE = 16;
-const T_GET = 18;
-
-// Rút hạn trả lời ở cả hai máy: bên nhận để hộp thoại tự đóng, bên gửi để
-// vòng đếm ngược trên bàn khớp với con số hộp thoại đang đếm cho họ xem.
-for (const page of [asker, target]) {
-  await page.evaluate(() => { window.__monopoly.controller.tradeMs = 6000; });
-}
-await asker.bringToFront();
-await asker.evaluate(({ a, b, give, get }) => {
-  const c = window.__monopoly.controller;
-  c.state.buy(a, give);
-  c.state.buy(b, get);
-  c.sync();
-}, { a: askSeat, b: tgtSeat, give: T_GIVE, get: T_GET });
-await asker.waitForTimeout(700);
-
-await asker.locator('#actions button[data-key="t"]').click();
-await asker.locator(`.scrim.show .pick[data-id="${tgtSeat}"]`).click();
-await pickTradeTiles(asker, 'mine', [T_GIVE]);
-await pickTradeTiles(asker, 'theirs', [T_GET]);
-await asker.locator('.scrim.show button.btn', { hasText: 'Gửi đề nghị' }).click();
-
-await target.bringToFront();
-ok(await until(async () => (await target.locator('.scrim.show .trade-timer').count()) > 0, 30000),
-  'hộp xét duyệt kèm dòng đếm ngược để bên nhận biết mình có hạn');
-await target.screenshot({ path: `${SHOT}/on-13-trade-timer.png` });
-
-// Không bấm gì cả — đúng cái tình huống muốn kiểm
-ok(await until(async () => (await target.locator('.scrim.show button.btn')
-  .filter({ hasText: 'Đồng ý giao dịch' }).count()) === 0, 25000),
-  'hết giờ thì hộp thoại tự đóng, bên gửi không phải chờ mãi');
-await asker.bringToFront();
-ok(await until(async () => (await asker.locator('#broadcast').innerText()).includes('HẾT GIỜ')
-  || (await asker.locator('#broadcast').innerText()).includes('TỪ CHỐI'), 20000),
-  'bên gửi đọc được lý do: không trả lời kịp thì coi như từ chối');
-ok(!(await asker.evaluate(
-  (s) => window.__monopoly.controller.state.players[s].bankrupt, tgtSeat)),
-  'bên nhận không bị mời khỏi bàn vì lỡ một lời đáp');
-ok(await until(async () => asker.evaluate(
-  ({ give, get, a, b }) => {
-    const st = window.__monopoly.controller.state;
-    return st.owner.get(give) === a && st.owner.get(get) === b;
-  }, { give: T_GIVE, get: T_GET, a: askSeat, b: tgtSeat }), 15000),
-  'đất ai nấy giữ — giao dịch không tự chốt vì không ai bấm');
-
-/* ======================================= 13 · sức chứa (chậm, sau cờ --full) */
-
-if (FULL) {
-  console.log('\n▸ 13. Đổ đầy phòng và chặn người thứ 7 (--full)');
-  /* Đóng ván cũ trước. Mỗi tab giữ một ngữ cảnh WebGL, mà Chrome chỉ cho một số
-     lượng nhất định — để tab cũ sống thì tab thứ tám không dựng nổi Phaser. */
-  for (const page of [H, P2, P3]) await page.close();
-  const E = watch(await ctx.newPage(), 'E');
-  await E.goto(BASE, { waitUntil: 'domcontentloaded' });
-  await bootToLobby(E);
-  const link2 = await E.locator('#lobby-link').inputValue();
-  await E.locator('.lobby-seat.is-me input.lobby-name').fill('Chủ mới');
-  await E.locator('.lobby-seat.is-me .lobby-ready').click();
-
-  const crowd = [];
-  for (const n of ['Hai', 'Ba', 'Tư', 'Năm', 'Sáu']) crowd.push(await enter(link2, n, n));
-  await E.bringToFront();
-  ok(await until(async () => (await seatCount(E)) === MAX, 60000), `phòng nhận đủ ${MAX} người`);
-  ok((await E.locator('.lobby-count').innerText()).includes('đã đầy'), 'phòng chờ báo "Phòng đã đầy"');
-  await E.screenshot({ path: `${SHOT}/on-14-lobby-full.png` });
-
-  /* Người thứ 7 được kiểm ngay tại chỗ có luật, không mở thêm tab.
-     Sáu bàn cờ Phaser đã chiếm hết ngữ cảnh WebGL mà Chrome cấp cho một tiến
-     trình; tab thứ bảy nằm im ở màn hình đen, chờ bao lâu cũng không dựng nổi
-     scene — nên chờ hộp thoại của nó là chờ một thứ không bao giờ tới.
-     Ở đây bơm thẳng một lời xin ghế vào phòng và xem phòng trả lời gì. */
-  const reply = await E.evaluate(() => new Promise((resolve) => {
-    const room = window.__room;
-    const send = room.tp.send.bind(room.tp);
-    room.tp.send = (event, data) => {
-      if (event === 'full') resolve(data.to);
-      return send(event, data);
-    };
-    room.tp._deliver('hello', { id: 'ke-den-muon' });
-    setTimeout(() => resolve(null), 3000);
-  }));
-  ok(reply === 'ke-den-muon', 'phòng đầy thì từ chối thẳng người xin ghế mới', String(reply));
-  ok((await seatCount(E)) === MAX, 'và không nhét thêm ghế nào');
-
-  await crowd.pop().close();
-  await E.bringToFront();
-  ok(await until(async () => (await seatCount(E)) === MAX - 1, 30000),
-    'có người rời thì phòng hết đầy');
-
-  const reply2 = await E.evaluate(() => new Promise((resolve) => {
-    const room = window.__room;
-    const send = room.tp.send.bind(room.tp);
-    let full = false;
-    room.tp.send = (event, data) => {
-      if (event === 'full') full = true;
-      return send(event, data);
-    };
-    room.tp._deliver('hello', { id: 'ke-den-muon' });
-    setTimeout(() => resolve(full ? 'từ chối' : room.seats.length), 1500);
-  }));
-  ok(reply2 === MAX, 'chỗ vừa trống nhận được người mới', String(reply2));
-}
-
-/* ---------------------------------------------------------------- kết quả */
-
-console.log('\n──────────────────────────────────────────');
-if (errors.length) {
-  console.log(`\n⚠ ${errors.length} lỗi console/trang:`);
-  for (const e of [...new Set(errors)].slice(0, 12)) console.log('   ', e.slice(0, 200));
-}
-if (fails.length) {
-  console.log(`\n✗ HỎNG ${fails.length} mục:`);
-  for (const f of fails) console.log('   ·', f);
-} else {
-  console.log(`\n✓ Tất cả kiểm tra đều đạt${FULL ? '' : '  (thêm --full để kiểm tra sức chứa)'}`);
-}
-
+ok(errors.length === 0, 'không có lỗi console', errors.slice(0, 5).join(' | '));
 await browser.close();
-process.exit(fails.length || errors.length ? 1 : 0);
+console.log(fails.length ? `\nFAIL ${fails.length}: ${fails.join('; ')}` : '\n✓ bản online ổn');
+process.exit(fails.length ? 1 : 0);

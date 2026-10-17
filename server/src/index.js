@@ -140,6 +140,7 @@ export class GameRoom extends DurableObject {
       case 'chat': this.onChat(who.id, m); return;
       case 'meme': this.broadcast({ t: 'meme', seat, id: String(m.id ?? '').slice(0, 40) }); return;
       case 'act': this.onAct(seat, m.a); break;
+      case 'test': if (this.env.TEST_TIMING === '1') this.onTest(m); break;
       default: return;
     }
     await this.save();
@@ -201,7 +202,8 @@ export class GameRoom extends DurableObject {
       delete meta.away[id];
       this.act({ type: 'presence', seat, value: true });
     }
-    this.send(ws, { t: 'welcome', id, seat, now: Date.now() });
+    // `phase` đi kèm: máy vào lại quyết định vào thẳng ván hay ngồi phòng chờ ngay lúc nhận tin này
+    this.send(ws, { t: 'welcome', id, seat, now: Date.now(), phase: meta.phase });
     if (meta.phase === 'playing' && this.engine) this.send(ws, this.gameView());
     this.publishRoom();
     await this.save();
@@ -316,7 +318,8 @@ export class GameRoom extends DurableObject {
     this.armAnalytics();
     this.analytics?.gameStart(engine.st, 'online');
     this.publishRoom();
-    this.broadcast({ t: 'start', ...this.gameView(), events });
+    // `gameView` mang sẵn `t: 'game'`, nên `t: 'start'` phải đứng sau mới không bị ghi đè
+    this.broadcast({ ...this.gameView(), t: 'start', events });
   }
 
   /** Trạng thái ván cho người vừa vào: ảnh chụp, câu hỏi đang treo, giờ server. */
@@ -339,6 +342,33 @@ export class GameRoom extends DurableObject {
     const allowed = ['answer', 'hold', 'seen', 'learn', 'ghost-vote'];
     if (!allowed.includes(a.type)) return;
     this.act({ type: a.type, id: Number(a.id), value: a.value, seat });
+  }
+
+  /**
+   * Chỉ cho bộ kiểm thử (máy chủ bật `TEST_TIMING=1`): thay ván bằng ảnh chụp
+   * (`snap`), hoặc chạy thẳng một hàm luật (`inject: {path, args}`) như
+   * `LocalHost` của bản một máy. Tham số `{$seat: n}` đổi thành người ở ghế n.
+   * `timing` đổi hạn chờ của ván đang chạy.
+   */
+  onTest(m) {
+    const e = this.engine;
+    if (!e) return;
+    const seatOf = (a) => (a && typeof a === 'object' && Number.isInteger(a.$seat) ? e.st.players[a.$seat] : a);
+    let events = [];
+    // Đổi hạn chờ giữa ván: phần của phòng (vắng mặt) và phần của engine (lượt đi)
+    if (m.timing && typeof m.timing === 'object') {
+      const t = Object.fromEntries(Object.entries(m.timing).filter(([, v]) => Number.isFinite(v) && v >= 0));
+      this.meta.options = { ...this.meta.options, timing: { ...this.meta.options.timing, ...t } };
+      e.st.settings.timing = { ...e.st.settings.timing, ...t };
+    }
+    try {
+      if (m.snap) events = e.force(m.snap);
+      if (m.inject?.path) events = [...events, ...e.inject(String(m.inject.path), (m.inject.args ?? []).map(seatOf))];
+    } catch (err) {
+      console.error('test hook hỏng', err);
+      return;
+    }
+    if (events.length) this.broadcast({ t: 'events', events });
   }
 
   /** Đưa một action vào engine và phát sự kiện cho cả phòng. */

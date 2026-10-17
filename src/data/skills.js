@@ -1,6 +1,6 @@
 /**
  * Cây kỹ năng — dữ liệu thuần. Luật tính số nằm ở core/skills.js, phần hỏi
- * người chơi ở game/skillPlay.js.
+ * người chơi ở engine/skills.js.
  *
  * Mỗi lần đi ngang ô Bắt Đầu người chơi được +1 điểm. Khung giá cố định cho cả
  * năm nhánh để so được sức mạnh giữa các nhánh bằng cùng một thước:

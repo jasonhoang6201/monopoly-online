@@ -20,8 +20,6 @@
  * `(game_id, client_id, seq)` sẽ đụng dòng cũ). Batch đã thử gửi là bất biến,
  * Postgres chèn nguyên tử nên bị 409 nghĩa là cả batch đã nằm trong DB → bỏ.
  */
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase.js';
-import { transportKind } from './transport.js';
 import { finalRanking } from '../core/state.js';
 import { spentTotal, levelOf, isOff } from '../core/skills.js';
 
@@ -43,8 +41,12 @@ export class Analytics {
    */
   constructor(game, o = {}) {
     this.game = game;
-    this.url = o.url ?? SUPABASE_URL ?? '';
-    this.key = o.key ?? SUPABASE_ANON_KEY ?? '';
+    /* Đọc khoá thẳng từ biến build, không qua net/supabase.js: file ấy kéo cả
+       supabase-js vào bundle bàn cờ, mà ở đây chỉ cần gọi REST. Server Worker
+       không có `import.meta.env` nên truyền `o.url` / `o.key`. */
+    const env = import.meta.env ?? {};
+    this.url = o.url ?? env.VITE_SUPABASE_URL ?? '';
+    this.key = o.key ?? env.VITE_SUPABASE_ANON_KEY ?? '';
     this.fetch = o.fetch ?? globalThis.fetch?.bind(globalThis);
     this.storage = o.storage ?? safeStorage();
     this.now = o.now ?? Date.now;
@@ -121,8 +123,7 @@ export class Analytics {
 
   /** Bản online hay một máy — hỏi controller; test không có controller thì 'offline'. */
   modeOf() {
-    if (!this.game?.net) return 'offline';
-    return transportKind() === 'supabase' ? 'online' : 'local';
+    return this.game?.net ? 'online' : 'offline';
   }
 
   enqueue(table, rows) {

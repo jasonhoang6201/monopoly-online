@@ -3,7 +3,7 @@
  * đồng hồ (cả bàn ngồi quanh một máy, không ai treo được ai), rồi bảng giá chốt
  * phiên — kể cả phiên ế.
  *
- * Bản online có `auction-online.mjs` lo phần hết giờ và tab nằm nền.
+ * Bản online có `online.mjs` (phần 4) lo phiên đấu giá hỏi nhiều máy cùng lúc.
  *
  * Cần dev server đang chạy ở cổng 5178.
  */
